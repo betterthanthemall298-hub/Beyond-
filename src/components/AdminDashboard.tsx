@@ -24,6 +24,7 @@ import {
   Search
 } from 'lucide-react';
 import { HoodieCategory, HoodieSize, OrderStatus, Product, ProductColor } from '../types';
+import { compressImageFile } from '../lib/imageCompressor';
 
 export const AdminDashboard: React.FC = () => {
   const {
@@ -74,6 +75,10 @@ export const AdminDashboard: React.FC = () => {
 
   // Order Search State
   const [orderSearchQuery, setOrderSearchQuery] = useState('');
+
+  // Image Processing & Product Submitting States
+  const [isProcessingImages, setIsProcessingImages] = useState(false);
+  const [isSavingProduct, setIsSavingProduct] = useState(false);
 
   // Add Product Form States
   const [showAddProduct, setShowAddProduct] = useState(false);
@@ -241,19 +246,22 @@ export const AdminDashboard: React.FC = () => {
   };
 
   // Device file upload handler for product images
-  const handleProductImageUploadFromDevice = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleProductImageUploadFromDevice = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
-    Array.from(files).forEach((file: File) => {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        if (event.target?.result) {
-          setUploadedProductImages((prev) => [...prev, event.target!.result as string]);
-        }
-      };
-      reader.readAsDataURL(file);
-    });
+    setIsProcessingImages(true);
+    try {
+      for (const file of Array.from(files) as File[]) {
+        const compressed = await compressImageFile(file, 1200, 0.82);
+        setUploadedProductImages((prev) => [...prev, compressed]);
+      }
+    } catch (err) {
+      console.error('Failed to process product image:', err);
+    } finally {
+      setIsProcessingImages(false);
+      e.target.value = '';
+    }
   };
 
   const removeUploadedProductImage = (indexToRemove: number) => {
@@ -275,70 +283,80 @@ export const AdminDashboard: React.FC = () => {
   };
 
   // Device file upload handler for review screenshots
-  const handleReviewImageUploadFromDevice = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleReviewImageUploadFromDevice = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
-    Array.from(files).forEach((file: File) => {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        if (event.target?.result) {
-          addReviewImage(event.target!.result as string, reviewCaption.trim() || undefined);
-          setReviewCaption('');
-        }
-      };
-      reader.readAsDataURL(file);
-    });
+    setIsProcessingImages(true);
+    try {
+      for (const file of Array.from(files) as File[]) {
+        const compressed = await compressImageFile(file, 1000, 0.82);
+        await addReviewImage(compressed, reviewCaption.trim() || undefined);
+        setReviewCaption('');
+      }
+    } catch (err) {
+      console.error('Failed to process review image:', err);
+    } finally {
+      setIsProcessingImages(false);
+      e.target.value = '';
+    }
   };
 
-  const handleCreateProduct = (e: React.FormEvent) => {
+  const handleCreateProduct = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!pName.trim() || !pDescription.trim()) return;
 
-    const imagesToUse =
-      uploadedProductImages.length > 0
-        ? uploadedProductImages
-        : ['https://images.unsplash.com/photo-1556905055-8f358a7a47b2?q=80&w=1000&auto=format&fit=crop'];
+    setIsSavingProduct(true);
+    try {
+      const imagesToUse =
+        uploadedProductImages.length > 0
+          ? uploadedProductImages
+          : ['https://images.unsplash.com/photo-1556905055-8f358a7a47b2?q=80&w=1000&auto=format&fit=crop'];
 
-    const numOriginalPrice = pOriginalPrice !== '' && Number(pOriginalPrice) > 0 ? Number(pOriginalPrice) : undefined;
+      const numOriginalPrice = pOriginalPrice !== '' && Number(pOriginalPrice) > 0 ? Number(pOriginalPrice) : undefined;
 
-    addProduct({
-      name: pName.trim(),
-      subtitle: pSubtitle.trim() || 'Nocturne Oversized Hoodie',
-      category: pCategory,
-      price: Number(pPrice),
-      originalPrice: numOriginalPrice,
-      description: pDescription.trim(),
-      fabric: pFabric.trim(),
-      fit: pFit.trim(),
-      weightRange: pWeightRange.trim(),
-      careInstructions: pCare.trim(),
-      sizesStock: {
-        M: Number(pStockM),
-        L: Number(pStockL),
-        XL: Number(pStockXL),
-        '2XL': Number(pStock2XL)
-      },
-      sizeMeasurements: {
-        M: { length: Number(pLengthM) || 72, width: Number(pWidthM) || 62 },
-        L: { length: Number(pLengthL) || 74, width: Number(pWidthL) || 65 },
-        XL: { length: Number(pLengthXL) || 76, width: Number(pWidthXL) || 68 },
-        '2XL': { length: Number(pLength2XL) || 78, width: Number(pWidth2XL) || 72 }
-      },
-      colors: pColors.length > 0 ? pColors : [
-        { name: 'أسود كربوني', hex: '#171717' }
-      ],
-      images: imagesToUse,
-      isFeatured: true,
-      badge: 'جديد'
-    });
+      await addProduct({
+        name: pName.trim(),
+        subtitle: pSubtitle.trim() || 'Nocturne Oversized Hoodie',
+        category: pCategory,
+        price: Number(pPrice),
+        originalPrice: numOriginalPrice,
+        description: pDescription.trim(),
+        fabric: pFabric.trim(),
+        fit: pFit.trim(),
+        weightRange: pWeightRange.trim(),
+        careInstructions: pCare.trim(),
+        sizesStock: {
+          M: Number(pStockM),
+          L: Number(pStockL),
+          XL: Number(pStockXL),
+          '2XL': Number(pStock2XL)
+        },
+        sizeMeasurements: {
+          M: { length: Number(pLengthM) || 72, width: Number(pWidthM) || 62 },
+          L: { length: Number(pLengthL) || 74, width: Number(pWidthL) || 65 },
+          XL: { length: Number(pLengthXL) || 76, width: Number(pWidthXL) || 68 },
+          '2XL': { length: Number(pLength2XL) || 78, width: Number(pWidth2XL) || 72 }
+        },
+        colors: pColors.length > 0 ? pColors : [
+          { name: 'أسود كربوني', hex: '#171717' }
+        ],
+        images: imagesToUse,
+        isFeatured: true,
+        badge: 'جديد'
+      });
 
-    setPName('');
-    setPSubtitle('');
-    setPDescription('');
-    setPOriginalPrice('');
-    setUploadedProductImages([]);
-    setShowAddProduct(false);
+      setPName('');
+      setPSubtitle('');
+      setPDescription('');
+      setPOriginalPrice('');
+      setUploadedProductImages([]);
+      setShowAddProduct(false);
+    } catch (err) {
+      console.error('Error saving product:', err);
+    } finally {
+      setIsSavingProduct(false);
+    }
   };
 
   const handleStartEditProduct = (product: Product) => {
@@ -376,19 +394,22 @@ export const AdminDashboard: React.FC = () => {
     setNewColorHex('#171717');
   };
 
-  const handleEditProductImageUploadFromDevice = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleEditProductImageUploadFromDevice = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
-    Array.from(files).forEach((file: File) => {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        if (event.target?.result) {
-          setEditImages((prev) => [...prev, event.target!.result as string]);
-        }
-      };
-      reader.readAsDataURL(file);
-    });
+    setIsProcessingImages(true);
+    try {
+      for (const file of Array.from(files) as File[]) {
+        const compressed = await compressImageFile(file, 1200, 0.82);
+        setEditImages((prev) => [...prev, compressed]);
+      }
+    } catch (err) {
+      console.error('Failed to process edit product image:', err);
+    } finally {
+      setIsProcessingImages(false);
+      e.target.value = '';
+    }
   };
 
   const removeEditImage = (indexToRemove: number) => {
@@ -409,43 +430,50 @@ export const AdminDashboard: React.FC = () => {
     setEditColors((prev) => prev.filter((_, idx) => idx !== indexToRemove));
   };
 
-  const handleSaveProductEdit = (e: React.FormEvent) => {
+  const handleSaveProductEdit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingProduct) return;
     if (!editName.trim()) return;
 
-    const numOriginalPrice = editOriginalPrice !== '' && Number(editOriginalPrice) > 0 ? Number(editOriginalPrice) : undefined;
+    setIsSavingProduct(true);
+    try {
+      const numOriginalPrice = editOriginalPrice !== '' && Number(editOriginalPrice) > 0 ? Number(editOriginalPrice) : undefined;
 
-    updateProduct(editingProduct.id, {
-      name: editName.trim(),
-      subtitle: editSubtitle.trim(),
-      category: editCategory,
-      price: Number(editPrice),
-      originalPrice: numOriginalPrice,
-      description: editDescription.trim(),
-      fabric: editFabric.trim(),
-      fit: editFit.trim(),
-      weightRange: editWeightRange.trim(),
-      careInstructions: editCare.trim(),
-      badge: editBadge.trim() || undefined,
-      isFeatured: editIsFeatured,
-      sizesStock: {
-        M: Number(editStockM),
-        L: Number(editStockL),
-        XL: Number(editStockXL),
-        '2XL': Number(editStock2XL)
-      },
-      sizeMeasurements: {
-        M: { length: Number(editLengthM) || 72, width: Number(editWidthM) || 62 },
-        L: { length: Number(editLengthL) || 74, width: Number(editWidthL) || 65 },
-        XL: { length: Number(editLengthXL) || 76, width: Number(editWidthXL) || 68 },
-        '2XL': { length: Number(editLength2XL) || 78, width: Number(editWidth2XL) || 72 }
-      },
-      images: editImages.length > 0 ? editImages : editingProduct.images,
-      colors: editColors.length > 0 ? editColors : editingProduct.colors
-    });
+      await updateProduct(editingProduct.id, {
+        name: editName.trim(),
+        subtitle: editSubtitle.trim(),
+        category: editCategory,
+        price: Number(editPrice),
+        originalPrice: numOriginalPrice,
+        description: editDescription.trim(),
+        fabric: editFabric.trim(),
+        fit: editFit.trim(),
+        weightRange: editWeightRange.trim(),
+        careInstructions: editCare.trim(),
+        badge: editBadge.trim() || undefined,
+        isFeatured: editIsFeatured,
+        sizesStock: {
+          M: Number(editStockM),
+          L: Number(editStockL),
+          XL: Number(editStockXL),
+          '2XL': Number(editStock2XL)
+        },
+        sizeMeasurements: {
+          M: { length: Number(editLengthM) || 72, width: Number(editWidthM) || 62 },
+          L: { length: Number(editLengthL) || 74, width: Number(editWidthL) || 65 },
+          XL: { length: Number(editLengthXL) || 76, width: Number(editWidthXL) || 68 },
+          '2XL': { length: Number(editLength2XL) || 78, width: Number(editWidth2XL) || 72 }
+        },
+        images: editImages.length > 0 ? editImages : editingProduct.images,
+        colors: editColors.length > 0 ? editColors : editingProduct.colors
+      });
 
-    setEditingProduct(null);
+      setEditingProduct(null);
+    } catch (err) {
+      console.error('Error saving product edit:', err);
+    } finally {
+      setIsSavingProduct(false);
+    }
   };
 
   const handleCreateCoupon = (e: React.FormEvent) => {
@@ -508,18 +536,20 @@ export const AdminDashboard: React.FC = () => {
     });
   };
 
-  const handleLogoFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleLogoFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = (uploadEvent) => {
-      const result = uploadEvent.target?.result as string;
-      if (result) {
-        setBrandLogo(result);
-      }
-    };
-    reader.readAsDataURL(file);
+    setIsProcessingImages(true);
+    try {
+      const compressed = await compressImageFile(file, 600, 0.85);
+      setBrandLogo(compressed);
+    } catch (err) {
+      console.error('Failed to compress logo:', err);
+    } finally {
+      setIsProcessingImages(false);
+      e.target.value = '';
+    }
   };
 
   const handleSaveSettings = (e: React.FormEvent) => {
@@ -896,11 +926,21 @@ export const AdminDashboard: React.FC = () => {
                     />
                     <button
                       type="button"
+                      disabled={isProcessingImages}
                       onClick={() => productFileInputRef.current?.click()}
-                      className="px-4 py-2.5 rounded-xl bg-stone-950 hover:bg-stone-800 border border-dashed border-amber-500/50 hover:border-amber-400 text-stone-200 text-xs font-bold flex items-center gap-2 transition-colors"
+                      className="px-4 py-2.5 rounded-xl bg-stone-950 hover:bg-stone-800 disabled:opacity-50 border border-dashed border-amber-500/50 hover:border-amber-400 text-stone-200 text-xs font-bold flex items-center gap-2 transition-colors"
                     >
-                      <Upload className="w-4 h-4 text-amber-400" />
-                      <span>اختر صور من جهازك (كمبيوتر أو هاتف)</span>
+                      {isProcessingImages ? (
+                        <>
+                          <div className="w-4 h-4 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
+                          <span>جاري ضغط ومعالجة الصور...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Upload className="w-4 h-4 text-amber-400" />
+                          <span>اختر صور من جهازك (كمبيوتر أو هاتف)</span>
+                        </>
+                      )}
                     </button>
                     <span className="text-[11px] text-stone-500">
                       يمكنك تحديد صورة أو عدة صور وسيتم تحويلها وحفظها مع الهودي
@@ -1197,9 +1237,17 @@ export const AdminDashboard: React.FC = () => {
                 <button
                   id="admin-submit-new-product-btn"
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-bold text-xs"
+                  disabled={isSavingProduct || isProcessingImages}
+                  className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-black font-bold text-xs flex items-center gap-2"
                 >
-                  حفظ ونشر الهودي في المتجر
+                  {isSavingProduct ? (
+                    <>
+                      <div className="w-3.5 h-3.5 border-2 border-black border-t-transparent rounded-full animate-spin" />
+                      <span>جاري الحفظ والمزامنة السحابية...</span>
+                    </>
+                  ) : (
+                    <span>حفظ ونشر الهودي في المتجر</span>
+                  )}
                 </button>
               </div>
             </form>
@@ -2433,11 +2481,21 @@ export const AdminDashboard: React.FC = () => {
                     </label>
                     <button
                       type="button"
+                      disabled={isProcessingImages}
                       onClick={() => editProductFileInputRef.current?.click()}
-                      className="px-3 py-1.5 rounded-lg bg-stone-900 hover:bg-stone-800 border border-dashed border-amber-500/50 hover:border-amber-400 text-amber-400 text-xs font-bold flex items-center gap-1.5 transition-colors"
+                      className="px-3 py-1.5 rounded-lg bg-stone-900 hover:bg-stone-800 disabled:opacity-50 border border-dashed border-amber-500/50 hover:border-amber-400 text-amber-400 text-xs font-bold flex items-center gap-1.5 transition-colors"
                     >
-                      <Upload className="w-3.5 h-3.5" />
-                      <span>رفع صور من الجهاز</span>
+                      {isProcessingImages ? (
+                        <>
+                          <div className="w-3.5 h-3.5 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
+                          <span>جاري المعالجة...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Upload className="w-3.5 h-3.5" />
+                          <span>رفع صور من الجهاز</span>
+                        </>
+                      )}
                     </button>
                   </div>
 
@@ -2493,9 +2551,17 @@ export const AdminDashboard: React.FC = () => {
                 <button
                   id="save-edit-product-btn"
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-black text-xs font-bold transition-colors shadow-md shadow-amber-950/40"
+                  disabled={isSavingProduct || isProcessingImages}
+                  className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-black text-xs font-bold transition-colors shadow-md shadow-amber-950/40 flex items-center gap-2"
                 >
-                  حفظ التعديلات
+                  {isSavingProduct ? (
+                    <>
+                      <div className="w-3.5 h-3.5 border-2 border-black border-t-transparent rounded-full animate-spin" />
+                      <span>جاري الحفظ والمزامنة السحابية...</span>
+                    </>
+                  ) : (
+                    <span>حفظ التعديلات</span>
+                  )}
                 </button>
               </div>
             </form>

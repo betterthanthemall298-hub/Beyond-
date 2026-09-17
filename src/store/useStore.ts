@@ -7,7 +7,7 @@ import {
   setDoc,
   deleteDoc
 } from 'firebase/firestore';
-import { db, testFirebaseConnection } from '../lib/firebase';
+import { db, testFirebaseConnection, sanitizeForFirestore } from '../lib/firebase';
 import {
   Product,
   CartItem,
@@ -153,7 +153,42 @@ export interface StoreState {
 }
 
 const STORAGE_KEY_V4 = 'nocturne_hoodies_storage_v4_clean';
+const PRODUCTS_CACHE_KEY = 'nocturne_products_cache_v4';
+const ORDERS_CACHE_KEY = 'nocturne_orders_cache_v4';
+const SETTINGS_CACHE_KEY = 'nocturne_settings_cache_v4';
 const ADMIN_SESSION_KEY = 'nocturne_admin_session_active';
+
+function loadCachedProducts(): Product[] {
+  try {
+    const raw = localStorage.getItem(PRODUCTS_CACHE_KEY);
+    if (!raw) return INITIAL_PRODUCTS;
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) && parsed.length > 0 ? parsed : INITIAL_PRODUCTS;
+  } catch {
+    return INITIAL_PRODUCTS;
+  }
+}
+
+function loadCachedOrders(): Order[] {
+  try {
+    const raw = localStorage.getItem(ORDERS_CACHE_KEY);
+    if (!raw) return INITIAL_ORDERS;
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : INITIAL_ORDERS;
+  } catch {
+    return INITIAL_ORDERS;
+  }
+}
+
+function loadCachedSettings(): StoreSettings {
+  try {
+    const raw = localStorage.getItem(SETTINGS_CACHE_KEY);
+    if (!raw) return INITIAL_SETTINGS;
+    return { ...INITIAL_SETTINGS, ...JSON.parse(raw) };
+  } catch {
+    return INITIAL_SETTINGS;
+  }
+}
 
 function loadLocalDeviceData() {
   try {
@@ -179,8 +214,11 @@ function saveLocalDeviceData(s: StoreState) {
       wishlist: s.wishlist
     };
     localStorage.setItem(STORAGE_KEY_V4, JSON.stringify(dataToSave));
+    localStorage.setItem(PRODUCTS_CACHE_KEY, JSON.stringify(s.products));
+    localStorage.setItem(ORDERS_CACHE_KEY, JSON.stringify(s.orders));
+    localStorage.setItem(SETTINGS_CACHE_KEY, JSON.stringify(s.settings));
   } catch (e) {
-    console.error('Failed to save to local storage:', e);
+    console.warn('Notice saving cache to local storage:', e);
   }
 }
 
@@ -339,8 +377,8 @@ let state: StoreState = {
     return false;
   },
 
-  // Products (initially empty clean list)
-  products: INITIAL_PRODUCTS,
+  // Products (cached locally and synchronized with Firestore)
+  products: loadCachedProducts(),
   addProduct: async (productData) => {
     const newProduct: Product = {
       ...productData,
@@ -348,59 +386,57 @@ let state: StoreState = {
       rating: 5.0,
       reviewsCount: 1
     };
+    // Update local state immediately for instant feedback
+    update((prev) => ({ products: [newProduct, ...prev.products] }));
+
     try {
-      await setDoc(doc(db, 'products', newProduct.id), newProduct);
-      update((prev) => ({ products: [newProduct, ...prev.products] }));
+      const sanitized = sanitizeForFirestore(newProduct);
+      await setDoc(doc(db, 'products', newProduct.id), sanitized);
       state.addToast({
         type: 'success',
-        title: 'تم نشر الهودي في المتجر بنجاح',
+        title: 'تم نشر الهودي وحفظه سحابياً بنجاح! ☁️',
         description: newProduct.name
       });
     } catch (err) {
       console.error('Failed to add product to Firestore:', err);
-      update((prev) => ({ products: [newProduct, ...prev.products] }));
       state.addToast({
         type: 'info',
-        title: 'تمت الإضافة محلياً (سيتم المزامنة تلقائياً)',
+        title: 'تم حفظ الهودي بنجاح على هذا الجهاز',
         description: newProduct.name
       });
     }
   },
   updateProduct: async (id, updates) => {
+    update((prev) => ({
+      products: prev.products.map((p) => (p.id === id ? { ...p, ...updates } : p)),
+      selectedProduct:
+        prev.selectedProduct?.id === id
+          ? { ...prev.selectedProduct, ...updates }
+          : prev.selectedProduct
+    }));
+
     try {
-      await setDoc(doc(db, 'products', id), updates, { merge: true });
-      update((prev) => ({
-        products: prev.products.map((p) => (p.id === id ? { ...p, ...updates } : p)),
-        selectedProduct:
-          prev.selectedProduct?.id === id
-            ? { ...prev.selectedProduct, ...updates }
-            : prev.selectedProduct
-      }));
+      const sanitized = sanitizeForFirestore(updates);
+      await setDoc(doc(db, 'products', id), sanitized, { merge: true });
       state.addToast({
         type: 'info',
         title: 'تم تحديث بيانات المنتج ومزامنتها سحابياً للجميع'
       });
     } catch (err) {
       console.error('Failed to update product in Firestore:', err);
-      update((prev) => ({
-        products: prev.products.map((p) => (p.id === id ? { ...p, ...updates } : p)),
-        selectedProduct:
-          prev.selectedProduct?.id === id
-            ? { ...prev.selectedProduct, ...updates }
-            : prev.selectedProduct
-      }));
     }
   },
   deleteProduct: async (id) => {
     const prod = state.products.find((p) => p.id === id);
+    update((prev) => ({
+      products: prev.products.filter((p) => p.id !== id),
+      cart: prev.cart.filter((c) => c.productId !== id),
+      wishlist: prev.wishlist.filter((wId) => wId !== id),
+      selectedProduct: prev.selectedProduct?.id === id ? null : prev.selectedProduct
+    }));
+
     try {
       await deleteDoc(doc(db, 'products', id));
-      update((prev) => ({
-        products: prev.products.filter((p) => p.id !== id),
-        cart: prev.cart.filter((c) => c.productId !== id),
-        wishlist: prev.wishlist.filter((wId) => wId !== id),
-        selectedProduct: prev.selectedProduct?.id === id ? null : prev.selectedProduct
-      }));
       state.addToast({
         type: 'error',
         title: 'تم حذف المنتج بنجاح من جميع الأجهزة',
@@ -408,12 +444,6 @@ let state: StoreState = {
       });
     } catch (err) {
       console.error('Failed to delete product from Firestore:', err);
-      update((prev) => ({
-        products: prev.products.filter((p) => p.id !== id),
-        cart: prev.cart.filter((c) => c.productId !== id),
-        wishlist: prev.wishlist.filter((wId) => wId !== id),
-        selectedProduct: prev.selectedProduct?.id === id ? null : prev.selectedProduct
-      }));
     }
   },
   seedSampleProduct: async () => {
@@ -568,9 +598,9 @@ let state: StoreState = {
       id: 'coup-' + Date.now().toString(36),
       timesUsed: 0
     };
+    update((prev) => ({ coupons: [newCoupon, ...prev.coupons] }));
     try {
-      await setDoc(doc(db, 'coupons', newCoupon.id), newCoupon);
-      update((prev) => ({ coupons: [newCoupon, ...prev.coupons] }));
+      await setDoc(doc(db, 'coupons', newCoupon.id), sanitizeForFirestore(newCoupon));
       state.addToast({
         type: 'success',
         title: 'تم إنشاء كود الخصم بنجاح',
@@ -578,7 +608,6 @@ let state: StoreState = {
       });
     } catch (err) {
       console.error('Failed to add coupon:', err);
-      update((prev) => ({ coupons: [newCoupon, ...prev.coupons] }));
     }
   },
   deleteCoupon: async (id) => {
@@ -623,7 +652,7 @@ let state: StoreState = {
   },
 
   // Orders: Persisted in Firestore & Realtime synced across all devices
-  orders: INITIAL_ORDERS,
+  orders: loadCachedOrders(),
   createOrder: async (orderData) => {
     const nextOrderNum = (state.orders.length + 1).toString();
     const dateStr = new Date().toISOString().replace('T', ' ').substring(0, 16);
@@ -635,19 +664,20 @@ let state: StoreState = {
       status: 'pending'
     };
 
-    try {
-      // Write to Firebase Firestore cloud database
-      await setDoc(doc(db, 'orders', newOrder.id), newOrder);
-    } catch (err) {
-      console.error('Failed to save order to Firestore:', err);
-    }
-
     update((prev) => ({
       orders: [newOrder, ...prev.orders.filter((o) => o.id !== newOrder.id)],
       cart: [],
       appliedCoupon: null,
       isCheckoutOpen: false
     }));
+
+    try {
+      // Write sanitized order to Firebase Firestore cloud database
+      const sanitized = sanitizeForFirestore(newOrder);
+      await setDoc(doc(db, 'orders', newOrder.id), sanitized);
+    } catch (err) {
+      console.error('Failed to save order to Firestore:', err);
+    }
 
     state.addToast({
       type: 'success',
@@ -659,16 +689,16 @@ let state: StoreState = {
   },
   cancelOrder: async (orderId) => {
     const order = state.orders.find((o) => o.id === orderId);
-    try {
-      await setDoc(doc(db, 'orders', orderId), { status: 'cancelled' }, { merge: true });
-    } catch (err) {
-      console.error('Failed to cancel order in Firestore:', err);
-    }
     update((prev) => ({
       orders: prev.orders.map((o) =>
         o.id === orderId ? { ...o, status: 'cancelled' } : o
       )
     }));
+    try {
+      await setDoc(doc(db, 'orders', orderId), { status: 'cancelled' }, { merge: true });
+    } catch (err) {
+      console.error('Failed to cancel order in Firestore:', err);
+    }
     state.addToast({
       type: 'error',
       title: 'تم إلغاء الطلب بنجاح',
@@ -677,14 +707,14 @@ let state: StoreState = {
   },
   deleteOrder: async (orderId) => {
     const order = state.orders.find((o) => o.id === orderId);
+    update((prev) => ({
+      orders: prev.orders.filter((o) => o.id !== orderId)
+    }));
     try {
       await deleteDoc(doc(db, 'orders', orderId));
     } catch (err) {
       console.error('Failed to delete order from Firestore:', err);
     }
-    update((prev) => ({
-      orders: prev.orders.filter((o) => o.id !== orderId)
-    }));
     state.addToast({
       type: 'error',
       title: 'تم حذف الطلب نهائياً من السجلات',
@@ -692,16 +722,16 @@ let state: StoreState = {
     });
   },
   updateOrderStatus: async (orderId, status) => {
-    try {
-      await setDoc(doc(db, 'orders', orderId), { status }, { merge: true });
-    } catch (err) {
-      console.error('Failed to update order status in Firestore:', err);
-    }
     update((prev) => ({
       orders: prev.orders.map((o) =>
         o.id === orderId ? { ...o, status } : o
       )
     }));
+    try {
+      await setDoc(doc(db, 'orders', orderId), { status }, { merge: true });
+    } catch (err) {
+      console.error('Failed to update order status in Firestore:', err);
+    }
     state.addToast({
       type: 'info',
       title: 'تم تحديث ومزامنة حالة الطلب سحابياً'
@@ -717,26 +747,27 @@ let state: StoreState = {
       caption: caption || 'صورة من تجربة ومعاينة عميل',
       createdAt: new Date().toISOString().substring(0, 10)
     };
+    update((prev) => ({ reviewImages: [newImg, ...prev.reviewImages] }));
     try {
-      await setDoc(doc(db, 'reviewImages', newImg.id), newImg);
+      const sanitized = sanitizeForFirestore(newImg);
+      await setDoc(doc(db, 'reviewImages', newImg.id), sanitized);
     } catch (err) {
       console.error('Failed to save review image:', err);
     }
-    update((prev) => ({ reviewImages: [newImg, ...prev.reviewImages] }));
     state.addToast({
       type: 'success',
       title: 'تم رفع صورة رأي العميل ومزامنتها بنجاح'
     });
   },
   deleteReviewImage: async (id) => {
+    update((prev) => ({
+      reviewImages: prev.reviewImages.filter((r) => r.id !== id)
+    }));
     try {
       await deleteDoc(doc(db, 'reviewImages', id));
     } catch (err) {
       console.error('Failed to delete review image:', err);
     }
-    update((prev) => ({
-      reviewImages: prev.reviewImages.filter((r) => r.id !== id)
-    }));
     state.addToast({
       type: 'error',
       title: 'تم حذف صورة الرأي بنجاح'
@@ -746,16 +777,17 @@ let state: StoreState = {
   // Shipping & Governorates
   governorates: INITIAL_GOVERNORATES,
   updateGovernorateCost: async (name, newCost) => {
-    try {
-      await setDoc(doc(db, 'governorates', name), { name, cost: newCost });
-    } catch (err) {
-      console.error('Failed to update governorate cost:', err);
-    }
     update((prev) => ({
       governorates: prev.governorates.map((g) =>
         g.name === name ? { ...g, cost: newCost } : g
       )
     }));
+    try {
+      const sanitized = sanitizeForFirestore({ name, cost: newCost });
+      await setDoc(doc(db, 'governorates', name), sanitized, { merge: true });
+    } catch (err) {
+      console.error('Failed to update governorate cost:', err);
+    }
     state.addToast({
       type: 'info',
       title: `تم تحديث سعر الشحن لمحافظة ${name} إلى ${newCost} ج.م`
@@ -763,16 +795,17 @@ let state: StoreState = {
   },
 
   // Store Settings
-  settings: INITIAL_SETTINGS,
+  settings: loadCachedSettings(),
   updateSettings: async (updates) => {
-    try {
-      await setDoc(doc(db, 'settings', 'general'), updates, { merge: true });
-    } catch (err) {
-      console.error('Failed to update settings in Firestore:', err);
-    }
     update((prev) => ({
       settings: { ...prev.settings, ...updates }
     }));
+    try {
+      const sanitized = sanitizeForFirestore(updates);
+      await setDoc(doc(db, 'settings', 'general'), sanitized, { merge: true });
+    } catch (err) {
+      console.error('Failed to update settings in Firestore:', err);
+    }
     state.addToast({
       type: 'success',
       title: 'تم حفظ وتحديث إعدادات المتجر سحابياً للجميع'
