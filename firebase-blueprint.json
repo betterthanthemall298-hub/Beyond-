@@ -1,0 +1,111 @@
+{
+  "entities": {
+    "Product": {
+      "title": "Product",
+      "description": "Store hoodie product with stock per size, images, colors, and pricing",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "subtitle": { "type": "string" },
+        "category": { "type": "string" },
+        "price": { "type": "number" },
+        "originalPrice": { "type": "number" },
+        "description": { "type": "string" },
+        "fit": { "type": "string" },
+        "weightRange": { "type": "string" },
+        "careInstructions": { "type": "string" },
+        "sizesStock": { "type": "object" },
+        "sizeMeasurements": { "type": "object" },
+        "colors": { "type": "array" },
+        "images": { "type": "array" },
+        "isFeatured": { "type": "boolean" },
+        "rating": { "type": "number" },
+        "reviewsCount": { "type": "number" },
+        "badge": { "type": "string" }
+      },
+      "required": ["id", "name", "price"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "Customer purchase order placed from any device",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "orderNumber": { "type": "string" },
+        "customerName": { "type": "string" },
+        "phone": { "type": "string" },
+        "governorate": { "type": "string" },
+        "center": { "type": "string" },
+        "address": { "type": "string" },
+        "notes": { "type": "string" },
+        "items": { "type": "array" },
+        "subtotal": { "type": "number" },
+        "shippingCost": { "type": "number" },
+        "discount": { "type": "number" },
+        "total": { "type": "number" },
+        "status": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "customerName", "phone", "governorate", "address", "total", "status"]
+    },
+    "StoreSettings": {
+      "title": "StoreSettings",
+      "description": "Global store configuration and contact links",
+      "type": "object",
+      "properties": {
+        "storeName": { "type": "string" },
+        "storeSubtitle": { "type": "string" },
+        "announcementText": { "type": "string" },
+        "brandLogo": { "type": "string" },
+        "whatsappNumber": { "type": "string" },
+        "whatsappUrl": { "type": "string" },
+        "instagramUrl": { "type": "string" },
+        "tiktokUrl": { "type": "string" },
+        "facebookUrl": { "type": "string" },
+        "freeShippingThreshold": { "type": "number" }
+      }
+    },
+    "AdminAuth": {
+      "title": "AdminAuth",
+      "description": "Admin login credentials for managing the dashboard from any device",
+      "type": "object",
+      "properties": {
+        "username": { "type": "string" },
+        "password": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["username", "password"]
+    }
+  },
+  "firestore": {
+    "/products/{productId}": {
+      "schema": "Product",
+      "description": "Products available in the store"
+    },
+    "/orders/{orderId}": {
+      "schema": "Order",
+      "description": "Orders submitted by customers"
+    },
+    "/settings/{settingId}": {
+      "schema": "StoreSettings",
+      "description": "Store settings and social links"
+    },
+    "/admin_auth/{authId}": {
+      "schema": "AdminAuth",
+      "description": "Admin credentials document"
+    },
+    "/coupons/{couponId}": {
+      "schema": "object",
+      "description": "Discount coupons"
+    },
+    "/reviewImages/{reviewId}": {
+      "schema": "object",
+      "description": "Customer review photos"
+    },
+    "/governorates/{govId}": {
+      "schema": "object",
+      "description": "Shipping costs per governorate"
+    }
+  }
+}

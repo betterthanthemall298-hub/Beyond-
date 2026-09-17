@@ -113,4 +113,10 @@ export interface StoreSettings {
   freeShippingThreshold: number;
 }
 
+export interface AdminCredentials {
+  username: string;
+  password: string;
+  updatedAt?: string;
+}
+
 export type ActiveView = 'home' | 'catalog' | 'tracking' | 'reviews' | 'admin' | 'cart' | 'product' | 'wishlist';

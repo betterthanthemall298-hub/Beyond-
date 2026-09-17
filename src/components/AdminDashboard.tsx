@@ -47,17 +47,30 @@ export const AdminDashboard: React.FC = () => {
     updateGovernorateCost,
     settings,
     updateSettings,
-    openDeleteModal
+    openDeleteModal,
+    adminCredentials,
+    updateAdminCredentials,
+    verifyAdminLogin,
+    seedSampleProduct,
+    isFirebaseConnected
   } = useStore();
 
   const [activeTab, setActiveTab] = useState<
-    'products' | 'orders' | 'coupons' | 'reviews' | 'shipping' | 'settings'
+    'products' | 'orders' | 'coupons' | 'reviews' | 'shipping' | 'settings' | 'security'
   >('products');
 
   // Login Form States
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loginError, setLoginError] = useState('');
+
+  // Change Credentials States
+  const [newUsername, setNewUsername] = useState(adminCredentials.username);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [securitySuccess, setSecuritySuccess] = useState('');
+  const [securityError, setSecurityError] = useState('');
+  const [isUpdatingCreds, setIsUpdatingCreds] = useState(false);
 
   // Order Search State
   const [orderSearchQuery, setOrderSearchQuery] = useState('');
@@ -168,11 +181,46 @@ export const AdminDashboard: React.FC = () => {
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    if (username.trim() === 'admin' && password.trim() === 'admin123') {
-      setIsAdminLoggedIn(true);
+    const success = verifyAdminLogin(username, password);
+    if (success) {
       setLoginError('');
     } else {
-      setLoginError('اسم المستخدم أو كلمة المرور غير صحيحة.');
+      setLoginError('اسم المستخدم أو كلمة المرور غير صحيحة. يرجى التأكد من البيانات والمحاولة مجدداً.');
+    }
+  };
+
+  const handleChangeCredentials = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSecurityError('');
+    setSecuritySuccess('');
+
+    if (!newUsername.trim()) {
+      setSecurityError('يرجى كتابة اسم المستخدم الجديد');
+      return;
+    }
+    if (!newPassword.trim()) {
+      setSecurityError('يرجى كتابة كلمة المرور الجديدة');
+      return;
+    }
+    if (newPassword.trim().length < 4) {
+      setSecurityError('يجب ألا تقل كلمة المرور عن 4 أحرف');
+      return;
+    }
+    if (newPassword.trim() !== confirmPassword.trim()) {
+      setSecurityError('كلمة المرور وتأكيد كلمة المرور غير متطابقين');
+      return;
+    }
+
+    setIsUpdatingCreds(true);
+    const success = await updateAdminCredentials(newUsername.trim(), newPassword.trim());
+    setIsUpdatingCreds(false);
+
+    if (success) {
+      setSecuritySuccess('تم حفظ بيانات الدخول سحابياً بنجاح! يمكنك الآن استخدامها لتسجيل الدخول من أي جهاز.');
+      setNewPassword('');
+      setConfirmPassword('');
+    } else {
+      setSecurityError('حدث خطأ أثناء الحفظ السحابي، يرجى المحاولة مرة أخرى.');
     }
   };
 
@@ -541,17 +589,39 @@ export const AdminDashboard: React.FC = () => {
   // Logged-in Admin Dashboard View
   return (
     <div id="admin-dashboard-container" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-      {/* Top Header */}
-      <div className="flex items-center justify-end border-b border-stone-800 pb-3">
-        <button
-          id="admin-logout-btn"
-          type="button"
-          onClick={() => setIsAdminLoggedIn(false)}
-          className="px-4 py-2 rounded-xl bg-stone-900 hover:bg-stone-800 border border-stone-800 text-stone-300 text-xs font-semibold flex items-center gap-2 transition-colors"
-        >
-          <LogOut className="w-4 h-4 text-rose-400" />
-          <span>تسجيل الخروج</span>
-        </button>
+      {/* Top Header with Realtime Cloud Sync Status */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-stone-800 pb-4">
+        <div className="flex items-center gap-2.5">
+          <span className="relative flex h-2.5 w-2.5">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+          </span>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-emerald-400">قاعدة بيانات Firebase سحابية متصلة</span>
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-950/60 border border-emerald-800/40 text-emerald-300 font-mono">
+                مزامنة حية
+              </span>
+            </div>
+            <p className="text-[11px] text-stone-400">أي طلب أو تعديل يظهر فوراً لجميع الأجهزة بدون تحديث الصفحة</p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
+          <div className="text-right hidden sm:block">
+            <span className="text-[10px] text-stone-500 block">المستخدم الحالي</span>
+            <span className="text-xs font-mono font-bold text-amber-400">{adminCredentials.username}</span>
+          </div>
+          <button
+            id="admin-logout-btn"
+            type="button"
+            onClick={() => setIsAdminLoggedIn(false)}
+            className="px-4 py-2 rounded-xl bg-stone-900 hover:bg-stone-800 border border-stone-800 text-stone-300 text-xs font-semibold flex items-center gap-2 transition-colors"
+          >
+            <LogOut className="w-4 h-4 text-rose-400" />
+            <span>تسجيل الخروج</span>
+          </button>
+        </div>
       </div>
 
       {/* Overview Analytics Cards */}
@@ -685,6 +755,20 @@ export const AdminDashboard: React.FC = () => {
         >
           <Settings className="w-4 h-4" />
           <span>إعدادات وروابط المتجر</span>
+        </button>
+
+        <button
+          id="admin-tab-security"
+          type="button"
+          onClick={() => setActiveTab('security')}
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 ${
+            activeTab === 'security'
+              ? 'bg-amber-500 text-black shadow-sm'
+              : 'bg-stone-900 border border-stone-800 text-stone-300 hover:text-white'
+          }`}
+        >
+          <Lock className="w-4 h-4" />
+          <span>تغيير كلمة السر واسم المستخدم</span>
         </button>
       </div>
 
@@ -1094,89 +1178,120 @@ export const AdminDashboard: React.FC = () => {
             </form>
           )}
 
-          {/* Products Table */}
-          <div className="bg-stone-900/60 border border-stone-800 rounded-2xl overflow-hidden shadow-xl">
-            <div className="overflow-x-auto">
-              <table className="w-full text-right text-xs text-stone-300">
-                <thead className="bg-stone-950 text-stone-400 uppercase text-[11px] border-b border-stone-800">
-                  <tr>
-                    <th className="p-3.5">المنتج</th>
-                    <th className="p-3.5">الفئة</th>
-                    <th className="p-3.5">السعر</th>
-                    <th className="p-3.5">المخزون (M/L/XL/2XL)</th>
-                    <th className="p-3.5 text-center">إجراءات</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-stone-800/80">
-                  {products.map((p) => {
-                    const totalStock = Object.values(p.sizesStock).reduce((a, b) => a + (b || 0), 0);
-                    return (
-                      <tr key={p.id} className="hover:bg-stone-900/90 transition-colors">
-                        <td className="p-3.5 flex items-center gap-3">
-                          <img
-                            src={p.images[0]}
-                            alt={p.name}
-                            referrerPolicy="no-referrer"
-                            className="w-12 h-14 rounded-lg object-cover border border-stone-800 bg-stone-950 shrink-0"
-                          />
-                          <div>
-                            <p className="font-bold text-stone-200">{p.name}</p>
-                            <p className="text-stone-500 text-[11px]">{p.subtitle}</p>
-                          </div>
-                        </td>
-                        <td className="p-3.5">
-                          <span className="px-2 py-0.5 rounded-md bg-stone-950 border border-stone-800 text-stone-300 text-[11px]">
-                            {p.category}
-                          </span>
-                        </td>
-                        <td className="p-3.5 font-mono font-bold text-amber-400">
-                          {p.price} ج.م
-                        </td>
-                        <td className="p-3.5">
-                          <div className="flex items-center gap-1.5 font-mono text-[11px]">
-                            <span className="text-stone-300">{p.sizesStock.M}</span>
-                            <span className="text-stone-600">/</span>
-                            <span className="text-stone-300">{p.sizesStock.L}</span>
-                            <span className="text-stone-600">/</span>
-                            <span className="text-stone-300">{p.sizesStock.XL}</span>
-                            <span className="text-stone-600">/</span>
-                            <span className="text-stone-300">{p.sizesStock['2XL']}</span>
-                            <span className="text-stone-500 text-[10px] mr-1">
-                              (إجمالي {totalStock})
-                            </span>
-                          </div>
-                        </td>
-                        <td className="p-3.5 text-center">
-                          <div className="inline-flex items-center gap-2 justify-center">
-                            <button
-                              id={`admin-edit-product-btn-${p.id}`}
-                              type="button"
-                              onClick={() => handleStartEditProduct(p)}
-                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 hover:border-amber-500/60 transition-colors text-xs font-semibold"
-                              title="تعديل بيانات الهودي"
-                            >
-                              <Pencil className="w-3.5 h-3.5" />
-                              <span>تعديل</span>
-                            </button>
-                            <button
-                              id={`admin-delete-product-btn-${p.id}`}
-                              type="button"
-                              onClick={() => handleDeleteProductPrompt(p.id, p.name)}
-                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-rose-950/40 hover:bg-rose-950/80 text-rose-400 border border-rose-900/50 hover:border-rose-700 transition-colors text-xs font-semibold"
-                              title="حذف هذا الهودي نهائياً"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                              <span>حذف</span>
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+          {/* Products Table or Empty State */}
+          {products.length === 0 ? (
+            <div className="bg-stone-900/60 border border-stone-800 rounded-2xl p-10 text-center space-y-4 shadow-xl">
+              <div className="w-14 h-14 rounded-2xl bg-amber-950/40 border border-amber-800/40 text-amber-400 flex items-center justify-center mx-auto">
+                <Package className="w-7 h-7" />
+              </div>
+              <div>
+                <h4 className="text-base font-bold text-stone-200">لا توجد منتجات مضافة حتى الآن</h4>
+                <p className="text-xs text-stone-400 max-w-md mx-auto mt-1">
+                  المتجر فارغ وجاهز لرفع تشكيلتك وهودياتك الخاصة. يمكنك الضغط على "إضافة هودي جديد" لرفع منتجاتك، أو استخدام الزر التجريبي للمعاينة.
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowAddProduct(true)}
+                  className="px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-bold text-xs flex items-center gap-1.5 shadow-md shadow-amber-950/40 transition-colors"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>إضافة أول هودي يدوياً</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => seedSampleProduct()}
+                  className="px-4 py-2.5 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-300 font-semibold text-xs border border-stone-700 transition-colors"
+                >
+                  <span>إضافة منتج تجريبي للمعاينة</span>
+                </button>
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="bg-stone-900/60 border border-stone-800 rounded-2xl overflow-hidden shadow-xl">
+              <div className="overflow-x-auto">
+                <table className="w-full text-right text-xs text-stone-300">
+                  <thead className="bg-stone-950 text-stone-400 uppercase text-[11px] border-b border-stone-800">
+                    <tr>
+                      <th className="p-3.5">المنتج</th>
+                      <th className="p-3.5">الفئة</th>
+                      <th className="p-3.5">السعر</th>
+                      <th className="p-3.5">المخزون (M/L/XL/2XL)</th>
+                      <th className="p-3.5 text-center">إجراءات</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-stone-800/80">
+                    {products.map((p) => {
+                      const totalStock = Object.values(p.sizesStock).reduce((a, b) => a + (b || 0), 0);
+                      return (
+                        <tr key={p.id} className="hover:bg-stone-900/90 transition-colors">
+                          <td className="p-3.5 flex items-center gap-3">
+                            <img
+                              src={p.images[0]}
+                              alt={p.name}
+                              referrerPolicy="no-referrer"
+                              className="w-12 h-14 rounded-lg object-cover border border-stone-800 bg-stone-950 shrink-0"
+                            />
+                            <div>
+                              <p className="font-bold text-stone-200">{p.name}</p>
+                              <p className="text-stone-500 text-[11px]">{p.subtitle}</p>
+                            </div>
+                          </td>
+                          <td className="p-3.5">
+                            <span className="px-2 py-0.5 rounded-md bg-stone-950 border border-stone-800 text-stone-300 text-[11px]">
+                              {p.category}
+                            </span>
+                          </td>
+                          <td className="p-3.5 font-mono font-bold text-amber-400">
+                            {p.price} ج.م
+                          </td>
+                          <td className="p-3.5">
+                            <div className="flex items-center gap-1.5 font-mono text-[11px]">
+                              <span className="text-stone-300">{p.sizesStock.M}</span>
+                              <span className="text-stone-600">/</span>
+                              <span className="text-stone-300">{p.sizesStock.L}</span>
+                              <span className="text-stone-600">/</span>
+                              <span className="text-stone-300">{p.sizesStock.XL}</span>
+                              <span className="text-stone-600">/</span>
+                              <span className="text-stone-300">{p.sizesStock['2XL']}</span>
+                              <span className="text-stone-500 text-[10px] mr-1">
+                                (إجمالي {totalStock})
+                              </span>
+                            </div>
+                          </td>
+                          <td className="p-3.5 text-center">
+                            <div className="inline-flex items-center gap-2 justify-center">
+                              <button
+                                id={`admin-edit-product-btn-${p.id}`}
+                                type="button"
+                                onClick={() => handleStartEditProduct(p)}
+                                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 hover:border-amber-500/60 transition-colors text-xs font-semibold"
+                                title="تعديل بيانات الهودي"
+                              >
+                                <Pencil className="w-3.5 h-3.5" />
+                                <span>تعديل</span>
+                              </button>
+                              <button
+                                id={`admin-delete-product-btn-${p.id}`}
+                                type="button"
+                                onClick={() => handleDeleteProductPrompt(p.id, p.name)}
+                                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-rose-950/40 hover:bg-rose-950/80 text-rose-400 border border-rose-900/50 hover:border-rose-700 transition-colors text-xs font-semibold"
+                                title="حذف هذا الهودي نهائياً"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                                <span>حذف</span>
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -1774,6 +1889,107 @@ export const AdminDashboard: React.FC = () => {
             </button>
           </div>
         </form>
+      )}
+
+      {/* TAB CONTENT: SECURITY & CREDENTIALS */}
+      {activeTab === 'security' && (
+        <div className="bg-stone-900 border border-stone-800 rounded-2xl p-6 space-y-6 max-w-2xl animate-in fade-in shadow-xl">
+          <div>
+            <h3 className="text-base font-bold text-stone-100 flex items-center gap-2">
+              <Lock className="w-5 h-5 text-amber-400" />
+              <span>إدارة بيانات حساب لوحة الإدارة وكلمة السر</span>
+            </h3>
+            <p className="text-xs text-stone-400 mt-1">
+              يمكنك هنا تغيير اسم المستخدم وكلمة المرور الخاصة بلوحة الإدارة. يتم حفظ البيانات مشفرة وسحابياً في قاعدة بيانات Firebase، بحيث يمكنك الدخول بها من هاتفك أو الكمبيوتر أو أي جهاز آخر في أي وقت.
+            </p>
+          </div>
+
+          <div className="bg-stone-950/80 border border-stone-800/90 rounded-xl p-4 space-y-2 text-xs">
+            <div className="flex items-center justify-between">
+              <span className="text-stone-400">اسم المستخدم الحالي المسجل:</span>
+              <span className="font-mono font-bold text-amber-400 px-2 py-0.5 rounded bg-stone-900 border border-stone-800">
+                {adminCredentials.username}
+              </span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-stone-400">حالة المزامنة السحابية:</span>
+              <span className="text-emerald-400 font-semibold flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                متصل سحابياً (Firebase Firestore)
+              </span>
+            </div>
+          </div>
+
+          <form onSubmit={handleChangeCredentials} className="space-y-4">
+            <div>
+              <label className="block text-xs font-semibold text-stone-300 mb-1">
+                اسم المستخدم الجديد
+              </label>
+              <input
+                id="security-new-username"
+                type="text"
+                required
+                value={newUsername}
+                onChange={(e) => setNewUsername(e.target.value)}
+                placeholder="أدخل اسم المستخدم الجديد"
+                className="w-full bg-stone-950 border border-stone-800 rounded-xl px-3.5 py-2.5 text-xs text-stone-100 placeholder-stone-600 focus:outline-none focus:border-amber-500 font-mono"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-stone-300 mb-1">
+                كلمة المرور الجديدة
+              </label>
+              <input
+                id="security-new-password"
+                type="password"
+                required
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                placeholder="أدخل كلمة مرور جديدة (4 أحرف على الأقل)"
+                className="w-full bg-stone-950 border border-stone-800 rounded-xl px-3.5 py-2.5 text-xs text-stone-100 placeholder-stone-600 focus:outline-none focus:border-amber-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-stone-300 mb-1">
+                تأكيد كلمة المرور الجديدة
+              </label>
+              <input
+                id="security-confirm-password"
+                type="password"
+                required
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                placeholder="أعد كتابة كلمة المرور للتأكيد"
+                className="w-full bg-stone-950 border border-stone-800 rounded-xl px-3.5 py-2.5 text-xs text-stone-100 placeholder-stone-600 focus:outline-none focus:border-amber-500"
+              />
+            </div>
+
+            {securityError && (
+              <p className="text-xs text-rose-400 bg-rose-950/40 p-3 rounded-xl border border-rose-900/40">
+                {securityError}
+              </p>
+            )}
+
+            {securitySuccess && (
+              <p className="text-xs text-emerald-400 bg-emerald-950/40 p-3 rounded-xl border border-emerald-900/40">
+                {securitySuccess}
+              </p>
+            )}
+
+            <div className="pt-2">
+              <button
+                id="save-security-credentials-btn"
+                type="submit"
+                disabled={isUpdatingCreds}
+                className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-black font-bold text-xs transition-colors shadow-md shadow-amber-950/40 disabled:opacity-50"
+              >
+                {isUpdatingCreds ? 'جاري الحفظ السحابي...' : 'حفظ بيانات الدخول الجديدة سحابياً'}
+              </button>
+            </div>
+          </form>
+        </div>
       )}
 
       {/* Edit Product Modal */}

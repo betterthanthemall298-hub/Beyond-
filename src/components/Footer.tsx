@@ -46,10 +46,6 @@ export const Footer: React.FC = () => {
                 {settings.storeName || 'NOCTURNE HOODIES'}
               </span>
             </div>
-
-            <p className="text-xs text-stone-400 leading-relaxed max-w-md">
-              متجر متخصص في تقديم هوديز الأوفر سايز الراقية والمريحة بأعلى معايير الأناقة والجودة.
-            </p>
           </div>
 
           {/* Quick Links */}

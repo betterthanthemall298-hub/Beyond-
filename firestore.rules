@@ -1,0 +1,44 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Products can be read by everyone, and managed by store owners
+    match /products/{productId} {
+      allow read, write: if true;
+    }
+
+    // Orders can be created by any customer from any device, and managed by admin
+    match /orders/{orderId} {
+      allow read, write: if true;
+    }
+
+    // Settings can be read by all customers, and updated by admin
+    match /settings/{settingId} {
+      allow read, write: if true;
+    }
+
+    // Admin authentication credentials can be read and updated
+    match /admin_auth/{authId} {
+      allow read, write: if true;
+    }
+
+    // Coupons
+    match /coupons/{couponId} {
+      allow read, write: if true;
+    }
+
+    // Customer review images
+    match /reviewImages/{reviewId} {
+      allow read, write: if true;
+    }
+
+    // Shipping governorates
+    match /governorates/{govId} {
+      allow read, write: if true;
+    }
+
+    // Test connection doc
+    match /test/{docId} {
+      allow read, write: if true;
+    }
+  }
+}

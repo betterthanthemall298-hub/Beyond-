@@ -39,6 +39,7 @@ export const CheckoutModal: React.FC = () => {
   const [notes, setNotes] = useState('');
   const [phoneError, setPhoneError] = useState('');
   const [createdOrderNumber, setCreatedOrderNumber] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   if (!isCheckoutOpen) return null;
 
@@ -54,8 +55,9 @@ export const CheckoutModal: React.FC = () => {
     return regex.test(clean);
   };
 
-  const handleSubmitOrder = (e: React.FormEvent) => {
+  const handleSubmitOrder = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
 
     if (!customerName.trim()) {
       alert('برجاء كتابة الاسم بالكامل');
@@ -78,32 +80,40 @@ export const CheckoutModal: React.FC = () => {
       return;
     }
 
-    const orderItems: OrderItem[] = cart.map((item) => ({
-      productId: item.productId,
-      productName: item.product.name,
-      image: item.product.images[0],
-      size: item.size,
-      price: item.product.price,
-      quantity: item.quantity
-    }));
+    setIsSubmitting(true);
+    try {
+      const orderItems: OrderItem[] = cart.map((item) => ({
+        productId: item.productId,
+        productName: item.product.name,
+        image: item.product.images[0],
+        size: item.size,
+        price: item.product.price,
+        quantity: item.quantity
+      }));
 
-    const newOrder = createOrder({
-      customerName: customerName.trim(),
-      phone: phone.trim(),
-      alternatePhone: alternatePhone.trim() || undefined,
-      governorate: selectedGovernorate,
-      center: center.trim(),
-      address: address.trim(),
-      notes: notes.trim() || undefined,
-      items: orderItems,
-      subtotal,
-      shippingCost,
-      discount,
-      couponCode: appliedCoupon?.code,
-      total: grandTotal
-    });
+      const newOrder = await createOrder({
+        customerName: customerName.trim(),
+        phone: phone.trim(),
+        alternatePhone: alternatePhone.trim() || undefined,
+        governorate: selectedGovernorate,
+        center: center.trim(),
+        address: address.trim(),
+        notes: notes.trim() || undefined,
+        items: orderItems,
+        subtotal,
+        shippingCost,
+        discount,
+        couponCode: appliedCoupon?.code,
+        total: grandTotal
+      });
 
-    setCreatedOrderNumber(newOrder.orderNumber);
+      setCreatedOrderNumber(newOrder.orderNumber);
+    } catch (err) {
+      console.error('Failed to submit order:', err);
+      alert('حدث خطأ أثناء إرسال الطلب، يرجى المحاولة مرة أخرى.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleClose = () => {
