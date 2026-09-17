@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useStore } from '../store/useStore';
 import {
   Lock,
@@ -163,6 +163,22 @@ export const AdminDashboard: React.FC = () => {
   const [instagramUrl, setInstagramUrl] = useState(settings.instagramUrl || '');
   const [tiktokUrl, setTiktokUrl] = useState(settings.tiktokUrl || '');
   const [facebookUrl, setFacebookUrl] = useState(settings.facebookUrl || '');
+
+  // Synchronize form states when settings or credentials load/update from Firestore
+  useEffect(() => {
+    setStoreName(settings.storeName || '');
+    setBrandLogo(settings.brandLogo || '');
+    setAnnouncementText(settings.announcementText || '');
+    setWhatsappNumber(settings.whatsappNumber || '');
+    setWhatsappUrl(settings.whatsappUrl || '');
+    setInstagramUrl(settings.instagramUrl || '');
+    setTiktokUrl(settings.tiktokUrl || '');
+    setFacebookUrl(settings.facebookUrl || '');
+  }, [settings]);
+
+  useEffect(() => {
+    setNewUsername(adminCredentials.username || 'admin');
+  }, [adminCredentials.username]);
 
   // Stats calculation
   const totalRevenue = orders
@@ -567,6 +583,11 @@ export const AdminDashboard: React.FC = () => {
               />
             </div>
 
+            <div className="flex items-center gap-2 px-1 py-1 text-[11px] text-amber-400/90 bg-amber-950/20 border border-amber-900/30 rounded-xl">
+              <Check className="w-4 h-4 text-amber-400 shrink-0 ml-1" />
+              <span>تذكر الدخول مفعل تلقائياً — لن تحتاج لكتابة البيانات مجدداً على هذا الجهاز.</span>
+            </div>
+
             {loginError && (
               <p className="text-xs text-rose-400 bg-rose-950/40 p-2.5 rounded-lg border border-rose-900/40">
                 {loginError}
@@ -600,17 +621,23 @@ export const AdminDashboard: React.FC = () => {
             <div className="flex items-center gap-2">
               <span className="text-xs font-bold text-emerald-400">قاعدة بيانات Firebase سحابية متصلة</span>
               <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-950/60 border border-emerald-800/40 text-emerald-300 font-mono">
-                مزامنة حية
+                مزامنة حية للجميع
               </span>
             </div>
-            <p className="text-[11px] text-stone-400">أي طلب أو تعديل يظهر فوراً لجميع الأجهزة بدون تحديث الصفحة</p>
+            <p className="text-[11px] text-stone-400">أي تعديل تجريه هنا يظهر فوراً وبشكل لحظي لجميع الزوار على كافة الأجهزة</p>
           </div>
         </div>
 
         <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
-          <div className="text-right hidden sm:block">
-            <span className="text-[10px] text-stone-500 block">المستخدم الحالي</span>
-            <span className="text-xs font-mono font-bold text-amber-400">{adminCredentials.username}</span>
+          <div className="text-right hidden sm:flex items-center gap-2">
+            <span className="text-[10px] px-2.5 py-1 rounded-lg bg-stone-900 border border-stone-800 text-stone-400 flex items-center gap-1.5">
+              <Check className="w-3 h-3 text-emerald-400" />
+              جلسة دائمة محفوظة
+            </span>
+            <div className="text-right">
+              <span className="text-[10px] text-stone-500 block">المستخدم</span>
+              <span className="text-xs font-mono font-bold text-amber-400">{adminCredentials.username}</span>
+            </div>
           </div>
           <button
             id="admin-logout-btn"

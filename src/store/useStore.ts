@@ -2,9 +2,9 @@ import { useSyncExternalStore } from 'react';
 import {
   collection,
   doc,
+  getDoc,
   onSnapshot,
   setDoc,
-  updateDoc,
   deleteDoc
 } from 'firebase/firestore';
 import { db, testFirebaseConnection } from '../lib/firebase';
@@ -153,19 +153,22 @@ export interface StoreState {
 }
 
 const STORAGE_KEY_V4 = 'nocturne_hoodies_storage_v4_clean';
+const ADMIN_SESSION_KEY = 'nocturne_admin_session_active';
 
 function loadLocalDeviceData() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY_V4);
-    if (!raw) return { cart: [], wishlist: [] };
+    const adminSession = localStorage.getItem(ADMIN_SESSION_KEY) === 'true';
+    if (!raw) return { cart: [], wishlist: [], isAdminLoggedIn: adminSession };
     const parsed = JSON.parse(raw);
     return {
       cart: parsed.cart || [],
-      wishlist: parsed.wishlist || []
+      wishlist: parsed.wishlist || [],
+      isAdminLoggedIn: adminSession
     };
   } catch (e) {
     console.error('Failed to load local storage:', e);
-    return { cart: [], wishlist: [] };
+    return { cart: [], wishlist: [], isAdminLoggedIn: false };
   }
 }
 
@@ -208,8 +211,19 @@ let state: StoreState = {
   setIsSizeAdvisorOpen: (open) => update(() => ({ isSizeAdvisorOpen: open })),
   isCheckoutOpen: false,
   setIsCheckoutOpen: (open) => update(() => ({ isCheckoutOpen: open })),
-  isAdminLoggedIn: false,
-  setIsAdminLoggedIn: (logged) => update(() => ({ isAdminLoggedIn: logged })),
+  isAdminLoggedIn: localDeviceData.isAdminLoggedIn,
+  setIsAdminLoggedIn: (logged) => {
+    try {
+      if (logged) {
+        localStorage.setItem(ADMIN_SESSION_KEY, 'true');
+      } else {
+        localStorage.removeItem(ADMIN_SESSION_KEY);
+      }
+    } catch (e) {
+      console.error('Failed to update admin session in localStorage:', e);
+    }
+    update(() => ({ isAdminLoggedIn: logged }));
+  },
 
   searchQuery: '',
   setSearchQuery: (query) => update(() => ({ searchQuery: query })),
@@ -309,11 +323,16 @@ let state: StoreState = {
     const cleanPass = passInput.trim();
     const creds = state.adminCredentials;
     if (cleanUser === creds.username && cleanPass === creds.password) {
+      try {
+        localStorage.setItem(ADMIN_SESSION_KEY, 'true');
+      } catch (e) {
+        console.error('Failed to save admin session:', e);
+      }
       update(() => ({ isAdminLoggedIn: true }));
       state.addToast({
         type: 'success',
         title: 'مرحباً بك في لوحة الإدارة',
-        description: `تم تسجيل الدخول بنجاح كـ ${creds.username}`
+        description: `تم تسجيل الدخول بنجاح كـ ${creds.username} (تم حفظ الجلسة على هذا الجهاز)`
       });
       return true;
     }
@@ -349,7 +368,7 @@ let state: StoreState = {
   },
   updateProduct: async (id, updates) => {
     try {
-      await updateDoc(doc(db, 'products', id), updates);
+      await setDoc(doc(db, 'products', id), updates, { merge: true });
       update((prev) => ({
         products: prev.products.map((p) => (p.id === id ? { ...p, ...updates } : p)),
         selectedProduct:
@@ -359,7 +378,7 @@ let state: StoreState = {
       }));
       state.addToast({
         type: 'info',
-        title: 'تم تحديث بيانات المنتج ومزامنتها'
+        title: 'تم تحديث بيانات المنتج ومزامنتها سحابياً للجميع'
       });
     } catch (err) {
       console.error('Failed to update product in Firestore:', err);
@@ -587,7 +606,7 @@ let state: StoreState = {
     const current = state.coupons.find((c) => c.id === id);
     if (!current) return;
     try {
-      await updateDoc(doc(db, 'coupons', id), { active: !current.active });
+      await setDoc(doc(db, 'coupons', id), { active: !current.active }, { merge: true });
       update((prev) => ({
         coupons: prev.coupons.map((c) =>
           c.id === id ? { ...c, active: !c.active } : c
@@ -641,7 +660,7 @@ let state: StoreState = {
   cancelOrder: async (orderId) => {
     const order = state.orders.find((o) => o.id === orderId);
     try {
-      await updateDoc(doc(db, 'orders', orderId), { status: 'cancelled' });
+      await setDoc(doc(db, 'orders', orderId), { status: 'cancelled' }, { merge: true });
     } catch (err) {
       console.error('Failed to cancel order in Firestore:', err);
     }
@@ -674,7 +693,7 @@ let state: StoreState = {
   },
   updateOrderStatus: async (orderId, status) => {
     try {
-      await updateDoc(doc(db, 'orders', orderId), { status });
+      await setDoc(doc(db, 'orders', orderId), { status }, { merge: true });
     } catch (err) {
       console.error('Failed to update order status in Firestore:', err);
     }
@@ -778,6 +797,56 @@ let state: StoreState = {
   }
 };
 
+// Cloud auto-bootstrap to ensure shared catalog & settings exist across all devices
+async function initializeCloudDataIfEmpty() {
+  try {
+    const initRef = doc(db, 'settings', 'initial_setup');
+    const initSnap = await getDoc(initRef);
+    if (!initSnap.exists()) {
+      console.log('Bootstrapping initial store data into Firestore cloud...');
+
+      // 1. Seed products
+      for (const p of INITIAL_PRODUCTS) {
+        await setDoc(doc(db, 'products', p.id), p, { merge: true });
+      }
+
+      // 2. Seed settings
+      await setDoc(doc(db, 'settings', 'general'), INITIAL_SETTINGS, { merge: true });
+
+      // 3. Seed governorates
+      for (const g of INITIAL_GOVERNORATES) {
+        await setDoc(doc(db, 'governorates', g.name), g, { merge: true });
+      }
+
+      // 4. Seed coupons
+      for (const c of INITIAL_COUPONS) {
+        await setDoc(doc(db, 'coupons', c.id), c, { merge: true });
+      }
+
+      // 5. Seed review images
+      for (const img of INITIAL_REVIEW_IMAGES) {
+        await setDoc(doc(db, 'reviewImages', img.id), img, { merge: true });
+      }
+
+      // 6. Seed admin credentials
+      await setDoc(doc(db, 'admin_auth', 'credentials'), {
+        username: 'admin',
+        password: 'admin123',
+        updatedAt: new Date().toISOString()
+      }, { merge: true });
+
+      // 7. Mark initialized
+      await setDoc(initRef, {
+        initialized: true,
+        seededAt: new Date().toISOString()
+      });
+      console.log('Cloud data bootstrap complete!');
+    }
+  } catch (err) {
+    console.warn('Initial cloud bootstrap notice:', err);
+  }
+}
+
 // Setup Firebase Real-Time Synchronization Listeners
 let isSubscribed = false;
 
@@ -785,8 +854,10 @@ function setupFirebaseSync() {
   if (isSubscribed) return;
   isSubscribed = true;
 
-  // Test connection
-  testFirebaseConnection().catch(() => {});
+  // Test connection & bootstrap initial cloud data if newly created database
+  testFirebaseConnection()
+    .then(() => initializeCloudDataIfEmpty())
+    .catch(() => {});
 
   // 1. Orders Listener (Real-time updates across all devices)
   try {
@@ -819,8 +890,8 @@ function setupFirebaseSync() {
         });
         update(() => ({ products: loadedProducts }));
       } else {
-        // Empty if no products uploaded yet
-        update(() => ({ products: [] }));
+        // Only empty if products were explicitly deleted
+        update((prev) => ({ products: prev.products.length === 0 ? [] : prev.products }));
       }
     }, (error) => {
       console.warn('Products onSnapshot error:', error);
@@ -891,6 +962,23 @@ function setupFirebaseSync() {
     });
   } catch (err) {
     console.error('Error setting up review images listener:', err);
+  }
+
+  // 7. Governorates Listener (Shipping rates updated by admin sync to all users)
+  try {
+    onSnapshot(collection(db, 'governorates'), (snapshot) => {
+      if (!snapshot.empty) {
+        const loadedGovs: GovernorateShipping[] = [];
+        snapshot.forEach((docSnap) => {
+          loadedGovs.push(docSnap.data() as GovernorateShipping);
+        });
+        update(() => ({ governorates: loadedGovs }));
+      }
+    }, (error) => {
+      console.warn('Governorates onSnapshot error:', error);
+    });
+  } catch (err) {
+    console.error('Error setting up governorates listener:', err);
   }
 }
 
