@@ -41,6 +41,13 @@ export const CheckoutModal: React.FC = () => {
   const [createdOrderNumber, setCreatedOrderNumber] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // When checkout modal closes, ensure createdOrderNumber is cleaned so new orders are fresh
+  React.useEffect(() => {
+    if (!isCheckoutOpen) {
+      setCreatedOrderNumber(null);
+    }
+  }, [isCheckoutOpen]);
+
   if (!isCheckoutOpen) return null;
 
   const currentGov = governorates.find((g) => g.name === selectedGovernorate) || governorates[0];
@@ -122,13 +129,20 @@ export const CheckoutModal: React.FC = () => {
 
   const handleClose = () => {
     setCreatedOrderNumber(null);
+    setCustomerName('');
+    setPhone('');
+    setAlternatePhone('');
+    setCenter('');
+    setAddress('');
+    setNotes('');
+    setPhoneError('');
     setIsCheckoutOpen(false);
   };
 
   const getWhatsAppOrderLink = () => {
     if (!createdOrderNumber) return '';
     const text = encodeURIComponent(
-      `مرحباً نوكتورن هوديز، قمت بعمل طلب جديد برقم: ${createdOrderNumber}\nالاسم: ${customerName}\nالهاتف: ${phone}\nالمحافظة: ${selectedGovernorate}\nالمركز: ${center}\nالعنوان بالتفصيل: ${address}\nالإجمالي: ${grandTotal} ج.م\nأرجو تأكيد الطلب للشحن.`
+      `مرحباً Beyond، قمت بعمل طلب جديد برقم: ${createdOrderNumber}\nالاسم: ${customerName}\nالهاتف: ${phone}\nالمحافظة: ${selectedGovernorate}\nالمركز: ${center}\nالعنوان بالتفصيل: ${address}\nالإجمالي: ${grandTotal} ج.م\nأرجو تأكيد الطلب للشحن.`
     );
     return `https://wa.me/${settings.whatsappNumber}?text=${text}`;
   };
@@ -149,7 +163,7 @@ export const CheckoutModal: React.FC = () => {
             </h3>
             <p className="text-xs text-stone-400">
               {createdOrderNumber
-                ? 'شكراً لاختيارك نوكتورن هوديز الفاخرة'
+                ? 'شكراً لاختيارك Beyond'
                 : 'شحن لجميع محافظات مصر مع حق الفتح والمعاينة'}
             </p>
           </div>
@@ -228,6 +242,15 @@ export const CheckoutModal: React.FC = () => {
                   className="w-full sm:w-auto px-6 py-3 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-200 text-xs font-bold border border-stone-700 transition-colors"
                 >
                   تتبع حالة هذا الطلب
+                </button>
+
+                <button
+                  id="continue-shopping-new-order-btn"
+                  type="button"
+                  onClick={handleClose}
+                  className="w-full sm:w-auto px-6 py-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-black text-xs font-bold transition-colors shadow-md shadow-amber-950/40"
+                >
+                  طلب جديد / متابعة التسوق
                 </button>
               </div>
             </div>

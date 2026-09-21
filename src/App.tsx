@@ -6,6 +6,7 @@ import { ProductGrid } from './components/ProductGrid';
 import { SmartSizeAdvisorModal } from './components/SmartSizeAdvisorModal';
 import { WishlistDrawer } from './components/WishlistDrawer';
 import { CheckoutModal } from './components/CheckoutModal';
+import { QuickLookModal } from './components/QuickLookModal';
 import { OrderTrackingView } from './components/OrderTrackingView';
 import { CustomerReviewsGallery } from './components/CustomerReviewsGallery';
 import { CartPage } from './components/CartPage';
@@ -69,6 +70,7 @@ export default function App() {
       <ProductShareModal />
       <WishlistDrawer />
       <CheckoutModal />
+      <QuickLookModal />
 
       {/* Main Navigation Bar */}
       <Navbar />

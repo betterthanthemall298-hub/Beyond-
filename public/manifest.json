@@ -1,0 +1,21 @@
+{
+  "id": "/",
+  "name": "Beyond - متجر هوديز أوفر سايز فاخرة",
+  "short_name": "Beyond",
+  "description": "متجر مصري رائد في الهوديز الشتوية الأوفر سايز الفاخرة مع حق المعاينة قبل الاستلام وإشعارات فورية للطلبات.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#09090b",
+  "theme_color": "#09090b",
+  "orientation": "portrait",
+  "dir": "rtl",
+  "lang": "ar",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "64x64 32x32 24x24 16x16",
+      "type": "image/x-icon"
+    }
+  ]
+}

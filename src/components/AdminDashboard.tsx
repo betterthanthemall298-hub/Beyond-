@@ -47,7 +47,8 @@ import {
   isSoundNotificationEnabled,
   setSoundNotificationEnabled,
   requestNotificationPermission,
-  getNotificationPermission
+  getNotificationPermission,
+  testPhoneNotification
 } from '../lib/notifications';
 
 export const AdminDashboard: React.FC = () => {
@@ -1567,13 +1568,24 @@ export const AdminDashboard: React.FC = () => {
                     className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-stone-950 text-xs font-bold flex items-center gap-1.5 transition-colors shadow-sm"
                   >
                     <Bell className="w-3.5 h-3.5" />
-                    <span>تفعيل إشعارات المتصفح</span>
+                    <span>تفعيل إشعارات الهاتف / المتصفح</span>
                   </button>
                 ) : (
-                  <span className="px-3 py-1.5 rounded-xl bg-stone-800/80 border border-stone-700 text-stone-300 text-xs flex items-center gap-1.5">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>إشعارات المتصفح مقبولة</span>
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="px-3 py-1.5 rounded-xl bg-stone-800/80 border border-stone-700 text-stone-300 text-xs flex items-center gap-1.5">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>الإشعارات مفعلة</span>
+                    </span>
+                    <button
+                      id="admin-test-phone-notification-btn"
+                      type="button"
+                      onClick={() => testPhoneNotification()}
+                      className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-black text-xs font-bold flex items-center gap-1.5 transition-colors shadow-sm"
+                      title="تجربة وصول إشعار فوري كرسائل الواتساب على الهاتف"
+                    >
+                      <span>📱 إشعار تجريبي</span>
+                    </button>
+                  </div>
                 )}
               </div>
             </div>

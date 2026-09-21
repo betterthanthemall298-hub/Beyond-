@@ -8,6 +8,7 @@ import {
   deleteDoc
 } from 'firebase/firestore';
 import { db, testFirebaseConnection, sanitizeForFirestore } from '../lib/firebase';
+import { triggerNewOrderNotification } from '../lib/notifications';
 import {
   Product,
   CartItem,
@@ -57,6 +58,9 @@ export interface StoreState {
   shareModalProduct: Product | null;
   openShareModal: (product: Product) => void;
   closeShareModal: () => void;
+  quickLookProduct: Product | null;
+  openQuickLook: (product: Product) => void;
+  closeQuickLook: () => void;
 
   // Search & Filters
   searchQuery: string;
@@ -216,6 +220,9 @@ let state: StoreState = {
   shareModalProduct: null,
   openShareModal: (product) => update(() => ({ shareModalProduct: product })),
   closeShareModal: () => update(() => ({ shareModalProduct: null })),
+  quickLookProduct: null,
+  openQuickLook: (product) => update(() => ({ quickLookProduct: product })),
+  closeQuickLook: () => update(() => ({ quickLookProduct: null })),
 
   searchQuery: '',
   setSearchQuery: (query) => update(() => ({ searchQuery: query })),
@@ -632,15 +639,8 @@ let state: StoreState = {
     update((prev) => ({
       orders: [newOrder, ...prev.orders.filter((o) => o.id !== newOrder.id)],
       cart: [],
-      appliedCoupon: null,
-      isCheckoutOpen: false
+      appliedCoupon: null
     }));
-
-    state.addToast({
-      type: 'success',
-      title: 'تم تأكيد طلبك ومزامنته سحابياً! 🎉',
-      description: `رقم الطلب الخاص بك: #${nextOrderNum}`
-    });
 
     return newOrder;
   },
@@ -795,6 +795,7 @@ function setupFirebaseSync() {
   testFirebaseConnection().catch(() => {});
 
   // 1. Orders Listener (Real-time updates across all devices)
+  let isFirstOrdersSnapshot = true;
   try {
     onSnapshot(collection(db, 'orders'), (snapshot) => {
       if (!snapshot.empty) {
@@ -805,7 +806,24 @@ function setupFirebaseSync() {
         // Sort descending by creation date or order number
         loadedOrders.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
         update(() => ({ orders: loadedOrders }));
+
+        // Trigger phone and sound notifications for newly incoming orders
+        if (!isFirstOrdersSnapshot) {
+          snapshot.docChanges().forEach((change) => {
+            if (change.type === 'added') {
+              const newOrder = change.doc.data() as Order;
+              triggerNewOrderNotification(
+                newOrder.orderNumber,
+                newOrder.customerName,
+                newOrder.total,
+                newOrder.governorate
+              );
+            }
+          });
+        }
+        isFirstOrdersSnapshot = false;
       } else {
+        isFirstOrdersSnapshot = false;
         update(() => ({ orders: [] }));
       }
     }, (error) => {

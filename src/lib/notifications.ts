@@ -1,8 +1,9 @@
 /**
- * Sound synthesizer and Desktop Push Notifications for incoming store orders
+ * Sound synthesizer and Desktop/Mobile Push Notifications for incoming store orders
+ * Supports Service Worker background notifications, vibration, and audio chimes
  */
 
-const SOUND_ENABLED_KEY = 'nocturne_sound_notifications_enabled';
+const SOUND_ENABLED_KEY = 'beyond_sound_notifications_enabled';
 
 export function isSoundNotificationEnabled(): boolean {
   if (typeof window === 'undefined') return true;
@@ -49,7 +50,7 @@ export function playOrderNotificationSound() {
       osc.frequency.setValueAtTime(freq, now + time);
 
       gain.gain.setValueAtTime(0, now + time);
-      gain.gain.linearRampToValueAtTime(0.25, now + time + 0.02);
+      gain.gain.linearRampToValueAtTime(0.28, now + time + 0.02);
       gain.gain.exponentialRampToValueAtTime(0.0001, now + time + duration);
 
       osc.connect(gain);
@@ -64,10 +65,23 @@ export function playOrderNotificationSound() {
 }
 
 /**
- * Check if the browser supports desktop notifications
+ * Vibrate phone if supported (identical to WhatsApp vibration pattern)
+ */
+export function triggerPhoneVibration() {
+  if (typeof window !== 'undefined' && 'vibrate' in navigator) {
+    try {
+      navigator.vibrate([250, 100, 250, 100, 250]);
+    } catch {
+      // Ignore vibration errors if unsupported by device permissions
+    }
+  }
+}
+
+/**
+ * Check if the browser supports notifications
  */
 export function isDesktopNotificationSupported(): boolean {
-  return typeof window !== 'undefined' && 'Notification' in window;
+  return typeof window !== 'undefined' && ('Notification' in window || 'serviceWorker' in navigator);
 }
 
 /**
@@ -75,61 +89,112 @@ export function isDesktopNotificationSupported(): boolean {
  */
 export function getNotificationPermission(): NotificationPermission | 'unsupported' {
   if (!isDesktopNotificationSupported()) return 'unsupported';
-  return Notification.permission;
+  if ('Notification' in window) {
+    return Notification.permission;
+  }
+  return 'unsupported';
 }
 
 /**
- * Request notification permission from browser
+ * Request notification permission from browser/phone
  */
 export async function requestNotificationPermission(): Promise<NotificationPermission | 'unsupported'> {
   if (!isDesktopNotificationSupported()) return 'unsupported';
   try {
-    const result = await Notification.requestPermission();
-    return result;
+    if ('Notification' in window) {
+      const result = await Notification.requestPermission();
+      return result;
+    }
+    return 'unsupported';
   } catch (err) {
     console.warn('Error requesting notification permission:', err);
-    return Notification.permission;
+    return 'unsupported';
   }
 }
 
 /**
- * Send a desktop notification if permission is granted
+ * Send a phone / desktop notification using Service Worker (so it works when browser tab is inactive/backgrounded)
  */
-export function sendDesktopNotification(title: string, body: string, onClick?: () => void) {
+export async function sendDesktopNotification(title: string, body: string, onClick?: () => void) {
   if (!isDesktopNotificationSupported()) return;
-  if (Notification.permission !== 'granted') return;
 
+  // Attempt vibration
+  triggerPhoneVibration();
+
+  if ('Notification' in window && Notification.permission !== 'granted') {
+    return;
+  }
+
+  // 1. Try Service Worker showNotification first (Standard for Android & mobile background notifications)
+  if ('serviceWorker' in navigator) {
+    try {
+      const registration = await navigator.serviceWorker.ready;
+      if (registration && 'showNotification' in registration) {
+        await registration.showNotification(title, {
+          body,
+          icon: '/favicon.ico',
+          badge: '/favicon.ico',
+          tag: 'beyond-order-' + Date.now(),
+          vibrate: [250, 100, 250, 100, 250],
+          data: { url: '/?view=admin' },
+          requireInteraction: true
+        } as NotificationOptions);
+        return;
+      }
+    } catch (swErr) {
+      console.warn('Service worker showNotification failed, trying standard Notification:', swErr);
+    }
+  }
+
+  // 2. Fallback to standard window Notification
   try {
-    const notification = new Notification(title, {
-      body,
-      icon: '/favicon.ico',
-      badge: '/favicon.ico',
-      tag: 'new-order',
-      requireInteraction: true
-    });
+    if ('Notification' in window && Notification.permission === 'granted') {
+      const notification = new Notification(title, {
+        body,
+        icon: '/favicon.ico',
+        badge: '/favicon.ico',
+        tag: 'beyond-order-' + Date.now(),
+        requireInteraction: true
+      });
 
-    if (onClick) {
-      notification.onclick = () => {
-        window.focus();
-        onClick();
-        notification.close();
-      };
+      if (onClick) {
+        notification.onclick = () => {
+          window.focus();
+          onClick();
+          notification.close();
+        };
+      }
     }
   } catch (err) {
-    console.warn('Error showing desktop notification:', err);
+    console.warn('Error showing standard notification:', err);
   }
 }
 
 /**
- * Complete trigger for incoming order: plays sound + sends push notification
+ * Complete trigger for incoming order: plays chime + phone vibration + push notification
  */
 export function triggerNewOrderNotification(orderNumber: string, customerName: string, total: number, governorate: string) {
   playOrderNotificationSound();
+  triggerPhoneVibration();
 
-  const title = `🔔 طلب جديد وارد #${orderNumber}`;
+  const title = `🔔 طلب جديد وارد في Beyond #${orderNumber}`;
   const body = `العميل: ${customerName} | ${governorate} | الإجمالي: ${total} ج.م`;
 
   sendDesktopNotification(title, body, () => {
-    // Focus window or jump to orders
+    window.focus();
   });
 }
+
+/**
+ * Test phone notification directly for the store manager
+ */
+export async function testPhoneNotification() {
+  playOrderNotificationSound();
+  triggerPhoneVibration();
+
+  const title = '🔔 تجربة إشعار هاتف Beyond (ناجحة!)';
+  const body = 'إشعارات الهاتف تعمل بنجاح مثل الواتساب! ستصلك تنبيهات فورية بكل طلب جديد.';
+
+  await sendDesktopNotification(title, body);
+}
+
