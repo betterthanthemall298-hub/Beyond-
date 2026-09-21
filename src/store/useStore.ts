@@ -170,15 +170,17 @@ const STORAGE_KEY_V4 = 'nocturne_hoodies_storage_v4_clean';
 function loadLocalDeviceData() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY_V4);
-    if (!raw) return { cart: [], wishlist: [] };
+    if (!raw) return { cart: [], wishlist: [], isAdminLoggedIn: false, activeView: 'home' as ActiveView };
     const parsed = JSON.parse(raw);
     return {
       cart: parsed.cart || [],
-      wishlist: parsed.wishlist || []
+      wishlist: parsed.wishlist || [],
+      isAdminLoggedIn: Boolean(parsed.isAdminLoggedIn),
+      activeView: (parsed.activeView === 'admin' ? 'admin' : 'home') as ActiveView
     };
   } catch (e) {
     console.error('Failed to load local storage:', e);
-    return { cart: [], wishlist: [] };
+    return { cart: [], wishlist: [], isAdminLoggedIn: false, activeView: 'home' as ActiveView };
   }
 }
 
@@ -186,7 +188,9 @@ function saveLocalDeviceData(s: StoreState) {
   try {
     const dataToSave = {
       cart: s.cart,
-      wishlist: s.wishlist
+      wishlist: s.wishlist,
+      isAdminLoggedIn: s.isAdminLoggedIn,
+      activeView: s.activeView === 'admin' ? 'admin' : 'home'
     };
     localStorage.setItem(STORAGE_KEY_V4, JSON.stringify(dataToSave));
   } catch (e) {
@@ -198,11 +202,20 @@ const localDeviceData = loadLocalDeviceData();
 const listeners = new Set<() => void>();
 let lastSavedCart = localDeviceData.cart;
 let lastSavedWishlist = localDeviceData.wishlist;
+let lastSavedIsAdmin = localDeviceData.isAdminLoggedIn;
+let lastSavedActiveView = localDeviceData.activeView;
 
 function notify() {
-  if (state.cart !== lastSavedCart || state.wishlist !== lastSavedWishlist) {
+  if (
+    state.cart !== lastSavedCart ||
+    state.wishlist !== lastSavedWishlist ||
+    state.isAdminLoggedIn !== lastSavedIsAdmin ||
+    state.activeView !== lastSavedActiveView
+  ) {
     lastSavedCart = state.cart;
     lastSavedWishlist = state.wishlist;
+    lastSavedIsAdmin = state.isAdminLoggedIn;
+    lastSavedActiveView = state.activeView;
     saveLocalDeviceData(state);
   }
   listeners.forEach((listener) => listener());
@@ -215,7 +228,7 @@ function update(fn: (prev: StoreState) => Partial<StoreState>) {
 }
 
 let state: StoreState = {
-  activeView: 'home',
+  activeView: localDeviceData.activeView,
   setActiveView: (view) => update(() => ({ activeView: view })),
   selectedProduct: null,
   setSelectedProduct: (product) => update(() => ({ selectedProduct: product })),
@@ -227,7 +240,7 @@ let state: StoreState = {
   setIsSizeAdvisorOpen: (open) => update(() => ({ isSizeAdvisorOpen: open })),
   isCheckoutOpen: false,
   setIsCheckoutOpen: (open) => update(() => ({ isCheckoutOpen: open })),
-  isAdminLoggedIn: false,
+  isAdminLoggedIn: localDeviceData.isAdminLoggedIn,
   setIsAdminLoggedIn: (logged) => update(() => ({ isAdminLoggedIn: logged })),
   shareModalProduct: null,
   openShareModal: (product) => update(() => ({ shareModalProduct: product })),

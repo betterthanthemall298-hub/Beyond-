@@ -16,13 +16,13 @@ import {
   Flame,
   Share2,
   MessageCircle,
-  Send,
+  Instagram,
   Copy
 } from 'lucide-react';
 import { ProductCard } from './ProductCard';
 import {
   shareToWhatsApp,
-  shareToTelegram,
+  shareToInstagram,
   copyToClipboard,
   getProductShareUrl
 } from '../utils/shareProduct';
@@ -179,7 +179,7 @@ export const ProductDetailPage: React.FC = () => {
               type="button"
               onClick={() => openShareModal(product)}
               className="absolute top-4 left-18 p-3 rounded-2xl backdrop-blur-md border border-stone-800 bg-stone-950/70 text-stone-300 hover:text-white hover:border-amber-500/50 transition-all"
-              title="مشاركة المنتج عبر واتساب وتليجرام"
+              title="مشاركة المنتج عبر واتساب وانستجرام"
             >
               <Share2 className="w-5 h-5" />
             </button>
@@ -415,15 +415,22 @@ export const ProductDetailPage: React.FC = () => {
                 <span>مشاركة واتساب</span>
               </button>
 
-              {/* Telegram Share */}
+              {/* Instagram Share */}
               <button
-                id="product-detail-telegram-share-btn"
+                id="product-detail-instagram-share-btn"
                 type="button"
-                onClick={() => shareToTelegram(product)}
-                className="py-2.5 px-3 rounded-xl bg-[#229ED9] hover:bg-[#1f8fc4] active:bg-[#1a7caa] text-white font-extrabold text-xs flex items-center justify-center gap-2 transition-all shadow-md shadow-sky-950/30 group"
+                onClick={async () => {
+                  await shareToInstagram(product);
+                  addToast({
+                    type: 'success',
+                    title: 'تم نسخ تفاصيل ورابط الهودي!',
+                    description: 'تم فتح انستجرام للمشاركة مع أصدقائك.'
+                  });
+                }}
+                className="py-2.5 px-3 rounded-xl bg-gradient-to-r from-[#833ab4] via-[#fd1d1d] to-[#fcb045] hover:opacity-95 active:scale-[0.99] text-white font-extrabold text-xs flex items-center justify-center gap-2 transition-all shadow-md shadow-pink-950/30 group"
               >
-                <Send className="w-4 h-4 text-white" />
-                <span>مشاركة تليجرام</span>
+                <Instagram className="w-4 h-4 text-white" />
+                <span>مشاركة انستجرام</span>
               </button>
 
               {/* Copy Direct Link */}

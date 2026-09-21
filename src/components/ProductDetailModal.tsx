@@ -275,7 +275,7 @@ export const ProductDetailModal: React.FC = () => {
                 type="button"
                 onClick={() => openShareModal(selectedProduct)}
                 className="p-3.5 rounded-xl border border-stone-800 bg-stone-950 text-stone-400 hover:text-amber-400 hover:border-amber-500/50 transition-all"
-                title="مشاركة المنتج عبر واتساب وتليجرام"
+                title="مشاركة المنتج عبر واتساب وانستجرام"
               >
                 <Share2 className="w-5 h-5" />
               </button>

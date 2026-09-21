@@ -10,7 +10,7 @@ export function getProductShareUrl(productId: string): string {
 }
 
 /**
- * Creates persuasive marketing copy formatted for WhatsApp, Telegram, and social media.
+ * Creates persuasive marketing copy formatted for WhatsApp, Instagram, and social media.
  */
 export function getMarketingShareText(product: Product): string {
   const url = getProductShareUrl(product.id);
@@ -30,7 +30,7 @@ export function getMarketingShareText(product: Product): string {
 }
 
 /**
- * Short headline for Telegram and social posts.
+ * Short headline for Instagram and social posts.
  */
 export function getShortMarketingText(product: Product): string {
   return `🔥 هودي ${product.name} بسعر ${product.price} ج.م من متجر Nocturne Hoodies`;
@@ -46,7 +46,17 @@ export function shareToWhatsApp(product: Product): void {
 }
 
 /**
- * Share directly on Telegram.
+ * Share on Instagram Direct / Web. Copies link/message and opens Instagram.
+ */
+export async function shareToInstagram(product: Product): Promise<void> {
+  const text = getMarketingShareText(product);
+  await copyToClipboard(text);
+  // Open Instagram direct / web
+  window.open('https://www.instagram.com/', '_blank', 'noopener,noreferrer');
+}
+
+/**
+ * Share directly on Telegram (kept for compatibility).
  */
 export function shareToTelegram(product: Product): void {
   const url = getProductShareUrl(product.id);

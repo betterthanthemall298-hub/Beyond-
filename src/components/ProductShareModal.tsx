@@ -3,7 +3,7 @@ import { useStore } from '../store/useStore';
 import {
   X,
   MessageCircle,
-  Send,
+  Instagram,
   Share2,
   Copy,
   Check,
@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import {
   shareToWhatsApp,
-  shareToTelegram,
+  shareToInstagram,
   shareToFacebook,
   shareToTwitter,
   canNativeShare,
@@ -172,21 +172,28 @@ export const ProductShareModal: React.FC = () => {
               </span>
             </button>
 
-            {/* Telegram Share Button */}
+            {/* Instagram Share Button */}
             <button
-              id="share-telegram-btn"
+              id="share-instagram-btn"
               type="button"
-              onClick={() => shareToTelegram(product)}
-              className="w-full flex items-center justify-between p-3.5 rounded-2xl bg-[#229ED9] hover:bg-[#1e8ec3] active:bg-[#1b7fae] text-white font-bold transition-all shadow-lg shadow-sky-950/40 group"
+              onClick={async () => {
+                await shareToInstagram(product);
+                addToast({
+                  type: 'success',
+                  title: 'تم نسخ تفاصيل ورابط المنتج!',
+                  description: 'تم فتح انستجرام للمشاركة في الرسائل المباشرة أو الستوري.'
+                });
+              }}
+              className="w-full flex items-center justify-between p-3.5 rounded-2xl bg-gradient-to-r from-[#833ab4] via-[#fd1d1d] to-[#fcb045] hover:opacity-95 active:scale-[0.99] text-white font-bold transition-all shadow-lg shadow-pink-950/40 group"
             >
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
-                  <Send className="w-5 h-5 text-white" />
+                  <Instagram className="w-5 h-5 text-white" />
                 </div>
                 <div className="text-right">
-                  <span className="text-sm font-extrabold block">مشاركة عبر تليجرام (Telegram)</span>
-                  <span className="text-[11px] text-sky-100/80 block font-normal">
-                    نشر في القنوات والمجموعات والمحادثات الفورية
+                  <span className="text-sm font-extrabold block">مشاركة عبر انستجرام (Instagram)</span>
+                  <span className="text-[11px] text-pink-100/90 block font-normal">
+                    نسخ النص والرابط تلقائياً والفتح في انستجرام للمشاركة مع الأصدقاء
                   </span>
                 </div>
               </div>

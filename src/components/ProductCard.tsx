@@ -120,7 +120,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
             openShareModal(product);
           }}
           className="absolute top-3 left-12 p-2 rounded-xl backdrop-blur-md bg-stone-950/70 border border-stone-800 text-stone-300 hover:text-amber-400 hover:border-amber-500/50 transition-all z-10"
-          title="مشاركة المنتج عبر واتساب وتليجرام"
+          title="مشاركة المنتج عبر واتساب وانستجرام"
         >
           <Share2 className="w-4 h-4" />
         </button>

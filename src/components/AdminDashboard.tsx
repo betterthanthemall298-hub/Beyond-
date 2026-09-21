@@ -55,6 +55,7 @@ export const AdminDashboard: React.FC = () => {
   const {
     isAdminLoggedIn,
     setIsAdminLoggedIn,
+    setActiveView,
     products,
     addProduct,
     updateProduct,
@@ -724,7 +725,10 @@ export const AdminDashboard: React.FC = () => {
           <button
             id="admin-logout-btn"
             type="button"
-            onClick={() => setIsAdminLoggedIn(false)}
+            onClick={() => {
+              setIsAdminLoggedIn(false);
+              setActiveView('home');
+            }}
             className="px-4 py-2 rounded-xl bg-stone-900 hover:bg-stone-800 border border-stone-800 text-stone-300 text-xs font-semibold flex items-center gap-2 transition-colors"
           >
             <LogOut className="w-4 h-4 text-rose-400" />
