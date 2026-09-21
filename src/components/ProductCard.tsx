@@ -67,6 +67,8 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
         <img
           src={product.images[activeImageIndex] || product.images[0]}
           alt={product.name}
+          loading="lazy"
+          decoding="async"
           referrerPolicy="no-referrer"
           className="w-full h-full object-cover transition-all duration-500 transform group-hover:scale-105"
         />
@@ -129,7 +131,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
           <span className="font-bold">{product.rating}</span>
         </div>
 
-        {/* Quick Look (كويك لوك) Button */}
+        {/* Quick Look (Eye Icon Only) */}
         <button
           id={`quick-look-btn-${product.id}`}
           type="button"
@@ -137,11 +139,11 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
             e.stopPropagation();
             openQuickLook(product);
           }}
-          className="absolute bottom-2.5 left-2.5 px-2.5 py-1 rounded-xl backdrop-blur-md bg-stone-950/85 hover:bg-amber-500 hover:text-black border border-stone-700/80 text-stone-200 text-[11px] font-bold flex items-center gap-1.5 transition-all shadow-lg z-10 group/btn"
-          title="كويك لوك - نظرة سريعة على المنتج ومقاساته"
+          className="absolute bottom-2.5 left-2.5 w-8 h-8 rounded-full backdrop-blur-md bg-stone-950/85 hover:bg-amber-500 hover:text-black border border-stone-700/80 text-stone-200 flex items-center justify-center transition-all shadow-lg z-10 group/btn"
+          title="نظرة سريعة"
+          aria-label="نظرة سريعة"
         >
-          <Eye className="w-3.5 h-3.5 text-amber-400 group-hover/btn:text-black transition-colors" />
-          <span>كويك لوك</span>
+          <Eye className="w-4 h-4 text-amber-400 group-hover/btn:text-black transition-colors" />
         </button>
       </div>
 

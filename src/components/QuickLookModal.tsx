@@ -260,7 +260,7 @@ export const QuickLookModal: React.FC = () => {
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
                   <span className="px-2.5 py-0.5 rounded-md bg-amber-500/10 border border-amber-500/30 text-amber-400 text-[11px] font-bold">
-                    كويك لوك | نظرة سريعة
+                    معاينة سريعة
                   </span>
                   <span className="text-xs font-semibold text-stone-400 uppercase tracking-wider">
                     {product.subtitle}

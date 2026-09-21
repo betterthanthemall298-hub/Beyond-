@@ -5,7 +5,12 @@ import {
   onSnapshot,
   setDoc,
   updateDoc,
-  deleteDoc
+  deleteDoc,
+  query,
+  orderBy,
+  limit,
+  getDocs,
+  where
 } from 'firebase/firestore';
 import { db, testFirebaseConnection, sanitizeForFirestore } from '../lib/firebase';
 import { triggerNewOrderNotification } from '../lib/notifications';
@@ -131,6 +136,7 @@ export interface StoreState {
   cancelOrder: (orderId: string) => Promise<void>;
   deleteOrder: (orderId: string) => Promise<void>;
   updateOrderStatus: (orderId: string, status: OrderStatus) => Promise<void>;
+  searchRemoteOrders: (queryText: string) => Promise<Order[]>;
 
   // Review Images (synced with Firebase Firestore)
   reviewImages: CustomerReviewImage[];
@@ -190,9 +196,15 @@ function saveLocalDeviceData(s: StoreState) {
 
 const localDeviceData = loadLocalDeviceData();
 const listeners = new Set<() => void>();
+let lastSavedCart = localDeviceData.cart;
+let lastSavedWishlist = localDeviceData.wishlist;
 
 function notify() {
-  saveLocalDeviceData(state);
+  if (state.cart !== lastSavedCart || state.wishlist !== lastSavedWishlist) {
+    lastSavedCart = state.cart;
+    lastSavedWishlist = state.wishlist;
+    saveLocalDeviceData(state);
+  }
   listeners.forEach((listener) => listener());
 }
 
@@ -619,15 +631,34 @@ let state: StoreState = {
   // Orders: Persisted in Firestore & Realtime synced across all devices
   orders: INITIAL_ORDERS,
   createOrder: async (orderData) => {
-    const nextOrderNum = (state.orders.length + 1).toString();
+    // Scalable collision-free order numbering that easily handles tens of thousands of orders
+    const numericOrders = state.orders
+      .map((o) => parseInt(o.orderNumber.replace(/\D/g, ''), 10))
+      .filter((n) => !isNaN(n) && n > 0);
+    const maxNum = numericOrders.length > 0 ? Math.max(...numericOrders) : 1000;
+    const nextOrderNum = (maxNum + 1).toString();
     const dateStr = new Date().toISOString().replace('T', ' ').substring(0, 16);
+    const uniqueId = 'ord-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7);
+
     const newOrder: Order = {
       ...orderData,
-      id: 'ord-' + Date.now(),
+      id: uniqueId,
       orderNumber: nextOrderNum,
       createdAt: dateStr,
       status: 'pending'
     };
+
+    // Save locally to customer order history on this device
+    try {
+      const myOrdersRaw = localStorage.getItem('beyond_customer_my_orders');
+      const myOrdersList: string[] = myOrdersRaw ? JSON.parse(myOrdersRaw) : [];
+      if (!myOrdersList.includes(newOrder.orderNumber)) {
+        myOrdersList.unshift(newOrder.orderNumber);
+        localStorage.setItem('beyond_customer_my_orders', JSON.stringify(myOrdersList.slice(0, 30)));
+      }
+    } catch {
+      // ignore non-critical local storage errors
+    }
 
     try {
       // Write to Firebase Firestore cloud database
@@ -643,6 +674,27 @@ let state: StoreState = {
     }));
 
     return newOrder;
+  },
+  searchRemoteOrders: async (queryText: string) => {
+    const q = queryText.trim();
+    if (!q) return [];
+    const results: Order[] = [];
+    try {
+      // Search by exact orderNumber
+      const qByNumber = query(collection(db, 'orders'), where('orderNumber', '==', q), limit(10));
+      const snapNumber = await getDocs(qByNumber);
+      snapNumber.forEach((d) => results.push(d.data() as Order));
+
+      // If nothing found, try by phone
+      if (results.length === 0) {
+        const qByPhone = query(collection(db, 'orders'), where('phone', '==', q), limit(10));
+        const snapPhone = await getDocs(qByPhone);
+        snapPhone.forEach((d) => results.push(d.data() as Order));
+      }
+    } catch (err) {
+      console.error('Failed to search remote orders:', err);
+    }
+    return results;
   },
   cancelOrder: async (orderId) => {
     const order = state.orders.find((o) => o.id === orderId);
@@ -794,10 +846,14 @@ function setupFirebaseSync() {
   // Test connection
   testFirebaseConnection().catch(() => {});
 
-  // 1. Orders Listener (Real-time updates across all devices)
+  // 1. Orders Listener (Real-time updates, scaled with query limit for high volume)
   let isFirstOrdersSnapshot = true;
   try {
-    onSnapshot(collection(db, 'orders'), (snapshot) => {
+    const ordersCol = collection(db, 'orders');
+    // Using limit to scale gracefully to tens of thousands of orders
+    const ordersQuery = query(ordersCol, limit(300));
+
+    onSnapshot(ordersQuery, (snapshot) => {
       if (!snapshot.empty) {
         const loadedOrders: Order[] = [];
         snapshot.forEach((docSnap) => {

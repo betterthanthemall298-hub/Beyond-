@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useStore } from '../store/useStore';
 import { ProductCard } from './ProductCard';
 import { HoodieSize } from '../types';
@@ -27,34 +27,38 @@ export const ProductGrid: React.FC = () => {
 
   const sizeOptions: (HoodieSize | 'ALL')[] = ['ALL', 'M', 'L', 'XL', '2XL'];
 
-  // Filter products
-  const filteredProducts = products.filter((p) => {
-    // Category
-    if (selectedCategory !== 'all' && p.category !== selectedCategory) {
-      return false;
-    }
-    // Size Filter
-    if (selectedSizeFilter !== 'ALL') {
-      const stock = p.sizesStock[selectedSizeFilter] || 0;
-      if (stock <= 0) return false;
-    }
-    // Search Query
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase().trim();
-      const matchName = p.name.toLowerCase().includes(query);
-      const matchSubtitle = p.subtitle.toLowerCase().includes(query);
-      const matchDesc = p.description.toLowerCase().includes(query);
-      if (!matchName && !matchSubtitle && !matchDesc) return false;
-    }
-    return true;
-  });
+  // Filter products (memoized)
+  const filteredProducts = useMemo(() => {
+    return products.filter((p) => {
+      // Category
+      if (selectedCategory !== 'all' && p.category !== selectedCategory) {
+        return false;
+      }
+      // Size Filter
+      if (selectedSizeFilter !== 'ALL') {
+        const stock = p.sizesStock[selectedSizeFilter] || 0;
+        if (stock <= 0) return false;
+      }
+      // Search Query
+      if (searchQuery.trim()) {
+        const query = searchQuery.toLowerCase().trim();
+        const matchName = p.name.toLowerCase().includes(query);
+        const matchSubtitle = p.subtitle.toLowerCase().includes(query);
+        const matchDesc = p.description.toLowerCase().includes(query);
+        if (!matchName && !matchSubtitle && !matchDesc) return false;
+      }
+      return true;
+    });
+  }, [products, selectedCategory, selectedSizeFilter, searchQuery]);
 
-  // Sort products
-  const sortedProducts = [...filteredProducts].sort((a, b) => {
-    if (sortBy === 'price-asc') return a.price - b.price;
-    if (sortBy === 'price-desc') return b.price - a.price;
-    return b.rating - a.rating;
-  });
+  // Sort products (memoized)
+  const sortedProducts = useMemo(() => {
+    return [...filteredProducts].sort((a, b) => {
+      if (sortBy === 'price-asc') return a.price - b.price;
+      if (sortBy === 'price-desc') return b.price - a.price;
+      return b.rating - a.rating;
+    });
+  }, [filteredProducts, sortBy]);
 
   return (
     <section id="hoodies-catalog-section" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-14">

@@ -196,6 +196,7 @@ export const AdminDashboard: React.FC = () => {
 
   // Orders Classification & Notification States
   const [orderStatusFilter, setOrderStatusFilter] = useState<'all' | OrderStatus>('all');
+  const [visibleOrdersCount, setVisibleOrdersCount] = useState<number>(30);
   const [showExportDropdown, setShowExportDropdown] = useState(false);
   const [soundNotificationOn, setSoundNotificationOn] = useState<boolean>(isSoundNotificationEnabled());
   const [notificationPerm, setNotificationPerm] = useState<string>(getNotificationPermission());
@@ -1778,11 +1779,12 @@ export const AdminDashboard: React.FC = () => {
                   )}
                 </div>
               ) : (
-                filteredOrders.map((order) => (
-                  <div
-                    key={order.id}
-                    className="bg-stone-900 border border-stone-800 rounded-2xl p-4 sm:p-5 space-y-4"
-                  >
+                <>
+                  {filteredOrders.slice(0, visibleOrdersCount).map((order) => (
+                    <div
+                      key={order.id}
+                      className="bg-stone-900 border border-stone-800 rounded-2xl p-4 sm:p-5 space-y-4"
+                    >
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-stone-800 pb-3">
                     <div className="flex items-center gap-3">
                       <span className="font-mono font-bold text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-lg border border-amber-500/20">
@@ -1975,8 +1977,22 @@ export const AdminDashboard: React.FC = () => {
                     </div>
                   </div>
                 </div>
-              ))
-            )}
+                  ))}
+
+                  {filteredOrders.length > visibleOrdersCount && (
+                    <div className="text-center pt-3 pb-2">
+                      <button
+                        id="admin-load-more-orders-btn"
+                        type="button"
+                        onClick={() => setVisibleOrdersCount((prev) => prev + 30)}
+                        className="px-6 py-2.5 rounded-xl bg-stone-900 hover:bg-stone-800 text-stone-200 border border-stone-700 text-xs font-bold transition-all shadow-md hover:border-amber-500/50"
+                      >
+                        عرض المزيد من الطلبات (تم عرض {visibleOrdersCount} من إجمالي {filteredOrders.length} طلب)
+                      </button>
+                    </div>
+                  )}
+                </>
+              )}
           </div>
         </div>
         );

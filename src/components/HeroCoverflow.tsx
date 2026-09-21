@@ -124,36 +124,30 @@ export const HeroCoverflow: React.FC = () => {
 
               // Stretched & Pulled 3D coverflow styling math
               let transformStyle = '';
-              let filterStyle = 'blur(0px)';
               let opacityStyle = 1;
               let zIndexStyle = 30;
 
               if (isCenter) {
                 transformStyle = 'translateX(0%) scale(1.06) rotateY(0deg)';
-                filterStyle = 'blur(0px)';
                 opacityStyle = 1;
                 zIndexStyle = 30;
               } else if (offset === -1) {
-                // Pulled to the right/previous with 3D slant and blur
+                // Pulled to the right/previous with 3D slant
                 transformStyle = 'translateX(62%) scale(0.84) scaleX(0.9) rotateY(-26deg)';
-                filterStyle = 'blur(3px)';
-                opacityStyle = 0.55;
+                opacityStyle = 0.6;
                 zIndexStyle = 20;
               } else if (offset === 1) {
-                // Pulled to the left/next with 3D slant and blur
+                // Pulled to the left/next with 3D slant
                 transformStyle = 'translateX(-62%) scale(0.84) scaleX(0.9) rotateY(26deg)';
-                filterStyle = 'blur(3px)';
-                opacityStyle = 0.55;
+                opacityStyle = 0.6;
                 zIndexStyle = 20;
               } else if (offset === -2) {
                 transformStyle = 'translateX(110%) scale(0.68) scaleX(0.8) rotateY(-38deg)';
-                filterStyle = 'blur(7px)';
-                opacityStyle = 0.2;
+                opacityStyle = 0.25;
                 zIndexStyle = 10;
               } else if (offset === 2) {
                 transformStyle = 'translateX(-110%) scale(0.68) scaleX(0.8) rotateY(38deg)';
-                filterStyle = 'blur(7px)';
-                opacityStyle = 0.2;
+                opacityStyle = 0.25;
                 zIndexStyle = 10;
               }
 
@@ -164,10 +158,10 @@ export const HeroCoverflow: React.FC = () => {
                   onClick={() => handleCardClick(product, isCenter, idx)}
                   style={{
                     transform: transformStyle,
-                    filter: filterStyle,
                     opacity: opacityStyle,
                     zIndex: zIndexStyle,
-                    transition: 'all 500ms cubic-bezier(0.25, 1, 0.5, 1)'
+                    willChange: 'transform, opacity',
+                    transition: 'transform 450ms cubic-bezier(0.25, 1, 0.5, 1), opacity 450ms ease-out'
                   }}
                   className={`absolute w-[265px] sm:w-[325px] md:w-[370px] aspect-[4/5] rounded-2xl overflow-hidden bg-stone-900 border cursor-pointer group shadow-2xl ${
                     isCenter
@@ -179,6 +173,8 @@ export const HeroCoverflow: React.FC = () => {
                   <img
                     src={product.images[0]}
                     alt={product.name}
+                    loading={isCenter ? 'eager' : 'lazy'}
+                    decoding="async"
                     referrerPolicy="no-referrer"
                     className={`w-full h-full object-cover transition-transform duration-500 ${
                       isCenter ? 'group-hover:scale-105' : ''

@@ -13,25 +13,45 @@ import {
   MessageCircle,
   AlertCircle
 } from 'lucide-react';
-import { OrderStatus } from '../types';
+import { OrderStatus, Order } from '../types';
 
 export const OrderTrackingView: React.FC = () => {
-  const { orders, products, cancelOrder, deleteOrder, openDeleteModal, settings } = useStore();
+  const { orders, products, cancelOrder, deleteOrder, openDeleteModal, settings, searchRemoteOrders } = useStore();
   const [searchInput, setSearchInput] = useState('');
   const [searched, setSearched] = useState(false);
+  const [remoteResults, setRemoteResults] = useState<Order[]>([]);
+  const [isSearchingRemote, setIsSearchingRemote] = useState(false);
 
   const cleanQuery = searchInput.trim().toLowerCase();
 
-  const matchedOrders = orders.filter((o) => {
+  const localMatches = orders.filter((o) => {
     if (!cleanQuery) return false;
     const matchNumber = o.orderNumber.toLowerCase().includes(cleanQuery);
     const matchPhone = o.phone.includes(cleanQuery);
     return matchNumber || matchPhone;
   });
 
-  const handleSearch = (e: React.FormEvent) => {
+  const matchedOrders = [
+    ...localMatches,
+    ...remoteResults.filter((r) => !localMatches.some((m) => m.id === r.id))
+  ];
+
+  const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     setSearched(true);
+    if (!cleanQuery) return;
+
+    if (localMatches.length === 0) {
+      setIsSearchingRemote(true);
+      try {
+        const found = await searchRemoteOrders(cleanQuery);
+        setRemoteResults(found);
+      } catch (err) {
+        console.error('Remote search error:', err);
+      } finally {
+        setIsSearchingRemote(false);
+      }
+    }
   };
 
   const handleCancelOrderPrompt = (orderId: string, orderNumber: string) => {
