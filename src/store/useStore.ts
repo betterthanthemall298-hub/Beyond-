@@ -8,6 +8,7 @@ import {
   deleteDoc
 } from 'firebase/firestore';
 import { db, testFirebaseConnection, sanitizeForFirestore } from '../lib/firebase';
+import { triggerNewOrderNotification } from '../lib/notifications';
 import {
   Product,
   CartItem,
@@ -567,6 +568,19 @@ let state: StoreState = {
       return { success: false, message: 'كود الخصم غير صحيح أو غير مفعل' };
     }
 
+    // Check if coupon is target-specific to a product
+    if (coupon.targetProductId && coupon.targetProductId !== 'all') {
+      const hasTargetProduct = state.cart.some(
+        (item) => item.productId === coupon.targetProductId
+      );
+      if (!hasTargetProduct) {
+        return {
+          success: false,
+          message: `هذا الكوبون مخصص فقط لهودي "${coupon.targetProductName || 'محدد'}"، وغير موجود في سلتك حالياً.`
+        };
+      }
+    }
+
     const subtotal = state.getCartSubtotal();
     if (subtotal < coupon.minOrderAmount) {
       return {
@@ -576,12 +590,15 @@ let state: StoreState = {
     }
 
     update(() => ({ appliedCoupon: coupon }));
+    const targetLabel = coupon.targetProductName
+      ? ` على هودي (${coupon.targetProductName})`
+      : ' على مشترياتك';
     state.addToast({
       type: 'success',
       title: `تم تطبيق كود الخصم (${coupon.code}) بنجاح!`,
-      description: `خصم ${coupon.discountPercent}% على مشترياتك`
+      description: `خصم ${coupon.discountPercent}%${targetLabel}`
     });
-    return { success: true, message: `تم تفعيل خصم ${coupon.discountPercent}%` };
+    return { success: true, message: `تم تفعيل خصم ${coupon.discountPercent}%${targetLabel}` };
   },
   removeAppliedCoupon: () => {
     const currentCode = state.appliedCoupon?.code;
@@ -678,6 +695,14 @@ let state: StoreState = {
     } catch (err) {
       console.error('Failed to save order to Firestore:', err);
     }
+
+    // Trigger local notification sound & push
+    triggerNewOrderNotification(
+      newOrder.orderNumber,
+      newOrder.customerName,
+      newOrder.total,
+      newOrder.governorate
+    );
 
     state.addToast({
       type: 'success',
@@ -822,6 +847,18 @@ let state: StoreState = {
   getCartDiscount: () => {
     const coupon = state.appliedCoupon;
     if (!coupon) return 0;
+
+    if (coupon.targetProductId && coupon.targetProductId !== 'all') {
+      const targetItems = state.cart.filter(
+        (item) => item.productId === coupon.targetProductId
+      );
+      const targetSubtotal = targetItems.reduce(
+        (sum, item) => sum + item.product.price * item.quantity,
+        0
+      );
+      return Math.round((targetSubtotal * coupon.discountPercent) / 100);
+    }
+
     const subtotal = state.getCartSubtotal();
     return Math.round((subtotal * coupon.discountPercent) / 100);
   },
@@ -893,6 +930,9 @@ function setupFirebaseSync() {
     .catch(() => {});
 
   // 1. Orders Listener (Real-time updates across all devices)
+  let isInitialOrdersLoad = true;
+  const knownOrderIds = new Set<string>();
+
   try {
     onSnapshot(collection(db, 'orders'), (snapshot) => {
       if (!snapshot.empty) {
@@ -903,8 +943,36 @@ function setupFirebaseSync() {
         // Sort descending by creation date or order number
         loadedOrders.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
         update(() => ({ orders: loadedOrders }));
+
+        if (isInitialOrdersLoad) {
+          loadedOrders.forEach((o) => knownOrderIds.add(o.id));
+          isInitialOrdersLoad = false;
+        } else {
+          // Check for incoming orders added by other devices or customers
+          snapshot.docChanges().forEach((change) => {
+            if (change.type === 'added') {
+              const newOrder = change.doc.data() as Order;
+              if (!knownOrderIds.has(newOrder.id)) {
+                knownOrderIds.add(newOrder.id);
+                // Play notification sound and show desktop notification for admin
+                triggerNewOrderNotification(
+                  newOrder.orderNumber,
+                  newOrder.customerName,
+                  newOrder.total,
+                  newOrder.governorate
+                );
+                state.addToast({
+                  type: 'success',
+                  title: `🔔 طلب جديد وارد الآن #${newOrder.orderNumber}!`,
+                  description: `${newOrder.customerName} - ${newOrder.governorate} (${newOrder.total} ج.م)`
+                });
+              }
+            }
+          });
+        }
       } else {
         update(() => ({ orders: [] }));
+        isInitialOrdersLoad = false;
       }
     }, (error) => {
       console.warn('Orders onSnapshot error:', error);

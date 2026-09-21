@@ -50,9 +50,12 @@ export type OrderStatus = 'pending' | 'processing' | 'shipped' | 'delivered' | '
 export interface OrderItem {
   productId: string;
   productName: string;
+  subtitle?: string; // تفاصيل الطبعة أو القصة لتمييز المنتجات ذات الأسماء المتشابهة
   image: string;
+  images?: string[]; // صور إضافية للمنتج (مثل طبعة الظهر أو زوايا أخرى)
   size: HoodieSize;
   colorName?: string;
+  colorHex?: string;
   price: number;
   quantity: number;
 }
@@ -92,6 +95,8 @@ export interface Coupon {
   active: boolean;
   minOrderAmount: number;
   timesUsed: number;
+  targetProductId?: string; // إذا كان الكوبون مخصصاً لمنتج معين فقط
+  targetProductName?: string; // اسم المنتج للتوضيح
 }
 
 export interface GovernorateShipping {

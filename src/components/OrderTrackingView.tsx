@@ -16,7 +16,7 @@ import {
 import { OrderStatus } from '../types';
 
 export const OrderTrackingView: React.FC = () => {
-  const { orders, cancelOrder, deleteOrder, openDeleteModal, settings } = useStore();
+  const { orders, products, cancelOrder, deleteOrder, openDeleteModal, settings } = useStore();
   const [searchInput, setSearchInput] = useState('');
   const [searched, setSearched] = useState(false);
 
@@ -304,30 +304,63 @@ export const OrderTrackingView: React.FC = () => {
                   <div className="space-y-2">
                     <h4 className="text-xs font-bold text-stone-400">المنتجات المطلوبة:</h4>
                     <div className="space-y-2">
-                      {order.items.map((item, idx) => (
-                        <div
-                          key={idx}
-                          className="flex items-center justify-between p-3 rounded-xl bg-stone-950/60 border border-stone-800/80 text-xs"
-                        >
-                          <div className="flex items-center gap-3">
-                            <img
-                              src={item.image}
-                              alt={item.productName}
-                              referrerPolicy="no-referrer"
-                              className="w-12 h-14 rounded-lg object-cover border border-stone-800 shrink-0"
-                            />
-                            <div>
-                              <p className="font-bold text-stone-200">{item.productName}</p>
-                              <p className="text-stone-400 text-[11px] mt-0.5">
-                                المقاس: <span className="text-amber-400 font-semibold">{item.size}</span> | الكمية: {item.quantity}
-                              </p>
+                      {order.items.map((item, idx) => {
+                        const matchingProduct = products.find((p) => p.id === item.productId);
+                        const printSubtitle = item.subtitle || matchingProduct?.subtitle;
+                        const itemImg = item.image || item.images?.[0] || matchingProduct?.images?.[0] || '';
+                        const colorName = item.colorName || (matchingProduct?.colors && matchingProduct.colors[0]?.name);
+                        const colorHex = item.colorHex || (matchingProduct?.colors && matchingProduct.colors[0]?.hex);
+
+                        return (
+                          <div
+                            key={idx}
+                            className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-xl bg-stone-950/60 border border-stone-800/80 text-xs"
+                          >
+                            <div className="flex items-center gap-3">
+                              {itemImg ? (
+                                <img
+                                  src={itemImg}
+                                  alt={item.productName}
+                                  referrerPolicy="no-referrer"
+                                  className="w-14 h-16 rounded-xl object-cover border border-stone-700/80 shrink-0"
+                                />
+                              ) : null}
+                              <div>
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <p className="font-bold text-stone-200">{item.productName}</p>
+                                  {printSubtitle && (
+                                    <span className="text-[10px] px-2 py-0.5 rounded bg-amber-500/10 border border-amber-500/30 text-amber-300">
+                                      طبعة: {printSubtitle}
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="flex flex-wrap items-center gap-2 text-stone-400 text-[11px] mt-1">
+                                  <span>
+                                    المقاس: <strong className="text-amber-400 font-semibold">{item.size}</strong>
+                                  </span>
+                                  <span>•</span>
+                                  {colorName && (
+                                    <span className="flex items-center gap-1.5">
+                                      {colorHex && (
+                                        <span
+                                          className="w-2.5 h-2.5 rounded-full border border-stone-600 inline-block shrink-0"
+                                          style={{ backgroundColor: colorHex }}
+                                        />
+                                      )}
+                                      <span>اللون: <strong className="text-stone-300">{colorName}</strong></span>
+                                    </span>
+                                  )}
+                                  {colorName && <span>•</span>}
+                                  <span>الكمية: <strong className="text-stone-200">{item.quantity}</strong></span>
+                                </div>
+                              </div>
                             </div>
+                            <span className="font-mono font-bold text-amber-400 text-sm">
+                              {item.price * item.quantity} ج.م
+                            </span>
                           </div>
-                          <span className="font-mono font-bold text-amber-400">
-                            {item.price * item.quantity} ج.م
-                          </span>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
 

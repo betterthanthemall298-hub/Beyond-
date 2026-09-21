@@ -21,21 +21,30 @@ export const ProductDetailModal: React.FC = () => {
     addToCart,
     wishlist,
     toggleWishlist,
-    setIsSizeAdvisorOpen
+    setIsSizeAdvisorOpen,
+    activeView,
+    setActiveView
   } = useStore();
 
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [selectedSize, setSelectedSize] = useState<HoodieSize>('L');
   const [quantity, setQuantity] = useState(1);
 
-  if (!selectedProduct) return null;
+  // If there's no selected product, or if we are already viewing the full product page, do not display the modal
+  if (!selectedProduct || activeView === 'product') return null;
 
   const isFav = wishlist.includes(selectedProduct.id);
   const sizes: HoodieSize[] = ['M', 'L', 'XL', '2XL'];
   const currentStock = selectedProduct.sizesStock[selectedSize] || 0;
 
   const handleAddToCart = () => {
-    addToCart(selectedProduct, selectedSize, quantity);
+    const currentColor = selectedProduct.colors?.[0];
+    addToCart(selectedProduct, selectedSize, currentColor?.name, currentColor?.hex, quantity);
+  };
+
+  const handleGoToFullPage = () => {
+    setActiveView('product');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   return (
@@ -243,29 +252,41 @@ export const ProductDetailModal: React.FC = () => {
             </div>
 
             {/* Actions (Add to cart & Wishlist) */}
-            <div className="pt-4 border-t border-stone-800 flex items-center gap-3">
-              <button
-                id="modal-add-to-cart-btn"
-                type="button"
-                onClick={handleAddToCart}
-                className="flex-1 py-3.5 px-6 rounded-xl bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-black font-bold text-sm flex items-center justify-center gap-2 transition-all shadow-lg shadow-amber-950/40"
-              >
-                <ShoppingBag className="w-5 h-5" />
-                <span>إضافة إلى السلة (مقاس {selectedSize})</span>
-              </button>
+            <div className="pt-4 border-t border-stone-800 flex flex-col gap-2.5">
+              <div className="flex items-center gap-3">
+                <button
+                  id="modal-add-to-cart-btn"
+                  type="button"
+                  onClick={handleAddToCart}
+                  className="flex-1 py-3.5 px-6 rounded-xl bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-black font-bold text-sm flex items-center justify-center gap-2 transition-all shadow-lg shadow-amber-950/40"
+                >
+                  <ShoppingBag className="w-5 h-5" />
+                  <span>إضافة إلى السلة (مقاس {selectedSize})</span>
+                </button>
+
+                <button
+                  id="modal-toggle-wishlist-btn"
+                  type="button"
+                  onClick={() => toggleWishlist(selectedProduct.id)}
+                  className={`p-3.5 rounded-xl border transition-all ${
+                    isFav
+                      ? 'bg-rose-950/60 border-rose-800/60 text-rose-400'
+                      : 'bg-stone-950 border-stone-800 text-stone-400 hover:text-stone-200 hover:border-stone-700'
+                  }`}
+                  title={isFav ? 'إزالة من المفضلة' : 'حفظ في المفضلة'}
+                >
+                  <Heart className={`w-5 h-5 ${isFav ? 'fill-rose-400' : ''}`} />
+                </button>
+              </div>
 
               <button
-                id="modal-toggle-wishlist-btn"
+                id="modal-view-full-page-btn"
                 type="button"
-                onClick={() => toggleWishlist(selectedProduct.id)}
-                className={`p-3.5 rounded-xl border transition-all ${
-                  isFav
-                    ? 'bg-rose-950/60 border-rose-800/60 text-rose-400'
-                    : 'bg-stone-950 border-stone-800 text-stone-400 hover:text-stone-200 hover:border-stone-700'
-                }`}
-                title={isFav ? 'إزالة من المفضلة' : 'حفظ في المفضلة'}
+                onClick={handleGoToFullPage}
+                className="w-full py-2.5 px-4 rounded-xl bg-stone-950 hover:bg-stone-800/80 border border-stone-800 text-stone-300 hover:text-amber-400 text-xs font-semibold flex items-center justify-center gap-2 transition-colors"
               >
-                <Heart className={`w-5 h-5 ${isFav ? 'fill-rose-400' : ''}`} />
+                <span>الانتقال لصفحة تفاصيل المنتج الكاملة</span>
+                <span className="text-amber-500 font-bold">←</span>
               </button>
             </div>
           </div>

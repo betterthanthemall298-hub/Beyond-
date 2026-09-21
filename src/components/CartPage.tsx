@@ -275,8 +275,11 @@ export const CartPage: React.FC = () => {
               {appliedCoupon ? (
                 <div className="flex items-center justify-between p-3 rounded-xl bg-emerald-950/40 border border-emerald-800/50 text-emerald-400 text-xs font-bold">
                   <div className="flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4" />
-                    <span>الكوبون {appliedCoupon.code} (خصم {appliedCoupon.discountPercent}%)</span>
+                    <CheckCircle2 className="w-4 h-4 shrink-0" />
+                    <span>
+                      الكوبون {appliedCoupon.code} (خصم {appliedCoupon.discountPercent}%
+                      {appliedCoupon.targetProductName ? ` على ${appliedCoupon.targetProductName}` : ''})
+                    </span>
                   </div>
                   <button
                     type="button"
@@ -321,7 +324,10 @@ export const CartPage: React.FC = () => {
 
               {discount > 0 && (
                 <div className="flex justify-between text-emerald-400 font-bold">
-                  <span>الخصم ({appliedCoupon?.code}):</span>
+                  <span>
+                    الخصم ({appliedCoupon?.code}
+                    {appliedCoupon?.targetProductName ? ` - خاص بهودي ${appliedCoupon.targetProductName}` : ''}):
+                  </span>
                   <span className="font-mono">-{discount} ج.م</span>
                 </div>
               )}

@@ -85,8 +85,12 @@ export const CheckoutModal: React.FC = () => {
       const orderItems: OrderItem[] = cart.map((item) => ({
         productId: item.productId,
         productName: item.product.name,
-        image: item.product.images[0],
+        subtitle: item.product.subtitle || '',
+        image: item.product.images?.[0] || '',
+        images: item.product.images || [],
         size: item.size,
+        colorName: item.colorName,
+        colorHex: item.colorHex,
         price: item.product.price,
         quantity: item.quantity
       }));
@@ -376,7 +380,10 @@ export const CheckoutModal: React.FC = () => {
                 </div>
                 {discount > 0 && (
                   <div className="flex justify-between text-emerald-400">
-                    <span>خصم الكوبون ({appliedCoupon?.code}):</span>
+                    <span>
+                      خصم الكوبون ({appliedCoupon?.code}
+                      {appliedCoupon?.targetProductName ? ` - خاص بهودي ${appliedCoupon.targetProductName}` : ''}):
+                    </span>
                     <span className="font-mono">-{discount} ج.م</span>
                   </div>
                 )}

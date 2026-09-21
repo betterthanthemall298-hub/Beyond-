@@ -21,10 +21,34 @@ import {
   Facebook,
   Pencil,
   Palette,
-  Search
+  Search,
+  Download,
+  Bell,
+  BellRing,
+  Volume2,
+  VolumeX,
+  FileSpreadsheet,
+  CheckCircle2,
+  Clock,
+  Ban,
+  Eye,
+  Maximize2
 } from 'lucide-react';
-import { HoodieCategory, HoodieSize, OrderStatus, Product, ProductColor } from '../types';
+import { HoodieCategory, HoodieSize, OrderStatus, Product, ProductColor, OrderItem } from '../types';
 import { compressImageFile } from '../lib/imageCompressor';
+import {
+  exportOrdersToCSV,
+  exportOrdersByStatus,
+  ORDER_STATUS_LABELS,
+  ORDER_STATUS_FILE_NAMES
+} from '../lib/orderExporter';
+import {
+  playOrderNotificationSound,
+  isSoundNotificationEnabled,
+  setSoundNotificationEnabled,
+  requestNotificationPermission,
+  getNotificationPermission
+} from '../lib/notifications';
 
 export const AdminDashboard: React.FC = () => {
   const {
@@ -75,6 +99,15 @@ export const AdminDashboard: React.FC = () => {
 
   // Order Search State
   const [orderSearchQuery, setOrderSearchQuery] = useState('');
+
+  // Order Item Inspection Modal (for verifying image, color, size, and print)
+  const [inspectingOrderItem, setInspectingOrderItem] = useState<{
+    item: OrderItem;
+    orderNumber: string;
+    customerName: string;
+    orderDate: string;
+  } | null>(null);
+  const [inspectingImageIndex, setInspectingImageIndex] = useState(0);
 
   // Image Processing & Product Submitting States
   const [isProcessingImages, setIsProcessingImages] = useState(false);
@@ -157,6 +190,14 @@ export const AdminDashboard: React.FC = () => {
   const [cCode, setCCode] = useState('');
   const [cDiscount, setCDiscount] = useState(15);
   const [cMinOrder, setCMinOrder] = useState(600);
+  const [cTargetScope, setCTargetScope] = useState<'all' | 'specific'>('all');
+  const [cTargetProductId, setCTargetProductId] = useState<string>('');
+
+  // Orders Classification & Notification States
+  const [orderStatusFilter, setOrderStatusFilter] = useState<'all' | OrderStatus>('all');
+  const [showExportDropdown, setShowExportDropdown] = useState(false);
+  const [soundNotificationOn, setSoundNotificationOn] = useState<boolean>(isSoundNotificationEnabled());
+  const [notificationPerm, setNotificationPerm] = useState<string>(getNotificationPermission());
 
   // Settings state
   const [storeName, setStoreName] = useState(settings.storeName);
@@ -480,14 +521,23 @@ export const AdminDashboard: React.FC = () => {
     e.preventDefault();
     if (!cCode.trim()) return;
 
+    const targetProduct =
+      cTargetScope === 'specific' && cTargetProductId
+        ? products.find((p) => p.id === cTargetProductId)
+        : null;
+
     addCoupon({
       code: cCode.trim().toUpperCase(),
       discountPercent: Number(cDiscount),
       active: true,
-      minOrderAmount: Number(cMinOrder)
+      minOrderAmount: Number(cMinOrder),
+      targetProductId: targetProduct ? targetProduct.id : undefined,
+      targetProductName: targetProduct ? targetProduct.name : undefined
     });
 
     setCCode('');
+    setCTargetScope('all');
+    setCTargetProductId('');
     setShowAddCoupon(false);
   };
 
@@ -1372,8 +1422,22 @@ export const AdminDashboard: React.FC = () => {
 
       {/* TAB CONTENT: ORDERS */}
       {activeTab === 'orders' && (() => {
+        const statusCounts = {
+          all: orders.length,
+          pending: orders.filter((o) => o.status === 'pending').length,
+          processing: orders.filter((o) => o.status === 'processing').length,
+          shipped: orders.filter((o) => o.status === 'shipped').length,
+          delivered: orders.filter((o) => o.status === 'delivered').length,
+          cancelled: orders.filter((o) => o.status === 'cancelled').length
+        };
+
+        const filteredByStatus =
+          orderStatusFilter === 'all'
+            ? orders
+            : orders.filter((o) => o.status === orderStatusFilter);
+
         const cleanQuery = orderSearchQuery.trim().toLowerCase();
-        const filteredOrders = orders.filter((order) => {
+        const filteredOrders = filteredByStatus.filter((order) => {
           if (!cleanQuery) return true;
           const num = (order.orderNumber || '').toLowerCase();
           const matchNum = num === cleanQuery || num.includes(cleanQuery) || `#${num}` === cleanQuery;
@@ -1384,8 +1448,18 @@ export const AdminDashboard: React.FC = () => {
           return matchNum || matchName || matchPhone || matchCenter || matchAddress;
         });
 
+        const statusTabs: Array<{ id: 'all' | OrderStatus; label: string; count: number }> = [
+          { id: 'all', label: 'كافة الطلبات', count: statusCounts.all },
+          { id: 'pending', label: 'قيد الانتظار', count: statusCounts.pending },
+          { id: 'processing', label: 'جاري التجهيز', count: statusCounts.processing },
+          { id: 'shipped', label: 'تم الشحن', count: statusCounts.shipped },
+          { id: 'delivered', label: 'تم التوصيل', count: statusCounts.delivered },
+          { id: 'cancelled', label: 'ملغي', count: statusCounts.cancelled }
+        ];
+
         return (
           <div className="space-y-6">
+            {/* Top Bar with Title and Search */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
                 <h3 className="text-sm font-bold text-stone-200">سجل طلبات العملاء والشحنات</h3>
@@ -1413,6 +1487,263 @@ export const AdminDashboard: React.FC = () => {
                     <X className="w-3.5 h-3.5" />
                   </button>
                 )}
+              </div>
+            </div>
+
+            {/* Notification Alert Controls Card */}
+            <div className="bg-stone-900/90 border border-stone-800 rounded-2xl p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-sm">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 shrink-0">
+                  <BellRing className="w-5 h-5 animate-pulse" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h4 className="text-xs sm:text-sm font-bold text-stone-100">
+                      نظام التنبيهات الفورية للطلبات الجديدة
+                    </h4>
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                      مباشر ومزامن سحابياً
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-stone-400 mt-0.5">
+                    ستسمع نغمة تنبيه صوتية ويصلك إشعار بالمتصفح لأي شخص متواجد على لوحة التحكم فور وصول أي أوردر جديد.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2 w-full md:w-auto justify-end">
+                {/* Sound Toggle */}
+                <button
+                  id="admin-toggle-sound-btn"
+                  type="button"
+                  onClick={() => {
+                    const next = !soundNotificationOn;
+                    setSoundNotificationOn(next);
+                    setSoundNotificationEnabled(next);
+                    if (next) {
+                      playOrderNotificationSound();
+                    }
+                  }}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors border ${
+                    soundNotificationOn
+                      ? 'bg-amber-500/10 border-amber-500/30 text-amber-400 hover:bg-amber-500/20'
+                      : 'bg-stone-800/80 border-stone-700 text-stone-400 hover:bg-stone-800'
+                  }`}
+                  title={soundNotificationOn ? 'كتم صوت التنبيه' : 'تشغيل صوت التنبيه'}
+                >
+                  {soundNotificationOn ? (
+                    <>
+                      <Volume2 className="w-3.5 h-3.5" />
+                      <span>صوت النغمة (مفعّل)</span>
+                    </>
+                  ) : (
+                    <>
+                      <VolumeX className="w-3.5 h-3.5" />
+                      <span>صوت النغمة (مكتوم)</span>
+                    </>
+                  )}
+                </button>
+
+                {/* Test Sound */}
+                <button
+                  id="admin-test-sound-btn"
+                  type="button"
+                  onClick={() => playOrderNotificationSound()}
+                  className="px-3 py-1.5 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-200 border border-stone-700 text-xs font-bold flex items-center gap-1.5 transition-colors"
+                  title="تجربة صوت النغمة"
+                >
+                  <span>🔊 تجربة النغمة</span>
+                </button>
+
+                {/* Request Browser Notifications */}
+                {notificationPerm !== 'granted' ? (
+                  <button
+                    id="admin-enable-browser-notifications-btn"
+                    type="button"
+                    onClick={async () => {
+                      const res = await requestNotificationPermission();
+                      setNotificationPerm(res);
+                    }}
+                    className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-stone-950 text-xs font-bold flex items-center gap-1.5 transition-colors shadow-sm"
+                  >
+                    <Bell className="w-3.5 h-3.5" />
+                    <span>تفعيل إشعارات المتصفح</span>
+                  </button>
+                ) : (
+                  <span className="px-3 py-1.5 rounded-xl bg-stone-800/80 border border-stone-700 text-stone-300 text-xs flex items-center gap-1.5">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>إشعارات المتصفح مقبولة</span>
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Order Classification Tabs */}
+            <div className="flex flex-wrap items-center gap-2 border-b border-stone-800 pb-3">
+              {statusTabs.map((tab) => {
+                const isActive = orderStatusFilter === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    id={`admin-order-status-tab-${tab.id}`}
+                    type="button"
+                    onClick={() => setOrderStatusFilter(tab.id)}
+                    className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all ${
+                      isActive
+                        ? 'bg-amber-500 text-stone-950 shadow-md font-black'
+                        : 'bg-stone-900 border border-stone-800 text-stone-300 hover:bg-stone-800 hover:text-white'
+                    }`}
+                  >
+                    <span>{tab.label}</span>
+                    <span
+                      className={`px-1.5 py-0.5 rounded-full text-[10px] font-mono font-bold ${
+                        isActive
+                          ? 'bg-black/20 text-stone-950'
+                          : 'bg-stone-800 text-stone-400'
+                      }`}
+                    >
+                      {tab.count}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Export and Summary Actions Bar */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-stone-950/70 border border-stone-800/90 p-3.5 rounded-2xl">
+              <div className="text-xs text-stone-300 flex flex-wrap items-center gap-2">
+                <span className="font-bold text-stone-100">
+                  {orderStatusFilter === 'all'
+                    ? 'عرض كافة الطلبات'
+                    : `عرض تصنيف: ${ORDER_STATUS_LABELS[orderStatusFilter]}`}
+                </span>
+                <span className="text-stone-600">|</span>
+                <span>
+                  العدد: <strong className="text-amber-400 font-mono">{filteredByStatus.length}</strong> طلب
+                </span>
+                <span className="text-stone-600">|</span>
+                <span>
+                  إجمالي التحصيل:{' '}
+                  <strong className="text-emerald-400 font-mono">
+                    {filteredByStatus.reduce((sum, o) => sum + (o.status !== 'cancelled' ? o.total : 0), 0)} ج.م
+                  </strong>
+                </span>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                {/* Download Current View File */}
+                <button
+                  id="admin-export-current-file-btn"
+                  type="button"
+                  onClick={() => {
+                    const today = new Date().toISOString().split('T')[0];
+                    if (orderStatusFilter === 'all') {
+                      exportOrdersToCSV(orders, `طلبات_نوكتورن_كافة_الطلبات_${today}`);
+                    } else {
+                      exportOrdersByStatus(orders, orderStatusFilter);
+                    }
+                  }}
+                  className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 transition-colors shadow-sm"
+                  title="تنزيل ملف Excel / CSV للطلبات المعروضة حالياً"
+                >
+                  <FileSpreadsheet className="w-3.5 h-3.5" />
+                  <span>
+                    {orderStatusFilter === 'all'
+                      ? 'تنزيل ملف كافة الطلبات (Excel)'
+                      : `تنزيل ملف (${ORDER_STATUS_LABELS[orderStatusFilter]})`}
+                  </span>
+                </button>
+
+                {/* Dropdown to download separate file for each status */}
+                <div className="relative">
+                  <button
+                    id="admin-export-dropdown-toggle-btn"
+                    type="button"
+                    onClick={() => setShowExportDropdown(!showExportDropdown)}
+                    className="px-3 py-2 rounded-xl bg-stone-900 hover:bg-stone-800 text-stone-200 border border-stone-700 text-xs font-bold flex items-center gap-1.5 transition-colors"
+                  >
+                    <Download className="w-3.5 h-3.5 text-amber-400" />
+                    <span>تنزيل ملف منفصل لكل تصنيف</span>
+                  </button>
+
+                  {showExportDropdown && (
+                    <div
+                      id="admin-export-dropdown-menu"
+                      className="absolute left-0 sm:right-auto sm:left-0 top-full mt-2 w-64 bg-stone-900 border border-stone-800 rounded-2xl shadow-2xl p-2 z-30 space-y-1"
+                    >
+                      <div className="px-3 py-1.5 text-[11px] font-bold text-stone-400 border-b border-stone-800">
+                        اختر تصنيفاً لتنزيل ملفه بشكل منفصل:
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const today = new Date().toISOString().split('T')[0];
+                          exportOrdersToCSV(orders, `طلبات_نوكتورن_كافة_الطلبات_${today}`);
+                          setShowExportDropdown(false);
+                        }}
+                        className="w-full text-right px-3 py-2 rounded-xl text-xs text-stone-200 hover:bg-stone-800 flex items-center justify-between"
+                      >
+                        <span>ملف كافة الطلبات (الكل)</span>
+                        <span className="font-mono text-stone-400 text-[10px]">({orders.length})</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          exportOrdersByStatus(orders, 'pending');
+                          setShowExportDropdown(false);
+                        }}
+                        className="w-full text-right px-3 py-2 rounded-xl text-xs text-amber-400 hover:bg-amber-950/40 flex items-center justify-between"
+                      >
+                        <span>ملف قيد الانتظار (جديدة)</span>
+                        <span className="font-mono text-[10px]">({statusCounts.pending})</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          exportOrdersByStatus(orders, 'processing');
+                          setShowExportDropdown(false);
+                        }}
+                        className="w-full text-right px-3 py-2 rounded-xl text-xs text-blue-400 hover:bg-blue-950/40 flex items-center justify-between"
+                      >
+                        <span>ملف جاري التجهيز والتغليف</span>
+                        <span className="font-mono text-[10px]">({statusCounts.processing})</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          exportOrdersByStatus(orders, 'shipped');
+                          setShowExportDropdown(false);
+                        }}
+                        className="w-full text-right px-3 py-2 rounded-xl text-xs text-purple-400 hover:bg-purple-950/40 flex items-center justify-between"
+                      >
+                        <span>ملف تم التسليم لشركة الشحن</span>
+                        <span className="font-mono text-[10px]">({statusCounts.shipped})</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          exportOrdersByStatus(orders, 'delivered');
+                          setShowExportDropdown(false);
+                        }}
+                        className="w-full text-right px-3 py-2 rounded-xl text-xs text-emerald-400 hover:bg-emerald-950/40 flex items-center justify-between"
+                      >
+                        <span>ملف تم التوصيل بنجاح</span>
+                        <span className="font-mono text-[10px]">({statusCounts.delivered})</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          exportOrdersByStatus(orders, 'cancelled');
+                          setShowExportDropdown(false);
+                        }}
+                        className="w-full text-right px-3 py-2 rounded-xl text-xs text-rose-400 hover:bg-rose-950/40 flex items-center justify-between"
+                      >
+                        <span>ملف الطلبات الملغاة</span>
+                        <span className="font-mono text-[10px]">({statusCounts.cancelled})</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -1497,24 +1828,137 @@ export const AdminDashboard: React.FC = () => {
                       )}
                     </div>
 
-                    <div className="space-y-1.5">
-                      <p className="text-stone-400 font-semibold">محتويات الشحنة:</p>
-                      {order.items.map((item, idx) => (
-                        <div
-                          key={idx}
-                          className="flex justify-between items-center text-[11px] bg-stone-950 p-1.5 px-2.5 rounded-lg border border-stone-800/80"
-                        >
-                          <span className="text-stone-300">
-                            {item.productName} (مقاس {item.size}) × {item.quantity}
-                          </span>
-                          <span className="font-mono text-amber-400 font-bold">
-                            {item.price * item.quantity} ج.م
-                          </span>
-                        </div>
-                      ))}
-                      <div className="flex justify-between items-center text-xs font-bold text-stone-200 pt-1">
+                    <div className="space-y-2.5">
+                      <div className="flex items-center justify-between">
+                        <p className="text-stone-300 font-bold text-xs flex items-center gap-1.5">
+                          <Package className="w-3.5 h-3.5 text-amber-500" />
+                          <span>محتويات الشحنة ({order.items.reduce((s, it) => s + (it.quantity || 1), 0)} قطعة):</span>
+                        </p>
+                        <span className="text-[10px] text-stone-500 hidden sm:inline">انقر على الصورة لمعاينة الطبعة</span>
+                      </div>
+
+                      <div className="space-y-2">
+                        {order.items.map((item, idx) => {
+                          const matchingProduct = products.find((p) => p.id === item.productId);
+                          const printSubtitle = item.subtitle || matchingProduct?.subtitle;
+                          const itemImg = item.image || item.images?.[0] || matchingProduct?.images?.[0] || '';
+                          const colorName = item.colorName || (matchingProduct?.colors && matchingProduct.colors[0]?.name);
+                          const colorHex = item.colorHex || (matchingProduct?.colors && matchingProduct.colors[0]?.hex) || '#171717';
+
+                          return (
+                            <div
+                              key={idx}
+                              className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 p-2.5 rounded-xl bg-stone-950/90 border border-stone-800/90 hover:border-stone-700 transition-all text-xs"
+                            >
+                              {/* Thumbnail & Title/Print/Color/Size */}
+                              <div className="flex items-start sm:items-center gap-2.5">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setInspectingOrderItem({
+                                      item: {
+                                        ...item,
+                                        subtitle: printSubtitle,
+                                        image: itemImg,
+                                        images: item.images && item.images.length > 0 ? item.images : (matchingProduct?.images || [itemImg]),
+                                        colorName: colorName,
+                                        colorHex: colorHex
+                                      },
+                                      orderNumber: order.orderNumber,
+                                      customerName: order.customerName,
+                                      orderDate: order.createdAt
+                                    });
+                                    setInspectingImageIndex(0);
+                                  }}
+                                  className="relative w-12 h-14 sm:w-14 sm:h-16 rounded-xl overflow-hidden border border-stone-700/80 bg-stone-900 shrink-0 group/img focus:outline-none focus:ring-1 focus:ring-amber-500"
+                                  title="انقر لتكبير صورة الهودي وفحص تفاصيل الطبعة"
+                                >
+                                  {itemImg ? (
+                                    <img
+                                      src={itemImg}
+                                      alt={item.productName}
+                                      referrerPolicy="no-referrer"
+                                      className="w-full h-full object-cover group-hover/img:scale-110 transition-transform duration-300"
+                                    />
+                                  ) : (
+                                    <div className="w-full h-full flex items-center justify-center text-stone-600">
+                                      <ImageIcon className="w-5 h-5" />
+                                    </div>
+                                  )}
+                                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/img:opacity-100 flex items-center justify-center transition-opacity">
+                                    <Eye className="w-3.5 h-3.5 text-amber-400" />
+                                  </div>
+                                </button>
+
+                                <div className="space-y-1">
+                                  <div className="flex flex-wrap items-center gap-1.5">
+                                    <span className="font-bold text-stone-100 text-xs sm:text-sm">{item.productName}</span>
+                                    {printSubtitle && (
+                                      <span className="px-1.5 py-0.5 rounded bg-amber-500/10 border border-amber-500/30 text-amber-300 text-[10px] font-medium">
+                                        طبعة: {printSubtitle}
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+                                    <span className="px-1.5 py-0.5 rounded bg-stone-900 border border-stone-700 text-stone-200 font-bold font-mono">
+                                      مقاس: <strong className="text-amber-400">{item.size}</strong>
+                                    </span>
+
+                                    {colorName && (
+                                      <span className="px-1.5 py-0.5 rounded bg-stone-900 border border-stone-700 text-stone-300 flex items-center gap-1">
+                                        <span
+                                          className="w-2.5 h-2.5 rounded-full border border-stone-600 shadow-sm shrink-0 inline-block"
+                                          style={{ backgroundColor: colorHex }}
+                                        />
+                                        <span>لون: <strong className="text-stone-200">{colorName}</strong></span>
+                                      </span>
+                                    )}
+
+                                    <span className="px-1.5 py-0.5 rounded bg-amber-500/15 border border-amber-500/25 text-amber-300 font-bold font-mono">
+                                      {item.quantity} {item.quantity > 1 ? 'قطع' : 'قطعة'}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Price & Action */}
+                              <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-center gap-1 pt-1.5 sm:pt-0 border-t sm:border-t-0 border-stone-850">
+                                <span className="font-mono text-amber-400 font-bold text-xs sm:text-sm">
+                                  {item.price * item.quantity} ج.م
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setInspectingOrderItem({
+                                      item: {
+                                        ...item,
+                                        subtitle: printSubtitle,
+                                        image: itemImg,
+                                        images: item.images && item.images.length > 0 ? item.images : (matchingProduct?.images || [itemImg]),
+                                        colorName: colorName,
+                                        colorHex: colorHex
+                                      },
+                                      orderNumber: order.orderNumber,
+                                      customerName: order.customerName,
+                                      orderDate: order.createdAt
+                                    });
+                                    setInspectingImageIndex(0);
+                                  }}
+                                  className="text-[10px] text-stone-400 hover:text-amber-400 flex items-center gap-1 transition-colors"
+                                >
+                                  <Eye className="w-3 h-3 text-amber-500" />
+                                  <span>فحص الطبعة</span>
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      <div className="flex justify-between items-center text-xs font-bold text-stone-200 pt-2 border-t border-stone-800">
                         <span>الإجمالي المطلوب تحصيله:</span>
-                        <span className="font-mono text-amber-400 text-sm">{order.total} ج.م</span>
+                        <span className="font-mono text-amber-400 text-sm font-black">{order.total} ج.م</span>
                       </div>
                     </div>
                   </div>
@@ -1583,6 +2027,69 @@ export const AdminDashboard: React.FC = () => {
                 </div>
               </div>
 
+              {/* Product Target Option */}
+              <div className="space-y-2 pt-2 border-t border-stone-800/80">
+                <label className="block text-xs font-bold text-stone-300">
+                  صلاحية ونطاق تطبيق الكوبون:
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCTargetScope('all');
+                      setCTargetProductId('');
+                    }}
+                    className={`p-2.5 rounded-xl border text-xs font-bold text-center transition-all ${
+                      cTargetScope === 'all'
+                        ? 'bg-amber-500/10 border-amber-500/40 text-amber-400'
+                        : 'bg-stone-950 border-stone-800 text-stone-400 hover:border-stone-700'
+                    }`}
+                  >
+                    شامل كافة منتجات المتجر
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCTargetScope('specific');
+                      if (!cTargetProductId && products.length > 0) {
+                        setCTargetProductId(products[0].id);
+                      }
+                    }}
+                    className={`p-2.5 rounded-xl border text-xs font-bold text-center transition-all ${
+                      cTargetScope === 'specific'
+                        ? 'bg-amber-500/10 border-amber-500/40 text-amber-400'
+                        : 'bg-stone-950 border-stone-800 text-stone-400 hover:border-stone-700'
+                    }`}
+                  >
+                    مخصص لهودي معين فقط
+                  </button>
+                </div>
+
+                {cTargetScope === 'specific' && (
+                  <div className="mt-2 space-y-1.5 bg-stone-950/80 border border-amber-500/20 p-3 rounded-xl">
+                    <label className="block text-xs font-bold text-amber-400">
+                      اختر الهودي الذي سيطبق عليه الخصم فقط:
+                    </label>
+                    <select
+                      id="admin-coupon-target-product-select"
+                      value={cTargetProductId}
+                      onChange={(e) => setCTargetProductId(e.target.value)}
+                      className="w-full bg-stone-900 border border-stone-700 rounded-xl px-3 py-2 text-xs text-stone-100 focus:outline-none focus:border-amber-500 font-medium"
+                    >
+                      {products.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name} ({p.price} ج.م)
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-[11px] text-stone-400">
+                      💡 ملاحظة: عند تفعيل هذا الكوبون، سيتم خصم الـ {cDiscount}% من سعر هذا الهودي فقط، دون التأثير على بقية العناصر في سلة المشتريات.
+                    </p>
+                  </div>
+                )}
+              </div>
+
               <div className="flex justify-end gap-2 pt-2">
                 <button
                   type="button"
@@ -1614,8 +2121,17 @@ export const AdminDashboard: React.FC = () => {
                       {coupon.code}
                     </span>
                     <p className="text-xs text-stone-400 mt-0.5">
-                      خصم {coupon.discountPercent}% على الطلب
+                      خصم {coupon.discountPercent}%
                     </p>
+                    {coupon.targetProductId && coupon.targetProductName ? (
+                      <span className="inline-block mt-2 px-2.5 py-1 rounded-lg bg-amber-500/10 border border-amber-500/30 text-[11px] font-bold text-amber-400">
+                        مخصص لهودي: {coupon.targetProductName}
+                      </span>
+                    ) : (
+                      <span className="inline-block mt-2 px-2.5 py-1 rounded-lg bg-stone-800 text-[11px] text-stone-400">
+                        شامل جميع منتجات المتجر
+                      </span>
+                    )}
                   </div>
 
                   {/* Working Delete Coupon Button */}
@@ -2568,6 +3084,220 @@ export const AdminDashboard: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* ORDER ITEM INSPECTION & PRINT VERIFICATION MODAL */}
+      {inspectingOrderItem && (() => {
+        const item = inspectingOrderItem.item;
+        const matchingProduct = products.find((p) => p.id === item.productId);
+        const imagesList = Array.from(
+          new Set([
+            ...(item.images && item.images.length > 0 ? item.images : []),
+            item.image,
+            ...(matchingProduct?.images || [])
+          ])
+        ).filter(Boolean) as string[];
+
+        const currentImg = imagesList[inspectingImageIndex] || imagesList[0] || '';
+        const printSubtitle = item.subtitle || matchingProduct?.subtitle;
+        const colorName = item.colorName || (matchingProduct?.colors && matchingProduct.colors[0]?.name);
+        const colorHex = item.colorHex || (matchingProduct?.colors && matchingProduct.colors[0]?.hex) || '#171717';
+        const currentStock = matchingProduct?.sizesStock?.[item.size];
+
+        return (
+          <div
+            id="order-item-inspection-modal"
+            className="fixed inset-0 z-[160] flex items-center justify-center p-3 sm:p-5 bg-black/85 backdrop-blur-md animate-in fade-in"
+            onClick={() => setInspectingOrderItem(null)}
+          >
+            <div
+              className="w-full max-w-2xl bg-stone-900 border border-stone-800 rounded-3xl shadow-2xl overflow-hidden max-h-[92vh] flex flex-col relative"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between p-4 sm:p-5 border-b border-stone-800 bg-stone-950/70">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 shrink-0">
+                    <Eye className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm sm:text-base font-bold text-stone-100 flex items-center gap-2">
+                      <span>فحص وتأكيد تفاصيل القطعة المطلوبة</span>
+                      <span className="font-mono text-xs px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-400 border border-amber-500/25">
+                        #{inspectingOrderItem.orderNumber}
+                      </span>
+                    </h3>
+                    <p className="text-xs text-stone-400 mt-0.5">
+                      العميل: <strong className="text-stone-200">{inspectingOrderItem.customerName}</strong> • {inspectingOrderItem.orderDate}
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  id="close-order-inspection-modal-btn"
+                  type="button"
+                  onClick={() => setInspectingOrderItem(null)}
+                  className="p-2 rounded-xl bg-stone-800/80 hover:bg-stone-800 text-stone-400 hover:text-white transition-colors"
+                  title="إغلاق المعاينة"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Body */}
+              <div className="p-4 sm:p-6 overflow-y-auto space-y-5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 items-start">
+                  {/* Left Column: Image with gallery switcher */}
+                  <div className="space-y-3">
+                    <div className="relative aspect-[3/4] rounded-2xl overflow-hidden border border-stone-800 bg-stone-950 shadow-inner group">
+                      {currentImg ? (
+                        <img
+                          src={currentImg}
+                          alt={item.productName}
+                          referrerPolicy="no-referrer"
+                          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex flex-col items-center justify-center text-stone-600">
+                          <ImageIcon className="w-12 h-12 mb-2" />
+                          <span className="text-xs">لا توجد صورة</span>
+                        </div>
+                      )}
+
+                      {/* Print Overlay Badge */}
+                      {printSubtitle && (
+                        <div className="absolute bottom-2 inset-x-2 bg-stone-950/90 backdrop-blur-md border border-stone-800 p-2 rounded-xl text-center shadow-lg">
+                          <span className="text-[10px] text-stone-400 block">طبعة وتفاصيل الموديل:</span>
+                          <span className="text-xs font-bold text-amber-400">{printSubtitle}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Image thumbnails if multiple */}
+                    {imagesList.length > 1 && (
+                      <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                        {imagesList.map((imgUrl, i) => (
+                          <button
+                            key={i}
+                            type="button"
+                            onClick={() => setInspectingImageIndex(i)}
+                            className={`w-14 h-16 rounded-xl overflow-hidden border-2 shrink-0 transition-all ${
+                              (inspectingImageIndex === i || (!imagesList[inspectingImageIndex] && i === 0))
+                                ? 'border-amber-500 scale-105 shadow-md shadow-amber-950/50'
+                                : 'border-stone-800 opacity-60 hover:opacity-100'
+                            }`}
+                          >
+                            <img
+                              src={imgUrl}
+                              alt={`زاوية ${i + 1}`}
+                              referrerPolicy="no-referrer"
+                              className="w-full h-full object-cover"
+                            />
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Right Column: Exact Specifications */}
+                  <div className="space-y-3.5 flex flex-col justify-between">
+                    <div className="space-y-3">
+                      {/* Product Name & Subtitle */}
+                      <div className="bg-stone-950/70 border border-stone-800/90 p-3.5 rounded-2xl space-y-1.5">
+                        <div className="text-[11px] text-stone-400 font-semibold">اسم الموديل المطلوب:</div>
+                        <h4 className="text-base font-black text-stone-100">{item.productName}</h4>
+                        {printSubtitle ? (
+                          <div className="p-2 rounded-xl bg-amber-500/10 border border-amber-500/25 text-amber-300 text-xs font-semibold flex items-center gap-2">
+                            <span>🎨</span>
+                            <span>الطباعة المحددة: <strong>{printSubtitle}</strong></span>
+                          </div>
+                        ) : (
+                          <div className="text-xs text-stone-400">
+                            الهودي بالتصميم الأساسي.
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Color & Size & Quantity Grid */}
+                      <div className="grid grid-cols-2 gap-2.5">
+                        {/* Chosen Color */}
+                        <div className="bg-stone-950/70 border border-stone-800/90 p-3 rounded-2xl space-y-1">
+                          <span className="text-[11px] text-stone-400">اللون المطلوب:</span>
+                          <div className="flex items-center gap-1.5">
+                            <span
+                              className="w-3.5 h-3.5 rounded-full border border-stone-600 shadow-sm shrink-0"
+                              style={{ backgroundColor: colorHex }}
+                            />
+                            <span className="font-bold text-xs text-stone-100">
+                              {colorName || 'اللون الافتراضي'}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Chosen Size */}
+                        <div className="bg-stone-950/70 border border-stone-800/90 p-3 rounded-2xl space-y-1">
+                          <span className="text-[11px] text-stone-400">المقاس المطلوب:</span>
+                          <div className="flex items-center gap-1.5">
+                            <span className="px-2 py-0.5 rounded-lg bg-amber-500 text-stone-950 font-black font-mono text-xs">
+                              {item.size}
+                            </span>
+                            <span className="text-[10px] text-stone-400">
+                              {item.size === 'M' ? 'وسط' : item.size === 'L' ? 'لارج' : item.size === 'XL' ? 'إكس لارج' : '2 إكس لارج'}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Quantity */}
+                        <div className="bg-stone-950/70 border border-stone-800/90 p-3 rounded-2xl space-y-1">
+                          <span className="text-[11px] text-stone-400">الكمية:</span>
+                          <div className="font-mono font-black text-sm text-amber-400">
+                            {item.quantity} {item.quantity > 1 ? 'قطع' : 'قطعة'}
+                          </div>
+                        </div>
+
+                        {/* Price */}
+                        <div className="bg-stone-950/70 border border-stone-800/90 p-3 rounded-2xl space-y-1">
+                          <span className="text-[11px] text-stone-400">الإجمالي:</span>
+                          <div className="font-mono font-black text-sm text-emerald-400">
+                            {item.price * item.quantity} ج.م
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Catalog Inventory Match Status */}
+                      {matchingProduct && (
+                        <div className="bg-stone-950/70 border border-stone-800/90 p-3 rounded-2xl space-y-1">
+                          <div className="flex items-center justify-between text-[11px] text-stone-400">
+                            <span>المخزون المتوفر لمقاس ({item.size}):</span>
+                            <strong className={`font-mono text-xs px-2 py-0.5 rounded-md ${
+                              (currentStock ?? 0) > 0
+                                ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/25'
+                                : 'bg-rose-500/15 text-rose-400 border border-rose-500/25'
+                            }`}>
+                              {currentStock ?? 0} قطعة
+                            </strong>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Footer Close Button */}
+                    <div className="pt-2">
+                      <button
+                        type="button"
+                        onClick={() => setInspectingOrderItem(null)}
+                        className="w-full py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-stone-950 font-bold text-xs flex items-center justify-center gap-2 transition-colors shadow-lg shadow-amber-950/30"
+                      >
+                        <Check className="w-4 h-4" />
+                        <span>تمت مراجعة تفاصيل القطعة</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 };

@@ -263,7 +263,8 @@ export const CartDrawer: React.FC = () => {
                     <div>
                       <span className="font-bold text-amber-300">{appliedCoupon.code}</span>
                       <span className="text-stone-400 mr-2">
-                        (خصم {appliedCoupon.discountPercent}%)
+                        (خصم {appliedCoupon.discountPercent}%
+                        {appliedCoupon.targetProductName ? ` على ${appliedCoupon.targetProductName}` : ''})
                       </span>
                     </div>
                   </div>
@@ -313,7 +314,10 @@ export const CartDrawer: React.FC = () => {
               </div>
               {discount > 0 && (
                 <div className="flex justify-between text-emerald-400 font-medium">
-                  <span>خصم الكوبون ({appliedCoupon?.code}):</span>
+                  <span>
+                    خصم الكوبون ({appliedCoupon?.code}
+                    {appliedCoupon?.targetProductName ? ` - خاص بهودي ${appliedCoupon.targetProductName}` : ''}):
+                  </span>
                   <span className="font-mono">-{discount} ج.م</span>
                 </div>
               )}
