@@ -1,5 +1,11 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
+import {
+  initializeFirestore,
+  getFirestore,
+  doc,
+  getDocFromServer,
+  Firestore
+} from 'firebase/firestore';
 import config from '../../firebase-applet-config.json';
 
 const firebaseConfig = {
@@ -13,17 +19,40 @@ const firebaseConfig = {
 
 export const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 
-export const db = config.firestoreDatabaseId && config.firestoreDatabaseId !== '(default)'
-  ? getFirestore(app, config.firestoreDatabaseId)
-  : getFirestore(app);
+const targetDatabaseId =
+  config.firestoreDatabaseId && config.firestoreDatabaseId !== '(default)'
+    ? config.firestoreDatabaseId
+    : undefined;
+
+let firestoreInstance: Firestore;
+try {
+  firestoreInstance = initializeFirestore(
+    app,
+    {
+      experimentalAutoDetectLongPolling: true
+    },
+    targetDatabaseId
+  );
+} catch {
+  firestoreInstance = targetDatabaseId
+    ? getFirestore(app, targetDatabaseId)
+    : getFirestore(app);
+}
+
+export const db = firestoreInstance;
 
 // Connectivity check test as required by skill guidelines
 export async function testFirebaseConnection() {
   try {
     await getDocFromServer(doc(db, 'test', 'connection'));
   } catch (error) {
-    if (error instanceof Error && error.message.includes('the client is offline')) {
-      console.warn('Firebase client appears offline, will retry when network is available.');
+    if (error instanceof Error) {
+      if (error.message.includes('the client is offline')) {
+        console.warn('Firebase client appears offline, will sync when network is ready.');
+      } else {
+        // Suppress initial transient handshake/unavailable warning
+        console.log('Firebase connection ready state:', error.message);
+      }
     }
   }
 }

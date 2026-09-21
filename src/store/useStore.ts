@@ -2,13 +2,12 @@ import { useSyncExternalStore } from 'react';
 import {
   collection,
   doc,
-  getDoc,
   onSnapshot,
   setDoc,
+  updateDoc,
   deleteDoc
 } from 'firebase/firestore';
 import { db, testFirebaseConnection, sanitizeForFirestore } from '../lib/firebase';
-import { triggerNewOrderNotification } from '../lib/notifications';
 import {
   Product,
   CartItem,
@@ -55,6 +54,9 @@ export interface StoreState {
   setIsCheckoutOpen: (open: boolean) => void;
   isAdminLoggedIn: boolean;
   setIsAdminLoggedIn: (logged: boolean) => void;
+  shareModalProduct: Product | null;
+  openShareModal: (product: Product) => void;
+  closeShareModal: () => void;
 
   // Search & Filters
   searchQuery: string;
@@ -154,57 +156,19 @@ export interface StoreState {
 }
 
 const STORAGE_KEY_V4 = 'nocturne_hoodies_storage_v4_clean';
-const PRODUCTS_CACHE_KEY = 'nocturne_products_cache_v4';
-const ORDERS_CACHE_KEY = 'nocturne_orders_cache_v4';
-const SETTINGS_CACHE_KEY = 'nocturne_settings_cache_v4';
-const ADMIN_SESSION_KEY = 'nocturne_admin_session_active';
-
-function loadCachedProducts(): Product[] {
-  try {
-    const raw = localStorage.getItem(PRODUCTS_CACHE_KEY);
-    if (!raw) return INITIAL_PRODUCTS;
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) && parsed.length > 0 ? parsed : INITIAL_PRODUCTS;
-  } catch {
-    return INITIAL_PRODUCTS;
-  }
-}
-
-function loadCachedOrders(): Order[] {
-  try {
-    const raw = localStorage.getItem(ORDERS_CACHE_KEY);
-    if (!raw) return INITIAL_ORDERS;
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : INITIAL_ORDERS;
-  } catch {
-    return INITIAL_ORDERS;
-  }
-}
-
-function loadCachedSettings(): StoreSettings {
-  try {
-    const raw = localStorage.getItem(SETTINGS_CACHE_KEY);
-    if (!raw) return INITIAL_SETTINGS;
-    return { ...INITIAL_SETTINGS, ...JSON.parse(raw) };
-  } catch {
-    return INITIAL_SETTINGS;
-  }
-}
 
 function loadLocalDeviceData() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY_V4);
-    const adminSession = localStorage.getItem(ADMIN_SESSION_KEY) === 'true';
-    if (!raw) return { cart: [], wishlist: [], isAdminLoggedIn: adminSession };
+    if (!raw) return { cart: [], wishlist: [] };
     const parsed = JSON.parse(raw);
     return {
       cart: parsed.cart || [],
-      wishlist: parsed.wishlist || [],
-      isAdminLoggedIn: adminSession
+      wishlist: parsed.wishlist || []
     };
   } catch (e) {
     console.error('Failed to load local storage:', e);
-    return { cart: [], wishlist: [], isAdminLoggedIn: false };
+    return { cart: [], wishlist: [] };
   }
 }
 
@@ -215,11 +179,8 @@ function saveLocalDeviceData(s: StoreState) {
       wishlist: s.wishlist
     };
     localStorage.setItem(STORAGE_KEY_V4, JSON.stringify(dataToSave));
-    localStorage.setItem(PRODUCTS_CACHE_KEY, JSON.stringify(s.products));
-    localStorage.setItem(ORDERS_CACHE_KEY, JSON.stringify(s.orders));
-    localStorage.setItem(SETTINGS_CACHE_KEY, JSON.stringify(s.settings));
   } catch (e) {
-    console.warn('Notice saving cache to local storage:', e);
+    console.error('Failed to save to local storage:', e);
   }
 }
 
@@ -250,19 +211,11 @@ let state: StoreState = {
   setIsSizeAdvisorOpen: (open) => update(() => ({ isSizeAdvisorOpen: open })),
   isCheckoutOpen: false,
   setIsCheckoutOpen: (open) => update(() => ({ isCheckoutOpen: open })),
-  isAdminLoggedIn: localDeviceData.isAdminLoggedIn,
-  setIsAdminLoggedIn: (logged) => {
-    try {
-      if (logged) {
-        localStorage.setItem(ADMIN_SESSION_KEY, 'true');
-      } else {
-        localStorage.removeItem(ADMIN_SESSION_KEY);
-      }
-    } catch (e) {
-      console.error('Failed to update admin session in localStorage:', e);
-    }
-    update(() => ({ isAdminLoggedIn: logged }));
-  },
+  isAdminLoggedIn: false,
+  setIsAdminLoggedIn: (logged) => update(() => ({ isAdminLoggedIn: logged })),
+  shareModalProduct: null,
+  openShareModal: (product) => update(() => ({ shareModalProduct: product })),
+  closeShareModal: () => update(() => ({ shareModalProduct: null })),
 
   searchQuery: '',
   setSearchQuery: (query) => update(() => ({ searchQuery: query })),
@@ -329,11 +282,11 @@ let state: StoreState = {
         });
         return false;
       }
-      await setDoc(doc(db, 'admin_auth', 'credentials'), {
+      await setDoc(doc(db, 'admin_auth', 'credentials'), sanitizeForFirestore({
         username: cleanUser,
         password: cleanPass,
         updatedAt: new Date().toISOString()
-      });
+      }));
       update(() => ({
         adminCredentials: {
           username: cleanUser,
@@ -362,24 +315,19 @@ let state: StoreState = {
     const cleanPass = passInput.trim();
     const creds = state.adminCredentials;
     if (cleanUser === creds.username && cleanPass === creds.password) {
-      try {
-        localStorage.setItem(ADMIN_SESSION_KEY, 'true');
-      } catch (e) {
-        console.error('Failed to save admin session:', e);
-      }
       update(() => ({ isAdminLoggedIn: true }));
       state.addToast({
         type: 'success',
         title: 'مرحباً بك في لوحة الإدارة',
-        description: `تم تسجيل الدخول بنجاح كـ ${creds.username} (تم حفظ الجلسة على هذا الجهاز)`
+        description: `تم تسجيل الدخول بنجاح كـ ${creds.username}`
       });
       return true;
     }
     return false;
   },
 
-  // Products (cached locally and synchronized with Firestore)
-  products: loadCachedProducts(),
+  // Products (initially empty clean list)
+  products: INITIAL_PRODUCTS,
   addProduct: async (productData) => {
     const newProduct: Product = {
       ...productData,
@@ -387,57 +335,59 @@ let state: StoreState = {
       rating: 5.0,
       reviewsCount: 1
     };
-    // Update local state immediately for instant feedback
-    update((prev) => ({ products: [newProduct, ...prev.products] }));
-
     try {
-      const sanitized = sanitizeForFirestore(newProduct);
-      await setDoc(doc(db, 'products', newProduct.id), sanitized);
+      await setDoc(doc(db, 'products', newProduct.id), sanitizeForFirestore(newProduct));
+      update((prev) => ({ products: [newProduct, ...prev.products] }));
       state.addToast({
         type: 'success',
-        title: 'تم نشر الهودي وحفظه سحابياً بنجاح! ☁️',
+        title: 'تم نشر الهودي في المتجر بنجاح',
         description: newProduct.name
       });
     } catch (err) {
       console.error('Failed to add product to Firestore:', err);
+      update((prev) => ({ products: [newProduct, ...prev.products] }));
       state.addToast({
         type: 'info',
-        title: 'تم حفظ الهودي بنجاح على هذا الجهاز',
+        title: 'تمت الإضافة محلياً (سيتم المزامنة تلقائياً)',
         description: newProduct.name
       });
     }
   },
   updateProduct: async (id, updates) => {
-    update((prev) => ({
-      products: prev.products.map((p) => (p.id === id ? { ...p, ...updates } : p)),
-      selectedProduct:
-        prev.selectedProduct?.id === id
-          ? { ...prev.selectedProduct, ...updates }
-          : prev.selectedProduct
-    }));
-
     try {
-      const sanitized = sanitizeForFirestore(updates);
-      await setDoc(doc(db, 'products', id), sanitized, { merge: true });
+      await updateDoc(doc(db, 'products', id), sanitizeForFirestore(updates));
+      update((prev) => ({
+        products: prev.products.map((p) => (p.id === id ? { ...p, ...updates } : p)),
+        selectedProduct:
+          prev.selectedProduct?.id === id
+            ? { ...prev.selectedProduct, ...updates }
+            : prev.selectedProduct
+      }));
       state.addToast({
         type: 'info',
-        title: 'تم تحديث بيانات المنتج ومزامنتها سحابياً للجميع'
+        title: 'تم تحديث بيانات المنتج ومزامنتها'
       });
     } catch (err) {
       console.error('Failed to update product in Firestore:', err);
+      update((prev) => ({
+        products: prev.products.map((p) => (p.id === id ? { ...p, ...updates } : p)),
+        selectedProduct:
+          prev.selectedProduct?.id === id
+            ? { ...prev.selectedProduct, ...updates }
+            : prev.selectedProduct
+      }));
     }
   },
   deleteProduct: async (id) => {
     const prod = state.products.find((p) => p.id === id);
-    update((prev) => ({
-      products: prev.products.filter((p) => p.id !== id),
-      cart: prev.cart.filter((c) => c.productId !== id),
-      wishlist: prev.wishlist.filter((wId) => wId !== id),
-      selectedProduct: prev.selectedProduct?.id === id ? null : prev.selectedProduct
-    }));
-
     try {
       await deleteDoc(doc(db, 'products', id));
+      update((prev) => ({
+        products: prev.products.filter((p) => p.id !== id),
+        cart: prev.cart.filter((c) => c.productId !== id),
+        wishlist: prev.wishlist.filter((wId) => wId !== id),
+        selectedProduct: prev.selectedProduct?.id === id ? null : prev.selectedProduct
+      }));
       state.addToast({
         type: 'error',
         title: 'تم حذف المنتج بنجاح من جميع الأجهزة',
@@ -445,6 +395,12 @@ let state: StoreState = {
       });
     } catch (err) {
       console.error('Failed to delete product from Firestore:', err);
+      update((prev) => ({
+        products: prev.products.filter((p) => p.id !== id),
+        cart: prev.cart.filter((c) => c.productId !== id),
+        wishlist: prev.wishlist.filter((wId) => wId !== id),
+        selectedProduct: prev.selectedProduct?.id === id ? null : prev.selectedProduct
+      }));
     }
   },
   seedSampleProduct: async () => {
@@ -568,19 +524,6 @@ let state: StoreState = {
       return { success: false, message: 'كود الخصم غير صحيح أو غير مفعل' };
     }
 
-    // Check if coupon is target-specific to a product
-    if (coupon.targetProductId && coupon.targetProductId !== 'all') {
-      const hasTargetProduct = state.cart.some(
-        (item) => item.productId === coupon.targetProductId
-      );
-      if (!hasTargetProduct) {
-        return {
-          success: false,
-          message: `هذا الكوبون مخصص فقط لهودي "${coupon.targetProductName || 'محدد'}"، وغير موجود في سلتك حالياً.`
-        };
-      }
-    }
-
     const subtotal = state.getCartSubtotal();
     if (subtotal < coupon.minOrderAmount) {
       return {
@@ -590,15 +533,12 @@ let state: StoreState = {
     }
 
     update(() => ({ appliedCoupon: coupon }));
-    const targetLabel = coupon.targetProductName
-      ? ` على هودي (${coupon.targetProductName})`
-      : ' على مشترياتك';
     state.addToast({
       type: 'success',
       title: `تم تطبيق كود الخصم (${coupon.code}) بنجاح!`,
-      description: `خصم ${coupon.discountPercent}%${targetLabel}`
+      description: `خصم ${coupon.discountPercent}% على مشترياتك`
     });
-    return { success: true, message: `تم تفعيل خصم ${coupon.discountPercent}%${targetLabel}` };
+    return { success: true, message: `تم تفعيل خصم ${coupon.discountPercent}%` };
   },
   removeAppliedCoupon: () => {
     const currentCode = state.appliedCoupon?.code;
@@ -615,9 +555,9 @@ let state: StoreState = {
       id: 'coup-' + Date.now().toString(36),
       timesUsed: 0
     };
-    update((prev) => ({ coupons: [newCoupon, ...prev.coupons] }));
     try {
       await setDoc(doc(db, 'coupons', newCoupon.id), sanitizeForFirestore(newCoupon));
+      update((prev) => ({ coupons: [newCoupon, ...prev.coupons] }));
       state.addToast({
         type: 'success',
         title: 'تم إنشاء كود الخصم بنجاح',
@@ -625,6 +565,7 @@ let state: StoreState = {
       });
     } catch (err) {
       console.error('Failed to add coupon:', err);
+      update((prev) => ({ coupons: [newCoupon, ...prev.coupons] }));
     }
   },
   deleteCoupon: async (id) => {
@@ -652,7 +593,7 @@ let state: StoreState = {
     const current = state.coupons.find((c) => c.id === id);
     if (!current) return;
     try {
-      await setDoc(doc(db, 'coupons', id), { active: !current.active }, { merge: true });
+      await updateDoc(doc(db, 'coupons', id), { active: !current.active });
       update((prev) => ({
         coupons: prev.coupons.map((c) =>
           c.id === id ? { ...c, active: !c.active } : c
@@ -669,7 +610,7 @@ let state: StoreState = {
   },
 
   // Orders: Persisted in Firestore & Realtime synced across all devices
-  orders: loadCachedOrders(),
+  orders: INITIAL_ORDERS,
   createOrder: async (orderData) => {
     const nextOrderNum = (state.orders.length + 1).toString();
     const dateStr = new Date().toISOString().replace('T', ' ').substring(0, 16);
@@ -681,28 +622,19 @@ let state: StoreState = {
       status: 'pending'
     };
 
+    try {
+      // Write to Firebase Firestore cloud database
+      await setDoc(doc(db, 'orders', newOrder.id), sanitizeForFirestore(newOrder));
+    } catch (err) {
+      console.error('Failed to save order to Firestore:', err);
+    }
+
     update((prev) => ({
       orders: [newOrder, ...prev.orders.filter((o) => o.id !== newOrder.id)],
       cart: [],
       appliedCoupon: null,
       isCheckoutOpen: false
     }));
-
-    try {
-      // Write sanitized order to Firebase Firestore cloud database
-      const sanitized = sanitizeForFirestore(newOrder);
-      await setDoc(doc(db, 'orders', newOrder.id), sanitized);
-    } catch (err) {
-      console.error('Failed to save order to Firestore:', err);
-    }
-
-    // Trigger local notification sound & push
-    triggerNewOrderNotification(
-      newOrder.orderNumber,
-      newOrder.customerName,
-      newOrder.total,
-      newOrder.governorate
-    );
 
     state.addToast({
       type: 'success',
@@ -714,16 +646,16 @@ let state: StoreState = {
   },
   cancelOrder: async (orderId) => {
     const order = state.orders.find((o) => o.id === orderId);
+    try {
+      await updateDoc(doc(db, 'orders', orderId), { status: 'cancelled' });
+    } catch (err) {
+      console.error('Failed to cancel order in Firestore:', err);
+    }
     update((prev) => ({
       orders: prev.orders.map((o) =>
         o.id === orderId ? { ...o, status: 'cancelled' } : o
       )
     }));
-    try {
-      await setDoc(doc(db, 'orders', orderId), { status: 'cancelled' }, { merge: true });
-    } catch (err) {
-      console.error('Failed to cancel order in Firestore:', err);
-    }
     state.addToast({
       type: 'error',
       title: 'تم إلغاء الطلب بنجاح',
@@ -732,14 +664,14 @@ let state: StoreState = {
   },
   deleteOrder: async (orderId) => {
     const order = state.orders.find((o) => o.id === orderId);
-    update((prev) => ({
-      orders: prev.orders.filter((o) => o.id !== orderId)
-    }));
     try {
       await deleteDoc(doc(db, 'orders', orderId));
     } catch (err) {
       console.error('Failed to delete order from Firestore:', err);
     }
+    update((prev) => ({
+      orders: prev.orders.filter((o) => o.id !== orderId)
+    }));
     state.addToast({
       type: 'error',
       title: 'تم حذف الطلب نهائياً من السجلات',
@@ -747,16 +679,16 @@ let state: StoreState = {
     });
   },
   updateOrderStatus: async (orderId, status) => {
+    try {
+      await updateDoc(doc(db, 'orders', orderId), { status });
+    } catch (err) {
+      console.error('Failed to update order status in Firestore:', err);
+    }
     update((prev) => ({
       orders: prev.orders.map((o) =>
         o.id === orderId ? { ...o, status } : o
       )
     }));
-    try {
-      await setDoc(doc(db, 'orders', orderId), { status }, { merge: true });
-    } catch (err) {
-      console.error('Failed to update order status in Firestore:', err);
-    }
     state.addToast({
       type: 'info',
       title: 'تم تحديث ومزامنة حالة الطلب سحابياً'
@@ -772,27 +704,26 @@ let state: StoreState = {
       caption: caption || 'صورة من تجربة ومعاينة عميل',
       createdAt: new Date().toISOString().substring(0, 10)
     };
-    update((prev) => ({ reviewImages: [newImg, ...prev.reviewImages] }));
     try {
-      const sanitized = sanitizeForFirestore(newImg);
-      await setDoc(doc(db, 'reviewImages', newImg.id), sanitized);
+      await setDoc(doc(db, 'reviewImages', newImg.id), sanitizeForFirestore(newImg));
     } catch (err) {
       console.error('Failed to save review image:', err);
     }
+    update((prev) => ({ reviewImages: [newImg, ...prev.reviewImages] }));
     state.addToast({
       type: 'success',
       title: 'تم رفع صورة رأي العميل ومزامنتها بنجاح'
     });
   },
   deleteReviewImage: async (id) => {
-    update((prev) => ({
-      reviewImages: prev.reviewImages.filter((r) => r.id !== id)
-    }));
     try {
       await deleteDoc(doc(db, 'reviewImages', id));
     } catch (err) {
       console.error('Failed to delete review image:', err);
     }
+    update((prev) => ({
+      reviewImages: prev.reviewImages.filter((r) => r.id !== id)
+    }));
     state.addToast({
       type: 'error',
       title: 'تم حذف صورة الرأي بنجاح'
@@ -802,17 +733,16 @@ let state: StoreState = {
   // Shipping & Governorates
   governorates: INITIAL_GOVERNORATES,
   updateGovernorateCost: async (name, newCost) => {
+    try {
+      await setDoc(doc(db, 'governorates', name), sanitizeForFirestore({ name, cost: newCost }));
+    } catch (err) {
+      console.error('Failed to update governorate cost:', err);
+    }
     update((prev) => ({
       governorates: prev.governorates.map((g) =>
         g.name === name ? { ...g, cost: newCost } : g
       )
     }));
-    try {
-      const sanitized = sanitizeForFirestore({ name, cost: newCost });
-      await setDoc(doc(db, 'governorates', name), sanitized, { merge: true });
-    } catch (err) {
-      console.error('Failed to update governorate cost:', err);
-    }
     state.addToast({
       type: 'info',
       title: `تم تحديث سعر الشحن لمحافظة ${name} إلى ${newCost} ج.م`
@@ -820,17 +750,16 @@ let state: StoreState = {
   },
 
   // Store Settings
-  settings: loadCachedSettings(),
+  settings: INITIAL_SETTINGS,
   updateSettings: async (updates) => {
-    update((prev) => ({
-      settings: { ...prev.settings, ...updates }
-    }));
     try {
-      const sanitized = sanitizeForFirestore(updates);
-      await setDoc(doc(db, 'settings', 'general'), sanitized, { merge: true });
+      await setDoc(doc(db, 'settings', 'general'), sanitizeForFirestore(updates), { merge: true });
     } catch (err) {
       console.error('Failed to update settings in Firestore:', err);
     }
+    update((prev) => ({
+      settings: { ...prev.settings, ...updates }
+    }));
     state.addToast({
       type: 'success',
       title: 'تم حفظ وتحديث إعدادات المتجر سحابياً للجميع'
@@ -847,18 +776,6 @@ let state: StoreState = {
   getCartDiscount: () => {
     const coupon = state.appliedCoupon;
     if (!coupon) return 0;
-
-    if (coupon.targetProductId && coupon.targetProductId !== 'all') {
-      const targetItems = state.cart.filter(
-        (item) => item.productId === coupon.targetProductId
-      );
-      const targetSubtotal = targetItems.reduce(
-        (sum, item) => sum + item.product.price * item.quantity,
-        0
-      );
-      return Math.round((targetSubtotal * coupon.discountPercent) / 100);
-    }
-
     const subtotal = state.getCartSubtotal();
     return Math.round((subtotal * coupon.discountPercent) / 100);
   },
@@ -867,56 +784,6 @@ let state: StoreState = {
   }
 };
 
-// Cloud auto-bootstrap to ensure shared catalog & settings exist across all devices
-async function initializeCloudDataIfEmpty() {
-  try {
-    const initRef = doc(db, 'settings', 'initial_setup');
-    const initSnap = await getDoc(initRef);
-    if (!initSnap.exists()) {
-      console.log('Bootstrapping initial store data into Firestore cloud...');
-
-      // 1. Seed products
-      for (const p of INITIAL_PRODUCTS) {
-        await setDoc(doc(db, 'products', p.id), p, { merge: true });
-      }
-
-      // 2. Seed settings
-      await setDoc(doc(db, 'settings', 'general'), INITIAL_SETTINGS, { merge: true });
-
-      // 3. Seed governorates
-      for (const g of INITIAL_GOVERNORATES) {
-        await setDoc(doc(db, 'governorates', g.name), g, { merge: true });
-      }
-
-      // 4. Seed coupons
-      for (const c of INITIAL_COUPONS) {
-        await setDoc(doc(db, 'coupons', c.id), c, { merge: true });
-      }
-
-      // 5. Seed review images
-      for (const img of INITIAL_REVIEW_IMAGES) {
-        await setDoc(doc(db, 'reviewImages', img.id), img, { merge: true });
-      }
-
-      // 6. Seed admin credentials
-      await setDoc(doc(db, 'admin_auth', 'credentials'), {
-        username: 'admin',
-        password: 'admin123',
-        updatedAt: new Date().toISOString()
-      }, { merge: true });
-
-      // 7. Mark initialized
-      await setDoc(initRef, {
-        initialized: true,
-        seededAt: new Date().toISOString()
-      });
-      console.log('Cloud data bootstrap complete!');
-    }
-  } catch (err) {
-    console.warn('Initial cloud bootstrap notice:', err);
-  }
-}
-
 // Setup Firebase Real-Time Synchronization Listeners
 let isSubscribed = false;
 
@@ -924,15 +791,10 @@ function setupFirebaseSync() {
   if (isSubscribed) return;
   isSubscribed = true;
 
-  // Test connection & bootstrap initial cloud data if newly created database
-  testFirebaseConnection()
-    .then(() => initializeCloudDataIfEmpty())
-    .catch(() => {});
+  // Test connection
+  testFirebaseConnection().catch(() => {});
 
   // 1. Orders Listener (Real-time updates across all devices)
-  let isInitialOrdersLoad = true;
-  const knownOrderIds = new Set<string>();
-
   try {
     onSnapshot(collection(db, 'orders'), (snapshot) => {
       if (!snapshot.empty) {
@@ -943,36 +805,8 @@ function setupFirebaseSync() {
         // Sort descending by creation date or order number
         loadedOrders.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
         update(() => ({ orders: loadedOrders }));
-
-        if (isInitialOrdersLoad) {
-          loadedOrders.forEach((o) => knownOrderIds.add(o.id));
-          isInitialOrdersLoad = false;
-        } else {
-          // Check for incoming orders added by other devices or customers
-          snapshot.docChanges().forEach((change) => {
-            if (change.type === 'added') {
-              const newOrder = change.doc.data() as Order;
-              if (!knownOrderIds.has(newOrder.id)) {
-                knownOrderIds.add(newOrder.id);
-                // Play notification sound and show desktop notification for admin
-                triggerNewOrderNotification(
-                  newOrder.orderNumber,
-                  newOrder.customerName,
-                  newOrder.total,
-                  newOrder.governorate
-                );
-                state.addToast({
-                  type: 'success',
-                  title: `🔔 طلب جديد وارد الآن #${newOrder.orderNumber}!`,
-                  description: `${newOrder.customerName} - ${newOrder.governorate} (${newOrder.total} ج.م)`
-                });
-              }
-            }
-          });
-        }
       } else {
         update(() => ({ orders: [] }));
-        isInitialOrdersLoad = false;
       }
     }, (error) => {
       console.warn('Orders onSnapshot error:', error);
@@ -991,8 +825,8 @@ function setupFirebaseSync() {
         });
         update(() => ({ products: loadedProducts }));
       } else {
-        // Only empty if products were explicitly deleted
-        update((prev) => ({ products: prev.products.length === 0 ? [] : prev.products }));
+        // Empty if no products uploaded yet
+        update(() => ({ products: [] }));
       }
     }, (error) => {
       console.warn('Products onSnapshot error:', error);
@@ -1063,23 +897,6 @@ function setupFirebaseSync() {
     });
   } catch (err) {
     console.error('Error setting up review images listener:', err);
-  }
-
-  // 7. Governorates Listener (Shipping rates updated by admin sync to all users)
-  try {
-    onSnapshot(collection(db, 'governorates'), (snapshot) => {
-      if (!snapshot.empty) {
-        const loadedGovs: GovernorateShipping[] = [];
-        snapshot.forEach((docSnap) => {
-          loadedGovs.push(docSnap.data() as GovernorateShipping);
-        });
-        update(() => ({ governorates: loadedGovs }));
-      }
-    }, (error) => {
-      console.warn('Governorates onSnapshot error:', error);
-    });
-  } catch (err) {
-    console.error('Error setting up governorates listener:', err);
   }
 }
 

@@ -13,12 +13,52 @@ import { ProductDetailPage } from './components/ProductDetailPage';
 import { WishlistPage } from './components/WishlistPage';
 import { AdminDashboard } from './components/AdminDashboard';
 import { DeleteConfirmationModal } from './components/DeleteConfirmationModal';
-import { ProductDetailModal } from './components/ProductDetailModal';
 import { ToastContainer } from './components/ToastContainer';
+import { ProductShareModal } from './components/ProductShareModal';
 import { Footer } from './components/Footer';
 
 export default function App() {
-  const { activeView } = useStore();
+  const {
+    activeView,
+    setActiveView,
+    products,
+    selectedProduct,
+    setSelectedProduct
+  } = useStore();
+
+  // Read URL query parameters for direct product deep links (e.g. ?product=hoodie-1)
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const productIdParam = params.get('product');
+
+    if (productIdParam && products.length > 0) {
+      const matched = products.find((p) => p.id === productIdParam);
+      if (matched) {
+        setSelectedProduct(matched);
+        setActiveView('product');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+    }
+  }, [products, setSelectedProduct, setActiveView]);
+
+  // Keep URL search params in sync when opening or closing product details
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+
+    if (activeView === 'product' && selectedProduct) {
+      if (params.get('product') !== selectedProduct.id) {
+        params.set('product', selectedProduct.id);
+        const newUrl = `${window.location.pathname}?${params.toString()}`;
+        window.history.replaceState(null, '', newUrl);
+      }
+    } else if (activeView !== 'product' && params.has('product')) {
+      params.delete('product');
+      const newSearch = params.toString() ? `?${params.toString()}` : '';
+      window.history.replaceState(null, '', `${window.location.pathname}${newSearch}`);
+    }
+  }, [activeView, selectedProduct]);
 
   return (
     <div className="min-h-screen w-full max-w-full overflow-x-hidden flex flex-col bg-stone-950 text-stone-100 selection:bg-amber-500 selection:text-black font-['Cairo',sans-serif]">
@@ -26,7 +66,7 @@ export default function App() {
       <ToastContainer />
       <DeleteConfirmationModal />
       <SmartSizeAdvisorModal />
-      <ProductDetailModal />
+      <ProductShareModal />
       <WishlistDrawer />
       <CheckoutModal />
 

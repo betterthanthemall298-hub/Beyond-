@@ -1,14 +1,21 @@
 import React, { useState } from 'react';
 import { useStore } from '../store/useStore';
 import { Product, HoodieSize } from '../types';
-import { Heart, ShoppingBag, Star, Check, Eye } from 'lucide-react';
+import { Heart, ShoppingBag, Star, Check, Share2 } from 'lucide-react';
 
 interface ProductCardProps {
   product: Product;
 }
 
 export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
-  const { setSelectedProduct, setActiveView, addToCart, wishlist, toggleWishlist } = useStore();
+  const {
+    setSelectedProduct,
+    setActiveView,
+    addToCart,
+    wishlist,
+    toggleWishlist,
+    openShareModal
+  } = useStore();
   const [chosenSize, setChosenSize] = useState<HoodieSize>('L');
   const [chosenColorIndex, setChosenColorIndex] = useState(0);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
@@ -34,11 +41,6 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
     setSelectedProduct(product);
     setActiveView('product');
     window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  const handleQuickView = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setSelectedProduct(product);
   };
 
   const handleQuickAdd = (e: React.MouseEvent) => {
@@ -91,33 +93,34 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
           </div>
         )}
 
-        {/* Action Buttons: Wishlist & Quick View */}
-        <div className="absolute top-3 left-3 flex flex-col gap-1.5 z-10">
-          <button
-            id={`wishlist-btn-${product.id}`}
-            type="button"
-            onClick={handleToggleWishlist}
-            className={`p-2 rounded-xl backdrop-blur-md border transition-all ${
-              isFav
-                ? 'bg-rose-950/80 border-rose-800/60 text-rose-400'
-                : 'bg-stone-950/70 border-stone-800 text-stone-300 hover:text-white hover:border-stone-600'
-            }`}
-            title={isFav ? 'إزالة من المفضلة' : 'حفظ في المفضلة'}
-          >
-            <Heart className={`w-4 h-4 ${isFav ? 'fill-rose-400' : ''}`} />
-          </button>
+        {/* Wishlist Button */}
+        <button
+          id={`wishlist-btn-${product.id}`}
+          type="button"
+          onClick={handleToggleWishlist}
+          className={`absolute top-3 left-3 p-2 rounded-xl backdrop-blur-md border transition-all z-10 ${
+            isFav
+              ? 'bg-rose-950/80 border-rose-800/60 text-rose-400'
+              : 'bg-stone-950/70 border-stone-800 text-stone-300 hover:text-white hover:border-stone-600'
+          }`}
+          title={isFav ? 'إزالة من المفضلة' : 'حفظ في المفضلة'}
+        >
+          <Heart className={`w-4 h-4 ${isFav ? 'fill-rose-400' : ''}`} />
+        </button>
 
-          <button
-            id={`quick-view-btn-${product.id}`}
-            type="button"
-            onClick={handleQuickView}
-            className="p-2 rounded-xl backdrop-blur-md border bg-stone-950/70 border-stone-800 text-stone-300 hover:text-amber-400 hover:border-amber-500/50 hover:bg-stone-900/90 transition-all shadow-md group/btn"
-            title="عرض سريع للمنتج"
-            aria-label="عرض سريع"
-          >
-            <Eye className="w-4 h-4 transition-transform group-hover/btn:scale-110" />
-          </button>
-        </div>
+        {/* Share Button */}
+        <button
+          id={`share-btn-${product.id}`}
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            openShareModal(product);
+          }}
+          className="absolute top-3 left-12 p-2 rounded-xl backdrop-blur-md bg-stone-950/70 border border-stone-800 text-stone-300 hover:text-amber-400 hover:border-amber-500/50 transition-all z-10"
+          title="مشاركة المنتج عبر واتساب وتليجرام"
+        >
+          <Share2 className="w-4 h-4" />
+        </button>
 
         {/* Rating Floating Tag */}
         <div className="absolute bottom-3 right-3 bg-stone-950/80 backdrop-blur-sm border border-stone-800 px-2 py-0.5 rounded-lg flex items-center gap-1 text-[11px] text-stone-300 z-10">
