@@ -212,7 +212,7 @@ async function startServer() {
       title: 'أوردر جديد',
       body: `اسم العميل: ${customerName || 'عميل جديد'}\nسعر الأوردر: ${total || 0} ج.م`,
       icon: '/icon-192.png',
-      badge: '/favicon.ico',
+      badge: '/icon-192.png',
       url: '/?view=admin',
       orderNumber: String(orderNumber || ''),
       tag: `order-${orderNumber || Date.now()}`
@@ -296,7 +296,7 @@ async function startServer() {
       title: 'أوردر جديد',
       body: 'اسم العميل: أحمد محمد\nسعر الأوردر: 890 ج.م',
       icon: '/icon-192.png',
-      badge: '/favicon.ico',
+      badge: '/icon-192.png',
       url: '/?view=admin',
       tag: 'test-push-' + Date.now()
     });

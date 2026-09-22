@@ -364,18 +364,16 @@ export async function getAnalyticsSummary(
     }
   });
 
-  // Calculate high-fidelity baseline if the store just launched analytics
-  // This ensures the charts and metrics immediately reflect store reality based on real order volume
-  const baselineMultiplier = period === 'today' ? 14 : period === 'week' ? 18 : 22;
-  const totalVisits = Math.max(rawVisits, Math.max(periodOrdersCount * baselineMultiplier, period === 'today' ? 38 : period === 'week' ? 245 : 980));
-  const uniqueVisitors = Math.round(totalVisits * 0.78);
-  const cartAdditions = Math.max(rawCartAdds, Math.round(periodOrdersCount * 3.4) + sessionCartAddCount, Math.round(totalVisits * 0.19));
-  const checkoutStarts = Math.max(rawCheckoutStarts, Math.round(periodOrdersCount * 1.5), Math.round(cartAdditions * 0.65));
+  // Pure, raw aggregated records without any synthetic baselines
+  const totalVisits = rawVisits;
+  const uniqueVisitors = rawVisits;
+  const cartAdditions = rawCartAdds;
+  const checkoutStarts = rawCheckoutStarts;
 
   // Abandoned carts = customers who added to cart minus completed orders
   const abandonedCarts = Math.max(0, cartAdditions - periodOrdersCount);
-  const abandonedCartRate = cartAdditions > 0 ? Math.min(95, Math.round((abandonedCarts / cartAdditions) * 100)) : 68;
-  const conversionRate = uniqueVisitors > 0 ? Number(((periodOrdersCount / uniqueVisitors) * 100).toFixed(1)) : 0;
+  const abandonedCartRate = cartAdditions > 0 ? Math.round((abandonedCarts / cartAdditions) * 100) : 0;
+  const conversionRate = totalVisits > 0 ? Number(((periodOrdersCount / totalVisits) * 100).toFixed(1)) : (periodOrdersCount > 0 ? 100 : 0);
 
   // Chart data building
   const chartData: AnalyticsSummary['chartData'] = [];
@@ -383,14 +381,12 @@ export async function getAnalyticsSummary(
   if (period === 'today') {
     // 24 hours breakdown for today
     const todayDoc = dailyDataMap.get(todayStr);
-    const currentHour = now.getHours();
 
     for (let h = 0; h <= 23; h++) {
       const hourStr = String(h);
       const hourLabel = `${h % 12 === 0 ? 12 : h % 12} ${h < 12 ? 'ص' : 'م'}`;
 
-      // Distribute naturally if hour <= currentHour
-      let hourVisits = todayDoc?.hourlyVisits?.[hourStr] || 0;
+      const hourVisits = todayDoc?.hourlyVisits?.[hourStr] || 0;
       let hourOrders = 0;
       let hourRevenue = 0;
 
@@ -403,13 +399,7 @@ export async function getAnalyticsSummary(
         }
       });
 
-      if (h <= currentHour && hourVisits === 0) {
-        // Natural diurnal traffic curve simulation for baseline
-        const hourWeight = [1, 1, 0, 0, 0, 1, 2, 3, 5, 8, 12, 14, 15, 13, 14, 16, 18, 20, 22, 19, 15, 10, 6, 3][h] || 2;
-        hourVisits = Math.max(hourOrders * 3, Math.round((totalVisits * hourWeight) / 200));
-      }
-
-      const hourCartAdds = todayDoc?.hourlyCartAdds?.[hourStr] || Math.round(hourVisits * 0.22);
+      const hourCartAdds = todayDoc?.hourlyCartAdds?.[hourStr] || 0;
 
       chartData.push({
         timeLabel: hourLabel,
@@ -437,8 +427,8 @@ export async function getAnalyticsSummary(
         }
       });
 
-      const dayVisits = dayDoc?.visits || Math.max(dayOrders * 12, Math.round(totalVisits / 7));
-      const dayCartAdds = dayDoc?.cartAdditions || Math.round(dayVisits * 0.21);
+      const dayVisits = dayDoc?.visits || 0;
+      const dayCartAdds = dayDoc?.cartAdditions || 0;
 
       chartData.push({
         timeLabel: `${dayName} (${day}/${month})`,
@@ -449,7 +439,7 @@ export async function getAnalyticsSummary(
       });
     });
   } else {
-    // Month breakdown (30 days - grouped into 5-day intervals or daily points)
+    // Month breakdown (30 days)
     targetDates.forEach((dateStr) => {
       const [, month, day] = dateStr.split('-').map(Number);
       const dayDoc = dailyDataMap.get(dateStr);
@@ -464,8 +454,8 @@ export async function getAnalyticsSummary(
         }
       });
 
-      const dayVisits = dayDoc?.visits || Math.max(dayOrders * 10, Math.round(totalVisits / 30));
-      const dayCartAdds = dayDoc?.cartAdditions || Math.round(dayVisits * 0.2);
+      const dayVisits = dayDoc?.visits || 0;
+      const dayCartAdds = dayDoc?.cartAdditions || 0;
 
       chartData.push({
         timeLabel: `${day}/${month}`,
@@ -477,40 +467,40 @@ export async function getAnalyticsSummary(
     });
   }
 
-  // Device Breakdown (Default high mobile share typical for e-commerce in MENA)
+  // Device Breakdown (Strict real records)
   const totalDeviceLogs = mobileCount + desktopCount;
-  const mobilePercent = totalDeviceLogs > 0 ? Math.round((mobileCount / totalDeviceLogs) * 100) : 84;
-  const desktopPercent = 100 - mobilePercent;
+  const mobilePercent = totalDeviceLogs > 0 ? Math.round((mobileCount / totalDeviceLogs) * 100) : 0;
+  const desktopPercent = totalDeviceLogs > 0 ? 100 - mobilePercent : 0;
 
   // Funnel Data
   const funnelData = [
     {
       stage: 'إجمالي الزيارات',
       count: totalVisits,
-      percentage: 100,
+      percentage: totalVisits > 0 ? 100 : 0,
       color: '#f59e0b' // Amber
     },
     {
       stage: 'إضافة للسلة',
       count: cartAdditions,
-      percentage: Math.min(100, Math.round((cartAdditions / totalVisits) * 100)),
+      percentage: totalVisits > 0 ? Math.min(100, Math.round((cartAdditions / totalVisits) * 100)) : 0,
       color: '#3b82f6' // Blue
     },
     {
       stage: 'بدء إتمام الطلب',
       count: checkoutStarts,
-      percentage: Math.min(100, Math.round((checkoutStarts / totalVisits) * 100)),
+      percentage: totalVisits > 0 ? Math.min(100, Math.round((checkoutStarts / totalVisits) * 100)) : 0,
       color: '#a855f7' // Purple
     },
     {
       stage: 'تأكيد الشراء الفعلي',
       count: periodOrdersCount,
-      percentage: Math.min(100, Math.round((periodOrdersCount / totalVisits) * 100)),
+      percentage: totalVisits > 0 ? Math.min(100, Math.round((periodOrdersCount / totalVisits) * 100)) : (periodOrdersCount > 0 ? 100 : 0),
       color: '#10b981' // Emerald
     }
   ];
 
-  // Top products stats
+  // Top products stats - ONLY real products from actual orders or logged adds
   const productSalesCount: Record<string, { name: string; sales: number }> = {};
   periodOrders.forEach((o) => {
     o.items?.forEach((it) => {
@@ -522,22 +512,15 @@ export async function getAnalyticsSummary(
 
   const topProductsStats: AnalyticsSummary['topProductsStats'] = [];
   Object.values(productSalesCount).forEach((p) => {
-    const estimatedAdds = Math.round(p.sales * 2.8) + 3;
+    const recordedAdds = productAddCounts[p.name]?.count || 0;
+    const addCount = Math.max(p.sales, recordedAdds);
     topProductsStats.push({
       name: p.name,
       salesCount: p.sales,
-      addCount: estimatedAdds,
-      conversionRate: Math.round((p.sales / estimatedAdds) * 100)
+      addCount,
+      conversionRate: addCount > 0 ? Math.round((p.sales / addCount) * 100) : 0
     });
   });
-
-  if (topProductsStats.length === 0) {
-    topProductsStats.push(
-      { name: 'Nocturne Heavyweight Hoodie', addCount: 28, salesCount: 9, conversionRate: 32 },
-      { name: 'Oversized Streetwear Hoodie', addCount: 19, salesCount: 5, conversionRate: 26 },
-      { name: 'Midnight Vintage Hoodie', addCount: 14, salesCount: 4, conversionRate: 28 }
-    );
-  }
 
   topProductsStats.sort((a, b) => b.salesCount - a.salesCount);
 
@@ -555,8 +538,8 @@ export async function getAnalyticsSummary(
     chartData,
     funnelData,
     deviceBreakdown: {
-      mobile: Math.round((totalVisits * mobilePercent) / 100),
-      desktop: Math.round((totalVisits * desktopPercent) / 100),
+      mobile: mobileCount,
+      desktop: desktopCount,
       mobilePercent,
       desktopPercent
     },

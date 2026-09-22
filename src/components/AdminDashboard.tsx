@@ -1547,6 +1547,27 @@ export const AdminDashboard: React.FC = () => {
               </div>
             </div>
 
+            {/* IFrame Environment Notice */}
+            {typeof window !== 'undefined' && window.self !== window.top && (
+              <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-3.5 text-xs text-amber-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-md">
+                <div className="flex items-start sm:items-center gap-2.5">
+                  <Info className="w-5 h-5 text-amber-400 shrink-0 mt-0.5 sm:mt-0" />
+                  <div>
+                    <span className="font-bold text-amber-300 block sm:inline">أنت تتصفح المعاينة المدمجة (iFrame): </span>
+                    <span className="text-stone-300">متصفحات الويب تمنع أذونات الإشعارات داخل النوافذ المدمجة. لتفعيل إشعارات الهاتف والكمبيوتر، افتح الموقع في نافذة جديدة.</span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => window.open(window.location.href, '_blank')}
+                  className="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-stone-950 font-bold text-xs shrink-0 flex items-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  <span>فتح في تبويب مستقل ↗</span>
+                </button>
+              </div>
+            )}
+
             {/* Direct Order Notification Controls - Clean & Minimal */}
             <div className="bg-stone-900/90 border border-stone-800 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-md">
               <div className="flex items-center gap-3">
@@ -1611,6 +1632,8 @@ export const AdminDashboard: React.FC = () => {
                           setNotificationPerm('granted');
                           setIsPushActive(true);
                           setTestPushMessage('✅ تم تفعيل Web Push بنجاح وحفظ الاشتراك بالداتابيز! ستصلك إشعارات الأوردرات حتى لو الموقع مقفول.');
+                        } else if (res.isInIframe) {
+                          setTestPushMessage('⚠️ المتصفح يمنع طلب إذن الإشعارات داخل المعاينة. اضغط زر "فتح في تبويب مستقل" بالأعلى لتفعيلها فوراً.');
                         } else if (res.isIosBrowser) {
                           setTestPushMessage('⚠️ على أجهزة الآيفون: اضغط زر المشاركة (Share ⬆️) ثم "إضافة إلى الشاشة الرئيسية" (Add to Home Screen) وافتح الموقع منها لتفعيل الإشعارات.');
                         } else {
@@ -1662,6 +1685,11 @@ export const AdminDashboard: React.FC = () => {
                   disabled={isSendingTestPush}
                   onClick={async () => {
                     setIsSendingTestPush(true);
+                    if (soundNotificationOn) {
+                      try {
+                        playOrderNotificationSound();
+                      } catch {}
+                    }
                     try {
                       const res = await testPhoneNotification(pushTopic);
                       if (res.sentCount > 0) {

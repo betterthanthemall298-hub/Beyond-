@@ -224,9 +224,20 @@ export async function subscribeToWebPush(): Promise<{
   subscription?: PushSubscription;
   error?: string;
   isIosBrowser?: boolean;
+  isInIframe?: boolean;
 }> {
   if (typeof window === 'undefined') {
     return { success: false, error: 'نافذة المتصفح غير متاحة' };
+  }
+
+  // Detect iframe preview (Browser security strictly blocks Notification permission in iframes)
+  const isInIframe = window.self !== window.top;
+  if (isInIframe) {
+    return {
+      success: false,
+      isInIframe: true,
+      error: 'المتصفح يمنع تفعيل الإشعارات داخل نافذة المعاينة (iFrame). يرجى فتح الموقع في تبويب مستقل لتفعيل الإشعارات.'
+    };
   }
 
   // Detect iOS Safari running in regular browser (not standalone PWA)
@@ -249,13 +260,20 @@ export async function subscribeToWebPush(): Promise<{
   }
 
   try {
-    // 1. Request user permission
-    const permission = await Notification.requestPermission();
-    if (permission !== 'granted') {
-      return { success: false, error: 'تم رفض إذن الإشعارات من إعدادات المتصفح' };
+    // 1. Ensure Service Worker is registered
+    try {
+      await navigator.serviceWorker.register('/sw.js');
+    } catch (e) {
+      console.warn('Explicit SW register notice:', e);
     }
 
-    // 2. Wait for Service Worker registration
+    // 2. Request user permission
+    const permission = await Notification.requestPermission();
+    if (permission !== 'granted') {
+      return { success: false, error: 'تم رفض إذن الإشعارات من إعدادات المتصفح. يرجى السماح بالإشعارات من إعدادات الموقع أعلى المتصفح.' };
+    }
+
+    // 3. Wait for Service Worker registration
     const registration = await navigator.serviceWorker.ready;
 
     // 3. Obtain VAPID Public Key
@@ -351,12 +369,11 @@ export async function sendDesktopNotification(title: string, body: string, onCli
       if (registration && 'showNotification' in registration) {
         await registration.showNotification(title, {
           body,
-          icon: '/favicon.ico',
-          badge: '/favicon.ico',
+          icon: '/icon-192.png',
+          badge: '/icon-192.png',
           tag: 'beyond-order-' + Date.now(),
           vibrate: [250, 100, 250, 100, 250],
-          data: { url: '/?view=admin' },
-          requireInteraction: true
+          data: { url: '/?view=admin' }
         } as NotificationOptions);
         return;
       }
@@ -370,10 +387,9 @@ export async function sendDesktopNotification(title: string, body: string, onCli
     if ('Notification' in window && Notification.permission === 'granted') {
       const notification = new Notification(title, {
         body,
-        icon: '/favicon.ico',
-        badge: '/favicon.ico',
-        tag: 'beyond-order-' + Date.now(),
-        requireInteraction: true
+        icon: '/icon-192.png',
+        badge: '/icon-192.png',
+        tag: 'beyond-order-' + Date.now()
       });
 
       if (onClick) {
