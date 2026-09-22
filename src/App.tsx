@@ -17,7 +17,6 @@ import { AdminDashboard } from './components/AdminDashboard';
 import { DeleteConfirmationModal } from './components/DeleteConfirmationModal';
 import { ToastContainer } from './components/ToastContainer';
 import { ShopifyOrderBanner } from './components/ShopifyOrderBanner';
-import { ShopifyLiveSalesPopup } from './components/ShopifyLiveSalesPopup';
 import { ProductShareModal } from './components/ProductShareModal';
 import { Footer } from './components/Footer';
 
@@ -260,7 +259,6 @@ export default function App() {
       {/* Universal Floating Modals & Alerts */}
       <ToastContainer />
       <ShopifyOrderBanner />
-      <ShopifyLiveSalesPopup />
       <DeleteConfirmationModal />
       <SmartSizeAdvisorModal />
       <ProductShareModal />

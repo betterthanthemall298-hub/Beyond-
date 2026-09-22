@@ -13,7 +13,7 @@ import {
   where
 } from 'firebase/firestore';
 import { db, testFirebaseConnection, sanitizeForFirestore } from '../lib/firebase';
-import { triggerNewOrderNotification } from '../lib/notifications';
+import { triggerNewOrderNotification, dispatchRemotePushNotification } from '../lib/notifications';
 import {
   Product,
   CartItem,
@@ -756,6 +756,26 @@ let state: StoreState = {
       console.error('Failed to save order to Firestore:', err);
     }
 
+    // Remote push notification to admin mobile device (works even if admin closed the website)
+    try {
+      const totalItems = newOrder.items.reduce((sum, it) => sum + (it.quantity || 1), 0);
+      const summary = newOrder.items.map((it) => `${it.productName} (${it.size})`).join(', ');
+      dispatchRemotePushNotification({
+        orderNumber: newOrder.orderNumber,
+        customerName: newOrder.customerName,
+        total: newOrder.total,
+        governorate: newOrder.governorate,
+        itemsCount: totalItems,
+        phone: newOrder.phone,
+        address: newOrder.address,
+        pushTopic: state.settings.pushNotificationTopic,
+        telegramBotToken: state.settings.telegramBotToken,
+        telegramChatId: state.settings.telegramChatId
+      }).catch(() => {});
+    } catch {
+      // Non-blocking notification dispatch
+    }
+
     update((prev) => ({
       orders: [newOrder, ...prev.orders.filter((o) => o.id !== newOrder.id)],
       cart: [],
@@ -957,11 +977,15 @@ function syncOrdersIfAdmin() {
           snapshot.docChanges().forEach((change) => {
             if (change.type === 'added') {
               const newOrder = change.doc.data() as Order;
+              const itemsCount = (newOrder.items || []).reduce((sum, it) => sum + (it.quantity || 1), 0);
+              const summary = (newOrder.items || []).map((it) => `${it.productName} (${it.size})`).join(', ');
               triggerNewOrderNotification(
                 newOrder.orderNumber,
                 newOrder.customerName,
                 newOrder.total,
-                newOrder.governorate
+                newOrder.governorate,
+                itemsCount,
+                summary
               );
             }
           });

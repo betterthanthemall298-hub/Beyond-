@@ -1,21 +1,27 @@
 {
   "id": "/",
-  "name": "Beyond - متجر هوديز أوفر سايز فاخرة",
-  "short_name": "Beyond",
-  "description": "متجر مصري رائد في الهوديز الشتوية الأوفر سايز الفاخرة مع حق المعاينة قبل الاستلام وإشعارات فورية للطلبات.",
-  "start_url": "/",
+  "name": "Shopify - Beyond",
+  "short_name": "Shopify",
+  "description": "Beyond Store - إشعارات فورية للطلبات على شاشة القفل بنمط شوبيفاي مع نغمة الكاشير",
+  "start_url": "/?view=admin",
   "scope": "/",
   "display": "standalone",
   "background_color": "#09090b",
-  "theme_color": "#09090b",
+  "theme_color": "#96BF48",
   "orientation": "portrait",
   "dir": "rtl",
   "lang": "ar",
   "icons": [
     {
-      "src": "/favicon.ico",
-      "sizes": "64x64 32x32 24x24 16x16",
-      "type": "image/x-icon"
+      "src": "/shopify-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/shopify-badge-72.png",
+      "sizes": "72x72",
+      "type": "image/png"
     }
   ]
 }

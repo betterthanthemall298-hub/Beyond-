@@ -11,6 +11,16 @@ import { ActiveView } from '../types';
  * 4. Preventing accidental website exit on home with a polite double-back prompt
  * 5. Deep link preservation and synchronization with browser history
  */
+const activeBackInterceptors: (() => boolean)[] = [];
+
+export function registerBackInterceptor(fn: () => boolean) {
+  activeBackInterceptors.push(fn);
+  return () => {
+    const idx = activeBackInterceptors.indexOf(fn);
+    if (idx !== -1) activeBackInterceptors.splice(idx, 1);
+  };
+}
+
 export function useMobileNavigation() {
   const {
     activeView,
@@ -30,7 +40,6 @@ export function useMobileNavigation() {
     setIsWishlistOpen,
     deleteModalState,
     closeDeleteModal,
-    backInterceptors,
     addToast
   } = useStore();
 
@@ -61,9 +70,6 @@ export function useMobileNavigation() {
 
   const deleteModalOpenRef = useRef(deleteModalState.isOpen);
   deleteModalOpenRef.current = deleteModalState.isOpen;
-
-  const backInterceptorsRef = useRef(backInterceptors);
-  backInterceptorsRef.current = backInterceptors;
 
   // Track if current state change was caused by browser popstate (to avoid pushing duplicate history)
   const isPoppingRef = useRef(false);
@@ -103,9 +109,9 @@ export function useMobileNavigation() {
       isPoppingRef.current = true;
 
       // 1. Check custom interceptors (e.g. edit product modal or image lightbox in admin/reviews)
-      if (backInterceptorsRef.current.length > 0) {
-        for (let i = backInterceptorsRef.current.length - 1; i >= 0; i--) {
-          const handled = backInterceptorsRef.current[i]();
+      if (activeBackInterceptors.length > 0) {
+        for (let i = activeBackInterceptors.length - 1; i >= 0; i--) {
+          const handled = activeBackInterceptors[i]();
           if (handled) {
             pushedModalsCountRef.current = Math.max(0, pushedModalsCountRef.current - 1);
             setTimeout(() => { isPoppingRef.current = false; }, 80);
@@ -268,7 +274,7 @@ export function useMobileNavigation() {
     shareModalProduct ||
     isWishlistOpen ||
     deleteModalState.isOpen ||
-    backInterceptors.length > 0
+    activeBackInterceptors.length > 0
   );
 
   const prevAnyModalOpenRef = useRef(false);

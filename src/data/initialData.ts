@@ -90,5 +90,6 @@ export const INITIAL_SETTINGS: StoreSettings = {
   instagramUrl: 'https://instagram.com',
   tiktokUrl: 'https://tiktok.com',
   facebookUrl: 'https://facebook.com',
-  freeShippingThreshold: 2000
+  freeShippingThreshold: 2000,
+  pushNotificationTopic: 'beyond_orders_alerts'
 };

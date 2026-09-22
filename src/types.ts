@@ -116,6 +116,9 @@ export interface StoreSettings {
   tiktokUrl: string;
   facebookUrl: string;
   freeShippingThreshold: number;
+  pushNotificationTopic?: string;
+  telegramBotToken?: string;
+  telegramChatId?: string;
 }
 
 export interface AdminCredentials {

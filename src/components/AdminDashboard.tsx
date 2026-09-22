@@ -32,7 +32,12 @@ import {
   Clock,
   Ban,
   Eye,
-  Maximize2
+  Maximize2,
+  Smartphone,
+  Copy,
+  ExternalLink,
+  Send,
+  Info
 } from 'lucide-react';
 import { HoodieCategory, HoodieSize, OrderStatus, Product, ProductColor, OrderItem } from '../types';
 import { compressImageFile } from '../lib/imageCompressor';
@@ -48,7 +53,10 @@ import {
   setSoundNotificationEnabled,
   requestNotificationPermission,
   getNotificationPermission,
-  testPhoneNotification
+  testPhoneNotification,
+  getPushTopic,
+  setPushTopic,
+  DEFAULT_PUSH_TOPIC
 } from '../lib/notifications';
 
 export const AdminDashboard: React.FC = () => {
@@ -212,6 +220,12 @@ export const AdminDashboard: React.FC = () => {
   const [instagramUrl, setInstagramUrl] = useState(settings.instagramUrl || '');
   const [tiktokUrl, setTiktokUrl] = useState(settings.tiktokUrl || '');
   const [facebookUrl, setFacebookUrl] = useState(settings.facebookUrl || '');
+  const [pushTopic, setPushTopicState] = useState(settings.pushNotificationTopic || getPushTopic());
+  const [telegramBotToken, setTelegramBotToken] = useState(settings.telegramBotToken || '');
+  const [telegramChatId, setTelegramChatId] = useState(settings.telegramChatId || '');
+  const [copiedTopic, setCopiedTopic] = useState(false);
+  const [isSendingTestPush, setIsSendingTestPush] = useState(false);
+  const [testPushMessage, setTestPushMessage] = useState('');
 
   // Synchronize form states when settings or credentials load/update from Firestore
   useEffect(() => {
@@ -223,6 +237,11 @@ export const AdminDashboard: React.FC = () => {
     setInstagramUrl(settings.instagramUrl || '');
     setTiktokUrl(settings.tiktokUrl || '');
     setFacebookUrl(settings.facebookUrl || '');
+    if (settings.pushNotificationTopic) {
+      setPushTopicState(settings.pushNotificationTopic);
+    }
+    if (settings.telegramBotToken) setTelegramBotToken(settings.telegramBotToken);
+    if (settings.telegramChatId) setTelegramChatId(settings.telegramChatId);
   }, [settings]);
 
   useEffect(() => {
@@ -615,8 +634,12 @@ export const AdminDashboard: React.FC = () => {
       whatsappUrl,
       instagramUrl,
       tiktokUrl,
-      facebookUrl
+      facebookUrl,
+      pushNotificationTopic: pushTopic.trim() || DEFAULT_PUSH_TOPIC,
+      telegramBotToken: telegramBotToken.trim(),
+      telegramChatId: telegramChatId.trim()
     });
+    setPushTopic(pushTopic.trim() || DEFAULT_PUSH_TOPIC);
   };
 
   // If not logged in, show secure login box
@@ -1496,102 +1519,215 @@ export const AdminDashboard: React.FC = () => {
               </div>
             </div>
 
-            {/* Notification Alert Controls Card */}
-            <div className="bg-stone-900/90 border border-stone-800 rounded-2xl p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-sm">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 shrink-0">
-                  <BellRing className="w-5 h-5 animate-pulse" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h4 className="text-xs sm:text-sm font-bold text-stone-100">
-                      نظام التنبيهات الفورية للطلبات الجديدة
-                    </h4>
-                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                      مباشر ومزامن سحابياً
-                    </span>
+            {/* Shopify Notification Alert Suite */}
+            <div className="bg-stone-900/95 border border-stone-800 rounded-2xl p-4 sm:p-5 flex flex-col gap-4 shadow-lg relative overflow-hidden">
+              <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-2xl overflow-hidden shadow-md shrink-0 border border-stone-800">
+                    <img
+                      src="/shopify-icon-192.png"
+                      alt="Shopify"
+                      className="w-full h-full object-cover"
+                    />
                   </div>
-                  <p className="text-[11px] text-stone-400 mt-0.5">
-                    ستسمع نغمة تنبيه صوتية ويصلك إشعار بالمتصفح لأي شخص متواجد على لوحة التحكم فور وصول أي أوردر جديد.
-                  </p>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h4 className="text-sm sm:text-base font-black text-stone-100 flex items-center gap-2">
+                        <span>إشعارات شوبيفاي لشاشة القفل (Shopify Lock Screen)</span>
+                      </h4>
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-black bg-lime-500/10 text-lime-400 border border-lime-500/30">
+                        متاح حتى لو الموقع مقفول 📱
+                      </span>
+                    </div>
+                    <p className="text-xs text-stone-400 mt-0.5">
+                      تصلك تنبيهات الطلبات الفورية بنغمة الكاشير (Cha-Ching) وبنفس شكل بطاقة شوبيفاي على شاشة قفل الموبايل.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Quick Action Controls */}
+                <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto justify-start lg:justify-end">
+                  {/* Sound Toggle */}
+                  <button
+                    id="admin-toggle-sound-btn"
+                    type="button"
+                    onClick={() => {
+                      const next = !soundNotificationOn;
+                      setSoundNotificationOn(next);
+                      setSoundNotificationEnabled(next);
+                      if (next) {
+                        playOrderNotificationSound();
+                      }
+                    }}
+                    className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors border ${
+                      soundNotificationOn
+                        ? 'bg-amber-500/10 border-amber-500/30 text-amber-400 hover:bg-amber-500/20'
+                        : 'bg-stone-800/80 border-stone-700 text-stone-400 hover:bg-stone-800'
+                    }`}
+                    title={soundNotificationOn ? 'كتم صوت التنبيه' : 'تشغيل صوت التنبيه'}
+                  >
+                    {soundNotificationOn ? (
+                      <>
+                        <Volume2 className="w-3.5 h-3.5" />
+                        <span>نغمة الكاشير (مفعّلة)</span>
+                      </>
+                    ) : (
+                      <>
+                        <VolumeX className="w-3.5 h-3.5" />
+                        <span>نغمة الكاشير (مكتومة)</span>
+                      </>
+                    )}
+                  </button>
+
+                  {/* Browser Permission Button */}
+                  {notificationPerm !== 'granted' ? (
+                    <button
+                      id="admin-enable-browser-notifications-btn"
+                      type="button"
+                      onClick={async () => {
+                        const res = await requestNotificationPermission();
+                        setNotificationPerm(res);
+                      }}
+                      className="px-3 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-stone-950 text-xs font-bold flex items-center gap-1.5 transition-colors shadow-sm"
+                    >
+                      <Bell className="w-3.5 h-3.5" />
+                      <span>تفعيل إشعارات المتصفح</span>
+                    </button>
+                  ) : (
+                    <span className="px-3 py-2 rounded-xl bg-stone-800/80 border border-stone-700 text-stone-300 text-xs flex items-center gap-1.5">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>إشعارات المتصفح مفعّلة</span>
+                    </span>
+                  )}
+
+                  {/* Test Phone Notification Button */}
+                  <button
+                    id="admin-test-phone-notification-btn"
+                    type="button"
+                    disabled={isSendingTestPush}
+                    onClick={async () => {
+                      setIsSendingTestPush(true);
+                      setTestPushMessage('جاري إرسال إشعار شوبيفاي التجريبي لهاتفك...');
+                      try {
+                        await testPhoneNotification(pushTopic);
+                        setTestPushMessage('✅ تم إرسال الإشعار بنجاح! إذا كنت مشتركاً بالقناة، سيظهر فوراً على شاشة القفل.');
+                      } catch {
+                        setTestPushMessage('تم إرسال الإشعار عبر المتصفح وقناة الدفع.');
+                      } finally {
+                        setIsSendingTestPush(false);
+                        setTimeout(() => setTestPushMessage(''), 8000);
+                      }
+                    }}
+                    className="px-4 py-2 rounded-xl bg-lime-600 hover:bg-lime-500 text-stone-950 text-xs font-black flex items-center gap-1.5 transition-all shadow-md shadow-lime-950/40"
+                  >
+                    <span>💸 إرسال إشعار تجريبي فوري (Cha-Ching)</span>
+                  </button>
                 </div>
               </div>
 
-              <div className="flex flex-wrap items-center gap-2 w-full md:w-auto justify-end">
-                {/* Sound Toggle */}
-                <button
-                  id="admin-toggle-sound-btn"
-                  type="button"
-                  onClick={() => {
-                    const next = !soundNotificationOn;
-                    setSoundNotificationOn(next);
-                    setSoundNotificationEnabled(next);
-                    if (next) {
-                      playOrderNotificationSound();
-                    }
-                  }}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors border ${
-                    soundNotificationOn
-                      ? 'bg-amber-500/10 border-amber-500/30 text-amber-400 hover:bg-amber-500/20'
-                      : 'bg-stone-800/80 border-stone-700 text-stone-400 hover:bg-stone-800'
-                  }`}
-                  title={soundNotificationOn ? 'كتم صوت التنبيه' : 'تشغيل صوت التنبيه'}
-                >
-                  {soundNotificationOn ? (
-                    <>
-                      <Volume2 className="w-3.5 h-3.5" />
-                      <span>صوت النغمة (مفعّل)</span>
-                    </>
-                  ) : (
-                    <>
-                      <VolumeX className="w-3.5 h-3.5" />
-                      <span>صوت النغمة (مكتوم)</span>
-                    </>
-                  )}
-                </button>
+              {testPushMessage && (
+                <div className="bg-lime-950/40 border border-lime-800/50 rounded-xl px-3.5 py-2 text-xs text-lime-300 flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 shrink-0 text-lime-400" />
+                  <span>{testPushMessage}</span>
+                </div>
+              )}
 
-                {/* Test Sound */}
-                <button
-                  id="admin-test-sound-btn"
-                  type="button"
-                  onClick={() => playOrderNotificationSound()}
-                  className="px-3 py-1.5 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-200 border border-stone-700 text-xs font-bold flex items-center gap-1.5 transition-colors"
-                  title="تجربة صوت النغمة"
-                >
-                  <span>🔊 تجربة النغمة</span>
-                </button>
+              {/* Exact Visual Preview of the Shopify Notification Card (Matching User Screenshot) */}
+              <div className="bg-stone-950/80 border border-stone-800/90 rounded-2xl p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                <div className="flex-1 w-full max-w-md">
+                  <p className="text-[11px] font-bold text-stone-400 mb-2 flex items-center gap-1.5">
+                    <Smartphone className="w-3.5 h-3.5 text-lime-400" />
+                    <span>الشكل المطابق الذي سيظهر على شاشة قفل هاتفك (Shopify Style):</span>
+                  </p>
+                  
+                  {/* iOS Notification Card Preview */}
+                  <div className="bg-stone-900/90 border border-stone-700/80 rounded-2xl p-3.5 shadow-2xl backdrop-blur-md">
+                    <div className="flex items-center justify-between gap-2 mb-1.5">
+                      <div className="flex items-center gap-2">
+                        <img
+                          src="/shopify-icon-192.png"
+                          alt="Shopify"
+                          className="w-5 h-5 rounded-md shadow-sm"
+                        />
+                        <span className="text-xs font-black text-stone-200 uppercase tracking-wide">
+                          Shopify
+                        </span>
+                      </div>
+                      <span className="text-[10px] text-stone-400">الآن</span>
+                    </div>
 
-                {/* Request Browser Notifications */}
-                {notificationPerm !== 'granted' ? (
-                  <button
-                    id="admin-enable-browser-notifications-btn"
-                    type="button"
-                    onClick={async () => {
-                      const res = await requestNotificationPermission();
-                      setNotificationPerm(res);
-                    }}
-                    className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-stone-950 text-xs font-bold flex items-center gap-1.5 transition-colors shadow-sm"
-                  >
-                    <Bell className="w-3.5 h-3.5" />
-                    <span>تفعيل إشعارات الهاتف / المتصفح</span>
-                  </button>
-                ) : (
-                  <div className="flex items-center gap-2">
-                    <span className="px-3 py-1.5 rounded-xl bg-stone-800/80 border border-stone-700 text-stone-300 text-xs flex items-center gap-1.5">
-                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                      <span>الإشعارات مفعلة</span>
-                    </span>
-                    <button
-                      id="admin-test-phone-notification-btn"
-                      type="button"
-                      onClick={() => testPhoneNotification()}
-                      className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black flex items-center gap-1.5 transition-all shadow-md shadow-emerald-950/40"
-                      title="تجربة إشعار شوبيفاي مع نغمة الكاشير (Cha-Ching) والاهتزاز وبانر الطلب"
-                    >
-                      <span>💸 تجربة إشعار شوبيفاي (Cha-Ching)</span>
-                    </button>
+                    <div className="text-left font-mono my-1" dir="ltr">
+                      <p className="text-xs sm:text-sm font-bold text-stone-100">
+                        Order #2138
+                      </p>
+                      <p className="text-[11px] sm:text-xs text-stone-300 mt-0.5">
+                        E£1,170.00, 2 items from Online Store - Beyond
+                      </p>
+                    </div>
+
+                    <div className="mt-2 pt-1.5 border-t border-stone-800/80 flex items-center justify-between text-[11px] text-stone-400">
+                      <span>العميل: <strong className="text-stone-200">حلا أحمد</strong></span>
+                      <span>📍 القاهرة</span>
+                    </div>
                   </div>
-                )}
+                </div>
+
+                {/* Closed Website Setup Instructions */}
+                <div className="flex-1 w-full bg-stone-900/60 border border-stone-800 rounded-xl p-3.5 text-xs text-stone-300 space-y-2.5">
+                  <div className="flex items-center gap-2 text-stone-100 font-bold border-b border-stone-800 pb-2">
+                    <Info className="w-4 h-4 text-amber-400 shrink-0" />
+                    <span>كيف تصلك الإشعارات حتى لو قفلت الموقع بالكامل؟</span>
+                  </div>
+
+                  <div className="space-y-2 text-[11px] text-stone-300 leading-relaxed">
+                    <p>
+                      <strong className="text-lime-400">الطريقة الأولى (الموصى بها للآيفون والأندرويد - تطبيق ntfy المجاني):</strong>
+                      <br />
+                      1. حمّل تطبيق <strong>ntfy</strong> المجاني من App Store على الآيفون (أو Google Play على أندرويد).
+                      <br />
+                      2. افتح التطبيق واضغط على علامة <strong>+</strong> وأدخل اسم قناتك:
+                    </p>
+
+                    <div className="flex items-center gap-2 bg-stone-950 border border-stone-800 rounded-xl p-1.5 px-3">
+                      <span className="font-mono text-lime-400 text-xs select-all flex-1" dir="ltr">
+                        {pushTopic}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(pushTopic);
+                          setCopiedTopic(true);
+                          setTimeout(() => setCopiedTopic(false), 2500);
+                        }}
+                        className="px-2 py-1 rounded-lg bg-stone-800 hover:bg-stone-700 text-stone-200 text-[10px] font-bold flex items-center gap-1 transition-colors"
+                      >
+                        <Copy className="w-3 h-3" />
+                        <span>{copiedTopic ? 'تم النسخ ✓' : 'نسخ القناة'}</span>
+                      </button>
+                      <a
+                        href={`https://ntfy.sh/${pushTopic}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="px-2 py-1 rounded-lg bg-lime-600/30 hover:bg-lime-600/50 text-lime-300 text-[10px] font-bold flex items-center gap-1 transition-colors border border-lime-500/30"
+                      >
+                        <ExternalLink className="w-3 h-3" />
+                        <span>فتح في المتصفح</span>
+                      </a>
+                    </div>
+
+                    <p className="text-stone-400">
+                      بمجرد إضافتها، أي أوردر جديد سينبهك فوراً على شاشة قفل الموبايل مع صوت الكاشير واهتزاز حتى لو كان هاتفك مقفولاً في جيبك!
+                    </p>
+
+                    <div className="pt-1.5 border-t border-stone-800">
+                      <p>
+                        <strong className="text-amber-400">الطريقة الثانية (تثبيت المتجر كأيقونة على شاشة الآيفون):</strong>
+                        <br />
+                        افتح المتجر في متصفح سفاري (Safari)، اضغط زر المشاركة (Share ⬆️) ثم اختر <strong>"إضافة إلى الشاشة الرئيسية" (Add to Home Screen)</strong> ليظهر المتجر بأيقونة شوبيفاي ويدعم إشعارات الويب PWA تلقائياً.
+                      </p>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -2498,6 +2634,68 @@ export const AdminDashboard: React.FC = () => {
                   onChange={(e) => setFacebookUrl(e.target.value)}
                   className="w-full bg-stone-950 border border-stone-800 rounded-xl px-3 py-2 text-xs text-stone-100 focus:border-amber-500"
                 />
+              </div>
+            </div>
+
+            {/* Mobile Push & Lock-Screen Notifications Configuration */}
+            <div className="pt-3 border-t border-stone-800 space-y-3">
+              <div className="flex items-center gap-2">
+                <img src="/shopify-icon-192.png" className="w-4 h-4 rounded" alt="Shopify" />
+                <h4 className="text-xs font-bold text-lime-400">
+                  إعدادات إشعارات شوبيفاي لشاشة القفل (عند إغلاق الموقع):
+                </h4>
+              </div>
+
+              <div>
+                <label className="block text-xs text-stone-300 mb-1 flex items-center justify-between">
+                  <span>اسم قناة التنبيهات الفورية (ntfy Topic)</span>
+                  <span className="text-[10px] text-stone-500">خاصة بتطبيق ntfy المجاني للآيفون والأندرويد</span>
+                </label>
+                <input
+                  id="settings-push-topic-input"
+                  type="text"
+                  placeholder="beyond_orders_alerts"
+                  value={pushTopic}
+                  onChange={(e) => setPushTopicState(e.target.value)}
+                  className="w-full bg-stone-950 border border-stone-800 rounded-xl px-3 py-2 text-xs text-lime-400 font-mono focus:border-lime-500"
+                  dir="ltr"
+                />
+                <p className="text-[10px] text-stone-500 mt-1">
+                  أي هاتف يضيف هذه القناة في تطبيق ntfy المجاني سيتلقى إشعاراً فورياً على شاشة القفل مع صوت الكاشير عند حدوث أي أوردر.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+                <div>
+                  <label className="block text-xs text-stone-300 mb-1 flex items-center gap-1.5">
+                    <Send className="w-3.5 h-3.5 text-sky-400" />
+                    <span>Telegram Bot Token (اختياري)</span>
+                  </label>
+                  <input
+                    id="settings-telegram-token-input"
+                    type="text"
+                    placeholder="مثال: 123456789:ABCdef..."
+                    value={telegramBotToken}
+                    onChange={(e) => setTelegramBotToken(e.target.value)}
+                    className="w-full bg-stone-950 border border-stone-800 rounded-xl px-3 py-2 text-xs text-stone-100 font-mono focus:border-amber-500"
+                    dir="ltr"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs text-stone-300 mb-1 flex items-center gap-1.5">
+                    <span>Telegram Chat ID (اختياري)</span>
+                  </label>
+                  <input
+                    id="settings-telegram-chatid-input"
+                    type="text"
+                    placeholder="مثال: 987654321"
+                    value={telegramChatId}
+                    onChange={(e) => setTelegramChatId(e.target.value)}
+                    className="w-full bg-stone-950 border border-stone-800 rounded-xl px-3 py-2 text-xs text-stone-100 font-mono focus:border-amber-500"
+                    dir="ltr"
+                  />
+                </div>
               </div>
             </div>
           </div>

@@ -56,21 +56,25 @@ export const ShopifyOrderBanner: React.FC = () => {
         {/* Glowing emerald highlight */}
         <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-emerald-500 via-teal-400 to-amber-400 animate-pulse" />
 
-        {/* Header */}
+        {/* Header with iOS Shopify look */}
         <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-xl bg-emerald-600/30 border border-emerald-500/50 flex items-center justify-center text-emerald-400 shrink-0">
-              <ShoppingBag className="w-4 h-4" />
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-xl overflow-hidden shrink-0 shadow-sm border border-white/10">
+              <img
+                src="/shopify-icon-192.png"
+                alt="Shopify"
+                className="w-full h-full object-cover"
+              />
             </div>
             <div>
               <div className="flex items-center gap-1.5">
-                <span className="text-[11px] font-black uppercase tracking-wider text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded-md border border-emerald-800/60">
-                  Shopify Alert • طلب جديد 💸
+                <span className="text-[11px] font-black uppercase tracking-wider text-lime-400 bg-lime-950/80 px-2 py-0.5 rounded-md border border-lime-800/60">
+                  Shopify
                 </span>
-                <span className="text-[10px] text-stone-400">الآن</span>
+                <span className="text-[10px] text-stone-400">الآن • طلب جديد 💸</span>
               </div>
-              <p className="text-xs font-bold text-stone-200 mt-0.5">
-                طلب وارد #{activeAlert.orderNumber}
+              <p className="text-sm font-black text-stone-100 mt-0.5 tracking-tight">
+                Order #{activeAlert.orderNumber}
               </p>
             </div>
           </div>
@@ -97,25 +101,20 @@ export const ShopifyOrderBanner: React.FC = () => {
           </div>
         </div>
 
-        {/* Customer & Total Details */}
-        <div className="bg-stone-900/80 border border-stone-800/80 rounded-xl p-2.5 flex items-center justify-between text-xs">
-          <div>
-            <p className="font-bold text-stone-100 flex items-center gap-1.5">
-              <span>{activeAlert.customerName}</span>
-              <span className="text-stone-500">•</span>
-              <span className="text-stone-300 font-normal">{activeAlert.governorate}</span>
+        {/* Exact Shopify iOS Subtitle Style */}
+        <div className="bg-stone-900/90 border border-stone-800 rounded-xl p-3 flex flex-col gap-1 text-xs">
+          <p className="font-bold text-stone-100 text-xs sm:text-sm tracking-tight text-left dir-ltr font-mono">
+            E£{Number(activeAlert.total || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}, {activeAlert.itemsCount || 1} {(activeAlert.itemsCount || 1) === 1 ? 'item' : 'items'} from Online Store - Beyond
+          </p>
+          <div className="flex items-center justify-between pt-1 border-t border-stone-800/70 text-[11px] text-stone-400">
+            <span>العميل: <strong className="text-stone-200">{activeAlert.customerName}</strong></span>
+            <span>📍 {activeAlert.governorate}</span>
+          </div>
+          {activeAlert.itemsSummary && (
+            <p className="text-[10px] text-stone-500 truncate mt-0.5">
+              {activeAlert.itemsSummary}
             </p>
-            {activeAlert.itemsSummary && (
-              <p className="text-[11px] text-stone-400 mt-0.5 truncate max-w-[220px]">
-                {activeAlert.itemsSummary}
-              </p>
-            )}
-          </div>
-          <div className="text-left shrink-0">
-            <span className="text-emerald-400 font-black text-sm">
-              {activeAlert.total} ج.م
-            </span>
-          </div>
+          )}
         </div>
 
         {/* Action Buttons */}
