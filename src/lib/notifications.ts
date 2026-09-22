@@ -165,7 +165,7 @@ export async function requestNotificationPermission(): Promise<NotificationPermi
 const PUSH_TOPIC_KEY = 'beyond_push_notification_topic';
 export const DEFAULT_PUSH_TOPIC = 'beyond_orders_alerts';
 
-export const DEFAULT_VAPID_PUBLIC_KEY = 'BHAMTxXec0bTYWzXsI9g008qduH8qwo4TwIhPP4PHXYO75OpBapmlCHQA06gvVRzNGz-Ur609mhV9iYqpggJgNw';
+export const DEFAULT_VAPID_PUBLIC_KEY = 'BK-YuLDxApl-Gt3kS6awCGqMNUcsodMJB6UG79jJ1_fgeP_pQ34_Xv2ofazDyt6-jak32qW16snJQvOLwgy9BLk';
 
 /**
  * Converts a Base64URL string into a Uint8Array required for applicationServerKey
@@ -262,14 +262,21 @@ export async function subscribeToWebPush(): Promise<{
     const vapidKey = await getVapidPublicKey();
     const applicationServerKey = urlBase64ToUint8Array(vapidKey);
 
-    // 4. Subscribe with PushManager
-    let subscription = await registration.pushManager.getSubscription();
-    if (!subscription) {
-      subscription = await registration.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey
-      });
+    // 4. Force clean re-subscription with active VAPID public key
+    const existingSub = await registration.pushManager.getSubscription();
+    if (existingSub) {
+      try {
+        await existingSub.unsubscribe();
+        console.log('[Push] Cleared previous push subscription to refresh with active VAPID key');
+      } catch (unsubErr) {
+        console.warn('[Push] Unsubscribe warning:', unsubErr);
+      }
     }
+
+    const subscription = await registration.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey
+    });
 
     const subJson = subscription.toJSON();
 
@@ -539,7 +546,12 @@ export function triggerNewOrderNotification(
 /**
  * Test phone notification directly for the store manager
  */
-export async function testPhoneNotification(topicOverride?: string) {
+export async function testPhoneNotification(topicOverride?: string): Promise<{
+  success: boolean;
+  sentCount: number;
+  totalSubscribers: number;
+  error?: string;
+}> {
   playOrderNotificationSound();
   triggerPhoneVibration();
   dispatchShopifyOrderAlert({
@@ -553,13 +565,25 @@ export async function testPhoneNotification(topicOverride?: string) {
 
   await sendDesktopNotification(title, body);
 
+  const result = { success: true, sentCount: 0, totalSubscribers: 0, error: '' };
+
   try {
-    await fetch('/api/push/test', {
+    const res = await fetch('/api/push/test', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' }
     });
-  } catch (e) {
+    if (res.ok) {
+      const data = await res.json();
+      result.sentCount = data.sentCount || 0;
+      result.totalSubscribers = data.totalSubscribers || 0;
+      result.success = data.success ?? true;
+    } else {
+      const data = await res.json().catch(() => ({}));
+      result.error = data.error || `Error ${res.status}`;
+    }
+  } catch (e: any) {
     console.warn('Direct backend test push error:', e);
+    result.error = e?.message || 'Failed to reach push server';
   }
 
   await dispatchRemotePushNotification({
@@ -567,6 +591,8 @@ export async function testPhoneNotification(topicOverride?: string) {
     customerName: 'أحمد محمد',
     total: 890,
     pushTopic: topicOverride
-  });
+  }).catch(() => {});
+
+  return result;
 }
 

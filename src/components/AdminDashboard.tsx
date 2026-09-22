@@ -1647,13 +1647,19 @@ export const AdminDashboard: React.FC = () => {
                   onClick={async () => {
                     setIsSendingTestPush(true);
                     try {
-                      await testPhoneNotification(pushTopic);
-                      setTestPushMessage('✅ تم إرسال إشعار تجريبي (أوردر جديد - أحمد محمد - 890 ج.م)');
+                      const res = await testPhoneNotification(pushTopic);
+                      if (res.sentCount > 0) {
+                        setTestPushMessage(`✅ تم إرسال الإشعار لجميع الأجهزة المشتركة بنجاح! (استلمته ${res.sentCount} أجهزة من إجمالي ${res.totalSubscribers} مسجلة)`);
+                      } else if (res.totalSubscribers === 0) {
+                        setTestPushMessage('⚠️ لا توجد أجهزة مسجلة حالياً! اضغط زر "فعّل الإشعارات" على كل جهاز أولاً.');
+                      } else {
+                        setTestPushMessage(`⚠️ تم إرسال الطلب، تأكد من الضغط على زر "تحديث" في الأجهزة لتجديد المفاتيح.`);
+                      }
                     } catch {
-                      setTestPushMessage('تم إرسال الإشعار');
+                      setTestPushMessage('تم إرسال الإشعار التجريبي');
                     } finally {
                       setIsSendingTestPush(false);
-                      setTimeout(() => setTestPushMessage(''), 5000);
+                      setTimeout(() => setTestPushMessage(''), 8000);
                     }
                   }}
                   className="px-3 py-2 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-200 text-xs font-bold flex items-center gap-1.5 transition-all border border-stone-700"
