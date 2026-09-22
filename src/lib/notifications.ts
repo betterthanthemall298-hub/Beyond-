@@ -17,8 +17,8 @@ export function setSoundNotificationEnabled(enabled: boolean) {
 }
 
 /**
- * Plays a pleasant, distinct customer order notification chime using Web Audio API.
- * Does not require external audio assets.
+ * Plays the authentic Shopify "Cha-Ching!" cash register & bell sound using Web Audio API.
+ * Synthesizes the mechanical drawer kick, sliding mechanism, crystal bell chime, and coin clinks.
  */
 export function playOrderNotificationSound() {
   if (typeof window === 'undefined') return;
@@ -34,33 +34,83 @@ export function playOrderNotificationSound() {
     }
 
     const now = ctx.currentTime;
-    // Harmonious alert notes: C5 (523.25), E5 (659.25), G5 (783.99), C6 (1046.50)
-    const chords = [
-      { freq: 523.25, time: 0, duration: 0.25 },
-      { freq: 659.25, time: 0.12, duration: 0.25 },
-      { freq: 783.99, time: 0.24, duration: 0.35 },
-      { freq: 1046.50, time: 0.38, duration: 0.65 }
+
+    // 1. Mechanical "Clack" (Drawer release / lever latch)
+    const noiseBuffer = ctx.createBuffer(1, Math.floor(ctx.sampleRate * 0.08), ctx.sampleRate);
+    const output = noiseBuffer.getChannelData(0);
+    for (let i = 0; i < noiseBuffer.length; i++) {
+      output[i] = Math.random() * 2 - 1;
+    }
+    const whiteNoise = ctx.createBufferSource();
+    whiteNoise.buffer = noiseBuffer;
+
+    const noiseFilter = ctx.createBiquadFilter();
+    noiseFilter.type = 'bandpass';
+    noiseFilter.frequency.setValueAtTime(1400, now);
+    noiseFilter.Q.setValueAtTime(3, now);
+
+    const noiseGain = ctx.createGain();
+    noiseGain.gain.setValueAtTime(0.35, now);
+    noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.07);
+
+    whiteNoise.connect(noiseFilter);
+    noiseFilter.connect(noiseGain);
+    noiseGain.connect(ctx.destination);
+    whiteNoise.start(now);
+
+    // 2. High-Pitched Cash Register Bell "CHING!" (Authentic Shopify Bell: ~1760Hz & harmonic overtones)
+    const bellFrequencies = [
+      { freq: 1760, gain: 0.32, decay: 0.8 }, // Primary register bell A6
+      { freq: 2640, gain: 0.22, decay: 0.6 }, // Fifth harmonic E7
+      { freq: 3520, gain: 0.15, decay: 0.45 }, // Octave A7
+      { freq: 1046, gain: 0.18, decay: 0.7 }  // Warm body resonance C6
     ];
 
-    chords.forEach(({ freq, time, duration }) => {
+    bellFrequencies.forEach(({ freq, gain: peakGain, decay }) => {
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
 
       osc.type = 'sine';
-      osc.frequency.setValueAtTime(freq, now + time);
+      osc.frequency.setValueAtTime(freq, now + 0.04);
 
-      gain.gain.setValueAtTime(0, now + time);
-      gain.gain.linearRampToValueAtTime(0.28, now + time + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.0001, now + time + duration);
+      gain.gain.setValueAtTime(0, now + 0.04);
+      gain.gain.linearRampToValueAtTime(peakGain, now + 0.045);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.04 + decay);
 
       osc.connect(gain);
       gain.connect(ctx.destination);
 
-      osc.start(now + time);
-      osc.stop(now + time + duration + 0.05);
+      osc.start(now + 0.04);
+      osc.stop(now + 0.04 + decay + 0.05);
+    });
+
+    // 3. Metallic Coin Drops / Clinking "Clink-Chink"
+    const coins = [
+      { time: 0.15, freq: 3100, duration: 0.08, vol: 0.18 },
+      { time: 0.24, freq: 4186, duration: 0.12, vol: 0.22 },
+      { freq: 2093, time: 0.26, duration: 0.15, vol: 0.12 }
+    ];
+
+    coins.forEach(({ time, freq, duration, vol }) => {
+      const coinOsc = ctx.createOscillator();
+      const coinGain = ctx.createGain();
+
+      coinOsc.type = 'triangle';
+      coinOsc.frequency.setValueAtTime(freq, now + time);
+      coinOsc.frequency.exponentialRampToValueAtTime(freq * 0.9, now + time + duration);
+
+      coinGain.gain.setValueAtTime(0, now + time);
+      coinGain.gain.linearRampToValueAtTime(vol, now + time + 0.005);
+      coinGain.gain.exponentialRampToValueAtTime(0.0001, now + time + duration);
+
+      coinOsc.connect(coinGain);
+      coinGain.connect(ctx.destination);
+
+      coinOsc.start(now + time);
+      coinOsc.stop(now + time + duration + 0.02);
     });
   } catch (err) {
-    console.warn('Could not play order notification audio:', err);
+    console.warn('Could not play Shopify notification audio:', err);
   }
 }
 
@@ -170,15 +220,50 @@ export async function sendDesktopNotification(title: string, body: string, onCli
   }
 }
 
+export interface ShopifyOrderAlertData {
+  id: string;
+  orderNumber: string;
+  customerName: string;
+  total: number;
+  governorate: string;
+  itemsSummary?: string;
+  timestamp: number;
+}
+
+const shopifyAlertListeners = new Set<(data: ShopifyOrderAlertData) => void>();
+
+export function onShopifyOrderAlert(callback: (data: ShopifyOrderAlertData) => void) {
+  shopifyAlertListeners.add(callback);
+  return () => {
+    shopifyAlertListeners.delete(callback);
+  };
+}
+
+export function dispatchShopifyOrderAlert(data: Omit<ShopifyOrderAlertData, 'id' | 'timestamp'>) {
+  const alertData: ShopifyOrderAlertData = {
+    ...data,
+    id: 'shopify-alert-' + Date.now(),
+    timestamp: Date.now()
+  };
+  shopifyAlertListeners.forEach((fn) => {
+    try {
+      fn(alertData);
+    } catch (err) {
+      console.warn('Error in shopify alert listener:', err);
+    }
+  });
+}
+
 /**
- * Complete trigger for incoming order: plays chime + phone vibration + push notification
+ * Complete trigger for incoming order: plays Shopify Cha-Ching chime + phone vibration + push notification + in-app banner
  */
-export function triggerNewOrderNotification(orderNumber: string, customerName: string, total: number, governorate: string) {
+export function triggerNewOrderNotification(orderNumber: string, customerName: string, total: number, governorate: string, itemsSummary?: string) {
   playOrderNotificationSound();
   triggerPhoneVibration();
+  dispatchShopifyOrderAlert({ orderNumber, customerName, total, governorate, itemsSummary });
 
-  const title = `🔔 طلب جديد وارد في Beyond #${orderNumber}`;
-  const body = `العميل: ${customerName} | ${governorate} | الإجمالي: ${total} ج.م`;
+  const title = `Cha-Ching! 🔔 طلب جديد #${orderNumber} في Beyond`;
+  const body = `العميل: ${customerName} • ${governorate} • الإجمالي: ${total} ج.م`;
 
   sendDesktopNotification(title, body, () => {
     window.focus();
@@ -191,9 +276,16 @@ export function triggerNewOrderNotification(orderNumber: string, customerName: s
 export async function testPhoneNotification() {
   playOrderNotificationSound();
   triggerPhoneVibration();
+  dispatchShopifyOrderAlert({
+    orderNumber: '1099',
+    customerName: 'كريم الألفي',
+    total: 890,
+    governorate: 'القاهرة (المعادي)',
+    itemsSummary: 'هودي أوفر سايز فاخر (أسود - L)'
+  });
 
-  const title = '🔔 تجربة إشعار هاتف Beyond (ناجحة!)';
-  const body = 'إشعارات الهاتف تعمل بنجاح مثل الواتساب! ستصلك تنبيهات فورية بكل طلب جديد.';
+  const title = 'Cha-Ching! 🔔 تجربة إشعار متجر Beyond (Shopify)';
+  const body = 'نغمة الكاشير وإشعارات الهاتف تعمل بنجاح مثل شوبيفاي! ستصلك تنبيهات فورية بكل طلب جديد.';
 
   await sendDesktopNotification(title, body);
 }

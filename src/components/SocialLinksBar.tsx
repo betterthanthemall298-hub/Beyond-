@@ -42,7 +42,7 @@ export const SocialLinksBar: React.FC = () => {
     {
       id: 'facebook',
       name: 'فيسبوك',
-      subtitle: 'مجتمع عملاء نوكتورن والمراجعات الحصرية',
+      subtitle: `مجتمع عملاء ${settings.storeName || 'Beyond'} والمراجعات الحصرية`,
       url: settings.facebookUrl || 'https://facebook.com',
       icon: <Facebook className="w-5 h-5 text-blue-400" />,
       badgeClass: 'hover:border-blue-800/60 hover:bg-blue-950/20'
@@ -54,7 +54,7 @@ export const SocialLinksBar: React.FC = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center max-w-xl mx-auto mb-8">
           <h3 className="text-xl sm:text-2xl font-black text-stone-100">
-            تواصل وتابع نوكتورن على منصاتنا
+            تواصل وتابع {settings.storeName || 'Beyond'} على منصاتنا
           </h3>
           <p className="text-xs sm:text-sm text-stone-400 mt-2">
             تابع مقاطع الفيديو والتصوير الواقعي للهوديز والتحديثات اليومية لأحدث القطع

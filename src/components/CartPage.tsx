@@ -7,9 +7,6 @@ import {
   Minus,
   ArrowRight,
   Tag,
-  ShieldCheck,
-  Truck,
-  RotateCcw,
   CheckCircle2,
   X
 } from 'lucide-react';
@@ -241,22 +238,6 @@ export const CartPage: React.FC = () => {
                   </div>
                 </div>
               ))}
-            </div>
-
-            {/* Shopping Guarantees */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-4">
-              <div className="p-3.5 rounded-xl bg-stone-950/60 border border-stone-800 text-xs text-stone-300 flex items-center gap-2.5">
-                <ShieldCheck className="w-4 h-4 text-amber-500 shrink-0" />
-                <span>دفع كاش عند الاستلام</span>
-              </div>
-              <div className="p-3.5 rounded-xl bg-stone-950/60 border border-stone-800 text-xs text-stone-300 flex items-center gap-2.5">
-                <Truck className="w-4 h-4 text-amber-500 shrink-0" />
-                <span>حق فتح الشحنة والمعاينة</span>
-              </div>
-              <div className="p-3.5 rounded-xl bg-stone-950/60 border border-stone-800 text-xs text-stone-300 flex items-center gap-2.5">
-                <RotateCcw className="w-4 h-4 text-amber-500 shrink-0" />
-                <span>استبدال مقاس خلال 14 يوماً</span>
-              </div>
             </div>
           </div>
 

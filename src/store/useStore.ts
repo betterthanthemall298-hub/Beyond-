@@ -165,22 +165,50 @@ export interface StoreState {
   getCartItemsCount: () => number;
 }
 
-const STORAGE_KEY_V4 = 'nocturne_hoodies_storage_v4_clean';
+const STORAGE_KEY_V5 = 'beyond_hoodies_storage_v5';
 
 function loadLocalDeviceData() {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY_V4);
-    if (!raw) return { cart: [], wishlist: [], isAdminLoggedIn: false, activeView: 'home' as ActiveView };
+    const raw = localStorage.getItem(STORAGE_KEY_V5);
+    if (!raw) {
+      return {
+        cart: [],
+        wishlist: [],
+        isAdminLoggedIn: false,
+        activeView: 'home' as ActiveView,
+        settings: INITIAL_SETTINGS
+      };
+    }
     const parsed = JSON.parse(raw);
+    const parsedSettings: StoreSettings = parsed.settings
+      ? {
+          ...INITIAL_SETTINGS,
+          ...parsed.settings,
+          storeName:
+            !parsed.settings.storeName ||
+            parsed.settings.storeName.includes('متجري الإلكتروني') ||
+            parsed.settings.storeName.includes('Nocturne')
+              ? 'Beyond'
+              : parsed.settings.storeName
+        }
+      : INITIAL_SETTINGS;
+
     return {
       cart: parsed.cart || [],
       wishlist: parsed.wishlist || [],
       isAdminLoggedIn: Boolean(parsed.isAdminLoggedIn),
-      activeView: (parsed.activeView === 'admin' ? 'admin' : 'home') as ActiveView
+      activeView: (parsed.activeView === 'admin' ? 'admin' : 'home') as ActiveView,
+      settings: parsedSettings
     };
   } catch (e) {
     console.error('Failed to load local storage:', e);
-    return { cart: [], wishlist: [], isAdminLoggedIn: false, activeView: 'home' as ActiveView };
+    return {
+      cart: [],
+      wishlist: [],
+      isAdminLoggedIn: false,
+      activeView: 'home' as ActiveView,
+      settings: INITIAL_SETTINGS
+    };
   }
 }
 
@@ -190,9 +218,10 @@ function saveLocalDeviceData(s: StoreState) {
       cart: s.cart,
       wishlist: s.wishlist,
       isAdminLoggedIn: s.isAdminLoggedIn,
-      activeView: s.activeView === 'admin' ? 'admin' : 'home'
+      activeView: s.activeView === 'admin' ? 'admin' : 'home',
+      settings: s.settings
     };
-    localStorage.setItem(STORAGE_KEY_V4, JSON.stringify(dataToSave));
+    localStorage.setItem(STORAGE_KEY_V5, JSON.stringify(dataToSave));
   } catch (e) {
     console.error('Failed to save to local storage:', e);
   }
@@ -204,18 +233,21 @@ let lastSavedCart = localDeviceData.cart;
 let lastSavedWishlist = localDeviceData.wishlist;
 let lastSavedIsAdmin = localDeviceData.isAdminLoggedIn;
 let lastSavedActiveView = localDeviceData.activeView;
+let lastSavedSettings = localDeviceData.settings;
 
 function notify() {
   if (
     state.cart !== lastSavedCart ||
     state.wishlist !== lastSavedWishlist ||
     state.isAdminLoggedIn !== lastSavedIsAdmin ||
-    state.activeView !== lastSavedActiveView
+    state.activeView !== lastSavedActiveView ||
+    state.settings !== lastSavedSettings
   ) {
     lastSavedCart = state.cart;
     lastSavedWishlist = state.wishlist;
     lastSavedIsAdmin = state.isAdminLoggedIn;
     lastSavedActiveView = state.activeView;
+    lastSavedSettings = state.settings;
     saveLocalDeviceData(state);
   }
   listeners.forEach((listener) => listener());
@@ -815,7 +847,7 @@ let state: StoreState = {
   },
 
   // Store Settings
-  settings: INITIAL_SETTINGS,
+  settings: localDeviceData.settings || INITIAL_SETTINGS,
   updateSettings: async (updates) => {
     try {
       await setDoc(doc(db, 'settings', 'general'), sanitizeForFirestore(updates), { merge: true });
@@ -927,7 +959,25 @@ function setupFirebaseSync() {
     onSnapshot(doc(db, 'settings', 'general'), (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data() as StoreSettings;
-        update((prev) => ({ settings: { ...prev.settings, ...data } }));
+        const cleanStoreName =
+          !data.storeName ||
+          data.storeName.includes('متجري الإلكتروني') ||
+          data.storeName.includes('Nocturne')
+            ? 'Beyond'
+            : data.storeName;
+        const normalizedData: StoreSettings = {
+          ...data,
+          storeName: cleanStoreName,
+          storeSubtitle: data.storeSubtitle || 'متجر هوديز أوفر سايز فاخرة'
+        };
+        // Auto-fix Firestore if it held outdated default name
+        if (data.storeName !== cleanStoreName) {
+          setDoc(doc(db, 'settings', 'general'), { storeName: cleanStoreName }, { merge: true }).catch(() => {});
+        }
+        update((prev) => ({ settings: { ...prev.settings, ...normalizedData } }));
+      } else {
+        // Initialize Firestore with Beyond if document is missing
+        setDoc(doc(db, 'settings', 'general'), sanitizeForFirestore(INITIAL_SETTINGS), { merge: true }).catch(() => {});
       }
     }, (error) => {
       console.warn('Settings onSnapshot error:', error);

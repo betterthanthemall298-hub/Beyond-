@@ -2,16 +2,13 @@ import React, { useState } from 'react';
 import { useStore } from '../store/useStore';
 import {
   X,
-  CheckCircle2,
   Truck,
   ShieldCheck,
   Phone,
   User,
   MapPin,
   FileText,
-  Send,
   ArrowRight,
-  ExternalLink,
   Building2
 } from 'lucide-react';
 import { OrderItem } from '../types';
@@ -25,9 +22,7 @@ export const CheckoutModal: React.FC = () => {
     appliedCoupon,
     getCartSubtotal,
     getCartDiscount,
-    createOrder,
-    settings,
-    setActiveView
+    createOrder
   } = useStore();
 
   const [customerName, setCustomerName] = useState('');
@@ -38,15 +33,7 @@ export const CheckoutModal: React.FC = () => {
   const [address, setAddress] = useState('');
   const [notes, setNotes] = useState('');
   const [phoneError, setPhoneError] = useState('');
-  const [createdOrderNumber, setCreatedOrderNumber] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  // When checkout modal closes, ensure createdOrderNumber is cleaned so new orders are fresh
-  React.useEffect(() => {
-    if (!isCheckoutOpen) {
-      setCreatedOrderNumber(null);
-    }
-  }, [isCheckoutOpen]);
 
   if (!isCheckoutOpen) return null;
 
@@ -60,6 +47,17 @@ export const CheckoutModal: React.FC = () => {
     const clean = p.replace(/\s+/g, '');
     const regex = /^01[0125][0-9]{8}$/;
     return regex.test(clean);
+  };
+
+  const handleClose = () => {
+    setCustomerName('');
+    setPhone('');
+    setAlternatePhone('');
+    setCenter('');
+    setAddress('');
+    setNotes('');
+    setPhoneError('');
+    setIsCheckoutOpen(false);
   };
 
   const handleSubmitOrder = async (e: React.FormEvent) => {
@@ -102,7 +100,7 @@ export const CheckoutModal: React.FC = () => {
         quantity: item.quantity
       }));
 
-      const newOrder = await createOrder({
+      await createOrder({
         customerName: customerName.trim(),
         phone: phone.trim(),
         alternatePhone: alternatePhone.trim() || undefined,
@@ -118,33 +116,14 @@ export const CheckoutModal: React.FC = () => {
         total: grandTotal
       });
 
-      setCreatedOrderNumber(newOrder.orderNumber);
+      // Directly close the checkout modal without showing any confirmation message screen
+      handleClose();
     } catch (err) {
       console.error('Failed to submit order:', err);
       alert('حدث خطأ أثناء إرسال الطلب، يرجى المحاولة مرة أخرى.');
     } finally {
       setIsSubmitting(false);
     }
-  };
-
-  const handleClose = () => {
-    setCreatedOrderNumber(null);
-    setCustomerName('');
-    setPhone('');
-    setAlternatePhone('');
-    setCenter('');
-    setAddress('');
-    setNotes('');
-    setPhoneError('');
-    setIsCheckoutOpen(false);
-  };
-
-  const getWhatsAppOrderLink = () => {
-    if (!createdOrderNumber) return '';
-    const text = encodeURIComponent(
-      `مرحباً Beyond، قمت بعمل طلب جديد برقم: ${createdOrderNumber}\nالاسم: ${customerName}\nالهاتف: ${phone}\nالمحافظة: ${selectedGovernorate}\nالمركز: ${center}\nالعنوان بالتفصيل: ${address}\nالإجمالي: ${grandTotal} ج.م\nأرجو تأكيد الطلب للشحن.`
-    );
-    return `https://wa.me/${settings.whatsappNumber}?text=${text}`;
   };
 
   return (
@@ -159,12 +138,10 @@ export const CheckoutModal: React.FC = () => {
         <div className="p-5 border-b border-stone-800 flex items-center justify-between bg-stone-950/60">
           <div>
             <h3 className="text-base font-bold text-stone-100">
-              {createdOrderNumber ? 'تم تأكيد طلبك بنجاح!' : 'إتمام الطلب والدفع عند الاستلام'}
+              إتمام الطلب والدفع عند الاستلام
             </h3>
             <p className="text-xs text-stone-400">
-              {createdOrderNumber
-                ? 'شكراً لاختيارك Beyond'
-                : 'شحن لجميع محافظات مصر مع حق الفتح والمعاينة'}
+              شحن لجميع محافظات مصر مع حق الفتح والمعاينة
             </p>
           </div>
           <button
@@ -178,84 +155,7 @@ export const CheckoutModal: React.FC = () => {
 
         {/* Modal Body */}
         <div className="flex-1 overflow-y-auto p-5">
-          {createdOrderNumber ? (
-            <div className="text-center py-6 space-y-5">
-              <div className="w-16 h-16 rounded-2xl bg-emerald-950/60 border border-emerald-800/40 text-emerald-400 flex items-center justify-center mx-auto shadow-lg shadow-emerald-950/40">
-                <CheckCircle2 className="w-8 h-8" />
-              </div>
-
-              <div>
-                <h4 className="text-xl font-extrabold text-stone-100">تم تسجيل طلبك برقم:</h4>
-                <div className="inline-block px-5 py-2 mt-2 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400 font-mono font-bold text-lg">
-                  {createdOrderNumber}
-                </div>
-                <p className="text-xs text-stone-400 mt-2 max-w-md mx-auto">
-                  تم إرسال الطلب إلى قسم التجهيز بمخازننا. سيتواصل معك مندوب الشحن هاتفياً قبل التوصيل للتنسيق.
-                </p>
-              </div>
-
-              {/* Order Info Card */}
-              <div className="bg-stone-950 border border-stone-800 rounded-xl p-4 max-w-md mx-auto text-xs space-y-2 text-stone-300 text-right">
-                <div className="flex justify-between border-b border-stone-800/80 pb-2">
-                  <span className="text-stone-400">اسم المستلم:</span>
-                  <span className="font-bold text-stone-200">{customerName}</span>
-                </div>
-                <div className="flex justify-between border-b border-stone-800/80 pb-2">
-                  <span className="text-stone-400">المحافظة والمركز:</span>
-                  <span className="font-medium text-stone-200">{selectedGovernorate} - {center}</span>
-                </div>
-                <div className="flex justify-between border-b border-stone-800/80 pb-2">
-                  <span className="text-stone-400">العنوان بالتفصيل:</span>
-                  <span className="font-medium text-stone-200">{address}</span>
-                </div>
-                <div className="flex justify-between border-b border-stone-800/80 pb-2">
-                  <span className="text-stone-400">مدة التوصيل المتوقعة:</span>
-                  <span className="text-amber-400 font-medium">{currentGov.deliveryDays}</span>
-                </div>
-                <div className="flex justify-between text-sm font-bold pt-1">
-                  <span>المبلغ المطلوب عند الاستلام:</span>
-                  <span className="text-amber-400 font-mono">{grandTotal} ج.م</span>
-                </div>
-              </div>
-
-              {/* Action Buttons */}
-              <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
-                <a
-                  id="whatsapp-confirm-order-link"
-                  href={getWhatsAppOrderLink()}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-full sm:w-auto px-6 py-3 rounded-xl bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-bold flex items-center justify-center gap-2 transition-colors shadow-lg shadow-emerald-950/40"
-                >
-                  <Send className="w-4 h-4" />
-                  <span>تأكيد ومتابعة عبر واتساب</span>
-                  <ExternalLink className="w-3.5 h-3.5" />
-                </a>
-
-                <button
-                  id="track-order-direct-btn"
-                  type="button"
-                  onClick={() => {
-                    handleClose();
-                    setActiveView('tracking');
-                  }}
-                  className="w-full sm:w-auto px-6 py-3 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-200 text-xs font-bold border border-stone-700 transition-colors"
-                >
-                  تتبع حالة هذا الطلب
-                </button>
-
-                <button
-                  id="continue-shopping-new-order-btn"
-                  type="button"
-                  onClick={handleClose}
-                  className="w-full sm:w-auto px-6 py-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-black text-xs font-bold transition-colors shadow-md shadow-amber-950/40"
-                >
-                  طلب جديد / متابعة التسوق
-                </button>
-              </div>
-            </div>
-          ) : (
-            <form id="checkout-form" onSubmit={handleSubmitOrder} className="space-y-5">
+          <form id="checkout-form" onSubmit={handleSubmitOrder} className="space-y-5">
               {/* Form Grid */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {/* Full Name */}
@@ -442,7 +342,6 @@ export const CheckoutModal: React.FC = () => {
                 <ArrowRight className="w-4 h-4 rotate-180" />
               </button>
             </form>
-          )}
         </div>
       </div>
     </div>

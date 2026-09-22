@@ -14,18 +14,9 @@ import {
   Package,
   Layers,
   Flame,
-  Share2,
-  MessageCircle,
-  Instagram,
-  Copy
+  Share2
 } from 'lucide-react';
 import { ProductCard } from './ProductCard';
-import {
-  shareToWhatsApp,
-  shareToInstagram,
-  copyToClipboard,
-  getProductShareUrl
-} from '../utils/shareProduct';
 
 export const ProductDetailPage: React.FC = () => {
   const {
@@ -48,7 +39,6 @@ export const ProductDetailPage: React.FC = () => {
   const [selectedSize, setSelectedSize] = useState<HoodieSize>('L');
   const [selectedColorIndex, setSelectedColorIndex] = useState(0);
   const [quantity, setQuantity] = useState(1);
-  const [copiedLink, setCopiedLink] = useState(false);
 
   if (!product) {
     return (
@@ -90,20 +80,6 @@ export const ProductDetailPage: React.FC = () => {
     );
     setActiveView('cart');
     window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  const handleCopyLink = async () => {
-    const url = getProductShareUrl(product.id);
-    const success = await copyToClipboard(url);
-    if (success) {
-      setCopiedLink(true);
-      addToast({
-        type: 'success',
-        title: 'تم نسخ رابط المنتج بنجاح!',
-        description: 'يمكنك الآن لصقه ومشاركته في أي مكان.'
-      });
-      setTimeout(() => setCopiedLink(false), 2500);
-    }
   };
 
   // Recommended Products: other products in the store
@@ -379,84 +355,6 @@ export const ProductDetailPage: React.FC = () => {
               <ShoppingBag className="w-5 h-5" />
               <span>أضف إلى السلة</span>
             </button>
-          </div>
-
-          {/* Social Media Sharing & Marketing Card */}
-          <div
-            id="product-social-share-card"
-            className="p-4 rounded-2xl bg-stone-900/80 border border-stone-800/90 space-y-3"
-          >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Share2 className="w-4 h-4 text-amber-400" />
-                <span className="text-xs font-bold text-stone-200">
-                  مشاركة المنتج والتسويق:
-                </span>
-              </div>
-              <button
-                id="product-page-open-share-modal-btn"
-                type="button"
-                onClick={() => openShareModal(product)}
-                className="text-[11px] font-bold text-amber-400 hover:text-amber-300 transition-colors hover:underline flex items-center gap-1"
-              >
-                <span>خيارات أكثر ونصوص إعلانية ←</span>
-              </button>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-              {/* WhatsApp Share */}
-              <button
-                id="product-detail-whatsapp-share-btn"
-                type="button"
-                onClick={() => shareToWhatsApp(product)}
-                className="py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white font-extrabold text-xs flex items-center justify-center gap-2 transition-all shadow-md shadow-emerald-950/30 group"
-              >
-                <MessageCircle className="w-4 h-4 text-white fill-white/20" />
-                <span>مشاركة واتساب</span>
-              </button>
-
-              {/* Instagram Share */}
-              <button
-                id="product-detail-instagram-share-btn"
-                type="button"
-                onClick={async () => {
-                  await shareToInstagram(product);
-                  addToast({
-                    type: 'success',
-                    title: 'تم نسخ تفاصيل ورابط الهودي!',
-                    description: 'تم فتح انستجرام للمشاركة مع أصدقائك.'
-                  });
-                }}
-                className="py-2.5 px-3 rounded-xl bg-gradient-to-r from-[#833ab4] via-[#fd1d1d] to-[#fcb045] hover:opacity-95 active:scale-[0.99] text-white font-extrabold text-xs flex items-center justify-center gap-2 transition-all shadow-md shadow-pink-950/30 group"
-              >
-                <Instagram className="w-4 h-4 text-white" />
-                <span>مشاركة انستجرام</span>
-              </button>
-
-              {/* Copy Direct Link */}
-              <button
-                id="product-detail-copy-link-btn"
-                type="button"
-                onClick={handleCopyLink}
-                className={`py-2.5 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${
-                  copiedLink
-                    ? 'bg-emerald-950/70 border-emerald-700 text-emerald-300'
-                    : 'bg-stone-950 hover:bg-stone-800 border-stone-800 hover:border-stone-700 text-stone-300 hover:text-white'
-                }`}
-              >
-                {copiedLink ? (
-                  <>
-                    <Check className="w-4 h-4 text-emerald-400" />
-                    <span>تم النسخ!</span>
-                  </>
-                ) : (
-                  <>
-                    <Copy className="w-4 h-4 text-stone-400" />
-                    <span>نسخ الرابط</span>
-                  </>
-                )}
-              </button>
-            </div>
           </div>
 
           {/* Measurements Guide (الطول والعرض بالسنتيمتر) */}

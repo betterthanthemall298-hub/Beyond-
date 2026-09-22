@@ -361,7 +361,7 @@ export const AdminDashboard: React.FC = () => {
 
       await addProduct({
         name: pName.trim(),
-        subtitle: pSubtitle.trim() || 'Nocturne Oversized Hoodie',
+        subtitle: pSubtitle.trim() || 'Beyond Oversized Hoodie',
         category: pCategory,
         price: Number(pPrice),
         originalPrice: numOriginalPrice,
@@ -915,7 +915,7 @@ export const AdminDashboard: React.FC = () => {
                   <input
                     type="text"
                     required
-                    placeholder="هودي نوكتورن..."
+                    placeholder="هودي بيوند..."
                     value={pName}
                     onChange={(e) => setPName(e.target.value)}
                     className="w-full bg-stone-950 border border-stone-800 rounded-xl px-3 py-2 text-xs text-stone-100"
@@ -925,7 +925,7 @@ export const AdminDashboard: React.FC = () => {
                   <label className="block text-xs text-stone-400 mb-1">العنوان الفرعي الإنجليزي</label>
                   <input
                     type="text"
-                    placeholder="Nocturne Charcoal Boxy"
+                    placeholder="Beyond Charcoal Boxy"
                     value={pSubtitle}
                     onChange={(e) => setPSubtitle(e.target.value)}
                     className="w-full bg-stone-950 border border-stone-800 rounded-xl px-3 py-2 text-xs text-stone-100"
@@ -1585,10 +1585,10 @@ export const AdminDashboard: React.FC = () => {
                       id="admin-test-phone-notification-btn"
                       type="button"
                       onClick={() => testPhoneNotification()}
-                      className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-black text-xs font-bold flex items-center gap-1.5 transition-colors shadow-sm"
-                      title="تجربة وصول إشعار فوري كرسائل الواتساب على الهاتف"
+                      className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black flex items-center gap-1.5 transition-all shadow-md shadow-emerald-950/40"
+                      title="تجربة إشعار شوبيفاي مع نغمة الكاشير (Cha-Ching) والاهتزاز وبانر الطلب"
                     >
-                      <span>📱 إشعار تجريبي</span>
+                      <span>💸 تجربة إشعار شوبيفاي (Cha-Ching)</span>
                     </button>
                   </div>
                 )}
@@ -1655,7 +1655,7 @@ export const AdminDashboard: React.FC = () => {
                   onClick={() => {
                     const today = new Date().toISOString().split('T')[0];
                     if (orderStatusFilter === 'all') {
-                      exportOrdersToCSV(orders, `طلبات_نوكتورن_كافة_الطلبات_${today}`);
+                      exportOrdersToCSV(orders, `طلبات_Beyond_كافة_الطلبات_${today}`);
                     } else {
                       exportOrdersByStatus(orders, orderStatusFilter);
                     }
@@ -1695,7 +1695,7 @@ export const AdminDashboard: React.FC = () => {
                         type="button"
                         onClick={() => {
                           const today = new Date().toISOString().split('T')[0];
-                          exportOrdersToCSV(orders, `طلبات_نوكتورن_كافة_الطلبات_${today}`);
+                          exportOrdersToCSV(orders, `طلبات_Beyond_كافة_الطلبات_${today}`);
                           setShowExportDropdown(false);
                         }}
                         className="w-full text-right px-3 py-2 rounded-xl text-xs text-stone-200 hover:bg-stone-800 flex items-center justify-between"

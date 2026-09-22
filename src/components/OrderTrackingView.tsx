@@ -427,7 +427,7 @@ export const OrderTrackingView: React.FC = () => {
                   <div className="flex justify-end pt-1">
                     <a
                       href={`https://wa.me/${settings.whatsappNumber}?text=${encodeURIComponent(
-                        `مرحباً نوكتورن هوديز، أريد الاستفسار عن طلبي رقم: ${order.orderNumber}`
+                        `مرحباً ${settings.storeName || 'Beyond'} هوديز، أريد الاستفسار عن طلبي رقم: ${order.orderNumber}`
                       )}`}
                       target="_blank"
                       rel="noopener noreferrer"

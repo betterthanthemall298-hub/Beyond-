@@ -43,7 +43,7 @@ export const Footer: React.FC = () => {
                 </div>
               )}
               <span className="text-lg font-black text-stone-100 tracking-wider">
-                {settings.storeName || 'NOCTURNE HOODIES'}
+                {settings.storeName || 'Beyond Hoodies'}
               </span>
             </div>
           </div>
@@ -193,7 +193,7 @@ export const Footer: React.FC = () => {
 
         {/* Bottom Bar */}
         <div className="pt-6 flex flex-col sm:flex-row items-center justify-between gap-3 text-stone-500 text-[11px]">
-          <p>© 2026 نوكتورن هوديز (Nocturne Hoodies). جميع الحقوق محفوظة.</p>
+          <p>© 2026 بيوند هوديز (Beyond Hoodies). جميع الحقوق محفوظة.</p>
           <button
             type="button"
             onClick={scrollToTop}

@@ -81,9 +81,9 @@ export const SAMPLE_HOODIE_TEMPLATE: Omit<Product, 'id' | 'rating' | 'reviewsCou
 };
 
 export const INITIAL_SETTINGS: StoreSettings = {
-  storeName: 'متجري الإلكتروني | My Store',
-  storeSubtitle: 'أحدث صيحات الملابس والهوديز العصرية',
-  announcementText: 'شحن سريع لجميع المحافظات | الدفع عند الاستلام مع إمكانية المعاينة قبل الاستلام',
+  storeName: 'Beyond',
+  storeSubtitle: 'متجر هوديز أوفر سايز فاخرة',
+  announcementText: 'Beyond | شحن سريع لجميع المحافظات والدفع عند الاستلام مع إمكانية المعاينة قبل الدفع',
   brandLogo: '',
   whatsappNumber: '201000000000',
   whatsappUrl: 'https://wa.me/201000000000',

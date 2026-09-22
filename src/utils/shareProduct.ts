@@ -20,7 +20,7 @@ export function getMarketingShareText(product: Product): string {
       : '';
 
   return (
-    `🛍️ *${product.name}* من متجر *Nocturne Hoodies*\n` +
+    `🛍️ *${product.name}* من متجر *Beyond Hoodies*\n` +
     (product.subtitle ? `✨ ${product.subtitle}\n` : '') +
     `💰 السعر: *${product.price} ج.م*${discountText}\n` +
     `🧵 خامة قطنية فاخرة مع تقفيل عالي الجودة وتصميم عصري مريح.\n\n` +
@@ -33,7 +33,7 @@ export function getMarketingShareText(product: Product): string {
  * Short headline for Instagram and social posts.
  */
 export function getShortMarketingText(product: Product): string {
-  return `🔥 هودي ${product.name} بسعر ${product.price} ج.م من متجر Nocturne Hoodies`;
+  return `🔥 هودي ${product.name} بسعر ${product.price} ج.م من متجر Beyond Hoodies`;
 }
 
 /**
@@ -100,7 +100,7 @@ export async function shareNative(product: Product): Promise<boolean> {
   const text = getShortMarketingText(product);
   try {
     await navigator.share({
-      title: `${product.name} | Nocturne Hoodies`,
+      title: `${product.name} | Beyond Hoodies`,
       text: text,
       url: url
     });
