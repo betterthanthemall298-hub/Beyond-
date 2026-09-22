@@ -189,15 +189,15 @@ export async function sendDesktopNotification(title: string, body: string, onCli
     return;
   }
 
-  // 1. Try Service Worker showNotification first (Standard for Android & iOS PWA background notifications)
+  // 1. Try Service Worker showNotification first (Standard for Android & mobile background notifications)
   if ('serviceWorker' in navigator) {
     try {
       const registration = await navigator.serviceWorker.ready;
       if (registration && 'showNotification' in registration) {
         await registration.showNotification(title, {
           body,
-          icon: '/shopify-icon-192.png',
-          badge: '/shopify-badge-72.png',
+          icon: '/favicon.ico',
+          badge: '/favicon.ico',
           tag: 'beyond-order-' + Date.now(),
           vibrate: [250, 100, 250, 100, 250],
           data: { url: '/?view=admin' },
@@ -215,8 +215,8 @@ export async function sendDesktopNotification(title: string, body: string, onCli
     if ('Notification' in window && Notification.permission === 'granted') {
       const notification = new Notification(title, {
         body,
-        icon: '/shopify-icon-192.png',
-        badge: '/shopify-badge-72.png',
+        icon: '/favicon.ico',
+        badge: '/favicon.ico',
         tag: 'beyond-order-' + Date.now(),
         requireInteraction: true
       });
@@ -239,7 +239,7 @@ export interface ShopifyOrderAlertData {
   orderNumber: string;
   customerName: string;
   total: number;
-  governorate: string;
+  governorate?: string;
   itemsCount?: number;
   itemsSummary?: string;
   timestamp: number;
@@ -257,26 +257,26 @@ export function onShopifyOrderAlert(callback: (data: ShopifyOrderAlertData) => v
 export function dispatchShopifyOrderAlert(data: Omit<ShopifyOrderAlertData, 'id' | 'timestamp'>) {
   const alertData: ShopifyOrderAlertData = {
     ...data,
-    id: 'shopify-alert-' + Date.now(),
+    id: 'beyond-alert-' + Date.now(),
     timestamp: Date.now()
   };
   shopifyAlertListeners.forEach((fn) => {
     try {
       fn(alertData);
     } catch (err) {
-      console.warn('Error in shopify alert listener:', err);
+      console.warn('Error in alert listener:', err);
     }
   });
 }
 
 /**
- * Dispatches remote background push notification that reaches admin's phone lock screen even when the site is closed
+ * Dispatches remote background push notification to phone lock screen
  */
 export async function dispatchRemotePushNotification(order: {
   orderNumber: string;
   customerName: string;
   total: number;
-  governorate: string;
+  governorate?: string;
   itemsCount?: number;
   phone?: string;
   address?: string;
@@ -285,17 +285,10 @@ export async function dispatchRemotePushNotification(order: {
   telegramChatId?: string;
 }) {
   const topic = (order.pushTopic && order.pushTopic.trim()) || getPushTopic();
-  const count = order.itemsCount || 1;
-  const itemsText = `${count} ${count === 1 ? 'item' : 'items'}`;
-  const formattedPrice = `E£${Number(order.total || 0).toLocaleString('en-US', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2
-  })}`;
+  const title = 'أوردر جديد';
+  const body = `اسم العميل: ${order.customerName}\nسعر الأوردر: ${order.total} ج.م`;
 
-  const title = `Order #${order.orderNumber}`;
-  const body = `${formattedPrice}, ${itemsText} from Online Store - Beyond\n${order.customerName} (${order.governorate})`;
-
-  // 1. Send via ntfy.sh (Delivers instant lock-screen push notification on iOS and Android even with website closed)
+  // 1. Send via ntfy.sh (Direct lock-screen push)
   try {
     const origin = typeof window !== 'undefined' ? window.location.origin : '';
     await fetch(`https://ntfy.sh/${topic}`, {
@@ -303,7 +296,7 @@ export async function dispatchRemotePushNotification(order: {
       headers: {
         'Title': title,
         'Priority': 'high',
-        'Tags': 'moneybag,package',
+        'Tags': 'package,bell',
         'Click': origin ? `${origin}/?view=admin` : '/?view=admin'
       },
       body: body
@@ -312,10 +305,10 @@ export async function dispatchRemotePushNotification(order: {
     console.warn('ntfy remote push error:', err);
   }
 
-  // 2. Send via Telegram Bot if admin provided credentials
+  // 2. Send via Telegram Bot if configured
   if (order.telegramBotToken && order.telegramChatId) {
     try {
-      const msg = `🛍️ *Order #${order.orderNumber}*\n${formattedPrice}, ${itemsText} from Online Store - Beyond\n\n👤 العميل: ${order.customerName}\n📱 الهاتف: ${order.phone || 'غير مسجل'}\n📍 المحافظة: ${order.governorate}\n🏠 العنوان: ${order.address || ''}`;
+      const msg = `🛍️ *أوردر جديد*\nاسم العميل: ${order.customerName}\nسعر الأوردر: ${order.total} ج.م`;
       await fetch(`https://api.telegram.org/bot${order.telegramBotToken}/sendMessage`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -332,14 +325,14 @@ export async function dispatchRemotePushNotification(order: {
 }
 
 /**
- * Complete trigger for incoming order: plays Shopify Cha-Ching chime + phone vibration + push notification + in-app banner
+ * Complete trigger for incoming order: sound + vibration + phone notification
  */
 export function triggerNewOrderNotification(
   orderNumber: string,
   customerName: string,
   total: number,
-  governorate: string,
-  itemsCount: number = 1,
+  governorate?: string,
+  itemsCount?: number,
   itemsSummary?: string
 ) {
   playOrderNotificationSound();
@@ -353,15 +346,8 @@ export function triggerNewOrderNotification(
     itemsSummary
   });
 
-  const formattedTotal = `E£${Number(total || 0).toLocaleString('en-US', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2
-  })}`;
-  const itemsText = `${itemsCount} ${itemsCount === 1 ? 'item' : 'items'}`;
-
-  // Title & Body matching the exact iOS Shopify Notification Stack in the user's screenshot
-  const title = `Order #${orderNumber}`;
-  const body = `${formattedTotal}, ${itemsText} from Online Store - Beyond\n${customerName} (${governorate})`;
+  const title = 'أوردر جديد';
+  const body = `اسم العميل: ${customerName}\nسعر الأوردر: ${total} ج.م`;
 
   sendDesktopNotification(title, body, () => {
     window.focus();
@@ -375,27 +361,20 @@ export async function testPhoneNotification(topicOverride?: string) {
   playOrderNotificationSound();
   triggerPhoneVibration();
   dispatchShopifyOrderAlert({
-    orderNumber: '2138',
-    customerName: 'حلا أحمد',
-    total: 1170,
-    governorate: 'القاهرة',
-    itemsCount: 2,
-    itemsSummary: 'هودي أوفر سايز فاخر (أسود - L) + (بيج - XL)'
+    orderNumber: '101',
+    customerName: 'أحمد محمد',
+    total: 890
   });
 
-  const title = 'Order #2138';
-  const body = 'E£1,170.00, 2 items from Online Store - Beyond\nحلا أحمد (القاهرة)';
+  const title = 'أوردر جديد';
+  const body = 'اسم العميل: أحمد محمد\nسعر الأوردر: 890 ج.م';
 
   await sendDesktopNotification(title, body);
 
-  // Also send remote test push to phone lock screen
   await dispatchRemotePushNotification({
-    orderNumber: '2138',
-    customerName: 'حلا أحمد',
-    total: 1170,
-    governorate: 'القاهرة',
-    itemsCount: 2,
-    phone: '01011565723',
+    orderNumber: '101',
+    customerName: 'أحمد محمد',
+    total: 890,
     pushTopic: topicOverride
   });
 }

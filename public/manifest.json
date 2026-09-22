@@ -1,27 +1,21 @@
 {
   "id": "/",
-  "name": "Shopify - Beyond",
-  "short_name": "Shopify",
-  "description": "Beyond Store - إشعارات فورية للطلبات على شاشة القفل بنمط شوبيفاي مع نغمة الكاشير",
-  "start_url": "/?view=admin",
+  "name": "Beyond - متجر هوديز أوفر سايز فاخرة",
+  "short_name": "Beyond",
+  "description": "Beyond Store - متجر هوديز أوفر سايز فاخرة مع إشعارات فورية للطلبات الجديدة",
+  "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "background_color": "#09090b",
-  "theme_color": "#96BF48",
+  "theme_color": "#09090b",
   "orientation": "portrait",
   "dir": "rtl",
   "lang": "ar",
   "icons": [
     {
-      "src": "/shopify-icon-192.png",
-      "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "any maskable"
-    },
-    {
-      "src": "/shopify-badge-72.png",
-      "sizes": "72x72",
-      "type": "image/png"
+      "src": "/favicon.ico",
+      "sizes": "64x64 32x32 24x24 16x16",
+      "type": "image/x-icon"
     }
   ]
 }

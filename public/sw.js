@@ -1,4 +1,4 @@
-// Beyond Store - Service Worker for Shopify-Style Lock Screen Notifications
+// Beyond Store - Service Worker for Background Phone Notifications
 const CACHE_NAME = 'beyond-store-v2';
 
 self.addEventListener('install', (event) => {
@@ -12,10 +12,10 @@ self.addEventListener('activate', (event) => {
 // Handle incoming background push notifications
 self.addEventListener('push', (event) => {
   let data = {
-    title: 'Order #2138',
-    body: 'E£1,170.00, 2 items from Online Store - Beyond',
-    icon: '/shopify-icon-192.png',
-    badge: '/shopify-badge-72.png',
+    title: 'أوردر جديد',
+    body: 'اسم العميل: عميل جديد\nسعر الأوردر: 0 ج.م',
+    icon: '/favicon.ico',
+    badge: '/favicon.ico',
     url: '/?view=admin'
   };
 
@@ -32,8 +32,8 @@ self.addEventListener('push', (event) => {
 
   const options = {
     body: data.body,
-    icon: data.icon || '/shopify-icon-192.png',
-    badge: data.badge || '/shopify-badge-72.png',
+    icon: data.icon || '/favicon.ico',
+    badge: data.badge || '/favicon.ico',
     vibrate: [250, 100, 250, 100, 250],
     tag: data.tag || 'beyond-order-' + Date.now(),
     renotify: true,
