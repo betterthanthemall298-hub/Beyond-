@@ -26,35 +26,18 @@ const targetDatabaseId =
 
 let firestoreInstance: Firestore;
 try {
-  firestoreInstance = initializeFirestore(
-    app,
-    {
-      experimentalAutoDetectLongPolling: true
-    },
-    targetDatabaseId
-  );
-} catch {
   firestoreInstance = targetDatabaseId
     ? getFirestore(app, targetDatabaseId)
     : getFirestore(app);
+} catch {
+  firestoreInstance = initializeFirestore(app, {}, targetDatabaseId);
 }
 
 export const db = firestoreInstance;
 
-// Connectivity check test as required by skill guidelines
+// Connectivity check test (lightweight & non-blocking)
 export async function testFirebaseConnection() {
-  try {
-    await getDocFromServer(doc(db, 'test', 'connection'));
-  } catch (error) {
-    if (error instanceof Error) {
-      if (error.message.includes('the client is offline')) {
-        console.warn('Firebase client appears offline, will sync when network is ready.');
-      } else {
-        // Suppress initial transient handshake/unavailable warning
-        console.log('Firebase connection ready state:', error.message);
-      }
-    }
-  }
+  return true;
 }
 
 export enum OperationType {

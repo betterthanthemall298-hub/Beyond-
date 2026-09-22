@@ -176,7 +176,11 @@ function loadLocalDeviceData() {
         wishlist: [],
         isAdminLoggedIn: false,
         activeView: 'home' as ActiveView,
-        settings: INITIAL_SETTINGS
+        settings: INITIAL_SETTINGS,
+        products: INITIAL_PRODUCTS,
+        coupons: INITIAL_COUPONS,
+        governorates: INITIAL_GOVERNORATES,
+        reviewImages: INITIAL_REVIEW_IMAGES
       };
     }
     const parsed = JSON.parse(raw);
@@ -198,7 +202,11 @@ function loadLocalDeviceData() {
       wishlist: parsed.wishlist || [],
       isAdminLoggedIn: Boolean(parsed.isAdminLoggedIn),
       activeView: (parsed.activeView === 'admin' ? 'admin' : 'home') as ActiveView,
-      settings: parsedSettings
+      settings: parsedSettings,
+      products: Array.isArray(parsed.products) ? parsed.products : INITIAL_PRODUCTS,
+      coupons: Array.isArray(parsed.coupons) ? parsed.coupons : INITIAL_COUPONS,
+      governorates: Array.isArray(parsed.governorates) && parsed.governorates.length > 0 ? parsed.governorates : INITIAL_GOVERNORATES,
+      reviewImages: Array.isArray(parsed.reviewImages) ? parsed.reviewImages : INITIAL_REVIEW_IMAGES
     };
   } catch (e) {
     console.error('Failed to load local storage:', e);
@@ -207,7 +215,11 @@ function loadLocalDeviceData() {
       wishlist: [],
       isAdminLoggedIn: false,
       activeView: 'home' as ActiveView,
-      settings: INITIAL_SETTINGS
+      settings: INITIAL_SETTINGS,
+      products: INITIAL_PRODUCTS,
+      coupons: INITIAL_COUPONS,
+      governorates: INITIAL_GOVERNORATES,
+      reviewImages: INITIAL_REVIEW_IMAGES
     };
   }
 }
@@ -219,7 +231,11 @@ function saveLocalDeviceData(s: StoreState) {
       wishlist: s.wishlist,
       isAdminLoggedIn: s.isAdminLoggedIn,
       activeView: s.activeView === 'admin' ? 'admin' : 'home',
-      settings: s.settings
+      settings: s.settings,
+      products: s.products,
+      coupons: s.coupons,
+      governorates: s.governorates,
+      reviewImages: s.reviewImages
     };
     localStorage.setItem(STORAGE_KEY_V5, JSON.stringify(dataToSave));
   } catch (e) {
@@ -234,6 +250,10 @@ let lastSavedWishlist = localDeviceData.wishlist;
 let lastSavedIsAdmin = localDeviceData.isAdminLoggedIn;
 let lastSavedActiveView = localDeviceData.activeView;
 let lastSavedSettings = localDeviceData.settings;
+let lastSavedProducts = localDeviceData.products;
+let lastSavedCoupons = localDeviceData.coupons;
+let lastSavedGovernorates = localDeviceData.governorates;
+let lastSavedReviewImages = localDeviceData.reviewImages;
 
 function notify() {
   if (
@@ -241,13 +261,21 @@ function notify() {
     state.wishlist !== lastSavedWishlist ||
     state.isAdminLoggedIn !== lastSavedIsAdmin ||
     state.activeView !== lastSavedActiveView ||
-    state.settings !== lastSavedSettings
+    state.settings !== lastSavedSettings ||
+    state.products !== lastSavedProducts ||
+    state.coupons !== lastSavedCoupons ||
+    state.governorates !== lastSavedGovernorates ||
+    state.reviewImages !== lastSavedReviewImages
   ) {
     lastSavedCart = state.cart;
     lastSavedWishlist = state.wishlist;
     lastSavedIsAdmin = state.isAdminLoggedIn;
     lastSavedActiveView = state.activeView;
     lastSavedSettings = state.settings;
+    lastSavedProducts = state.products;
+    lastSavedCoupons = state.coupons;
+    lastSavedGovernorates = state.governorates;
+    lastSavedReviewImages = state.reviewImages;
     saveLocalDeviceData(state);
   }
   listeners.forEach((listener) => listener());
@@ -273,7 +301,12 @@ let state: StoreState = {
   isCheckoutOpen: false,
   setIsCheckoutOpen: (open) => update(() => ({ isCheckoutOpen: open })),
   isAdminLoggedIn: localDeviceData.isAdminLoggedIn,
-  setIsAdminLoggedIn: (logged) => update(() => ({ isAdminLoggedIn: logged })),
+  setIsAdminLoggedIn: (logged) => {
+    update(() => ({ isAdminLoggedIn: logged }));
+    if (logged) {
+      syncOrdersIfAdmin();
+    }
+  },
   shareModalProduct: null,
   openShareModal: (product) => update(() => ({ shareModalProduct: product })),
   closeShareModal: () => update(() => ({ shareModalProduct: null })),
@@ -380,6 +413,7 @@ let state: StoreState = {
     const creds = state.adminCredentials;
     if (cleanUser === creds.username && cleanPass === creds.password) {
       update(() => ({ isAdminLoggedIn: true }));
+      syncOrdersIfAdmin();
       state.addToast({
         type: 'success',
         title: 'مرحباً بك في لوحة الإدارة',
@@ -390,8 +424,8 @@ let state: StoreState = {
     return false;
   },
 
-  // Products (initially empty clean list)
-  products: INITIAL_PRODUCTS,
+  // Products (loaded instantly from local cache, synced with cloud)
+  products: localDeviceData.products || INITIAL_PRODUCTS,
   addProduct: async (productData) => {
     const newProduct: Product = {
       ...productData,
@@ -576,7 +610,7 @@ let state: StoreState = {
   },
 
   // Coupons
-  coupons: INITIAL_COUPONS,
+  coupons: localDeviceData.coupons || INITIAL_COUPONS,
   appliedCoupon: null,
   applyCoupon: (code) => {
     const cleanCode = code.trim().toUpperCase();
@@ -793,7 +827,7 @@ let state: StoreState = {
   },
 
   // Customer Review Images
-  reviewImages: INITIAL_REVIEW_IMAGES,
+  reviewImages: localDeviceData.reviewImages || INITIAL_REVIEW_IMAGES,
   addReviewImage: async (imageUrl, caption) => {
     const newImg: CustomerReviewImage = {
       id: 'rev-img-' + Date.now(),
@@ -828,7 +862,7 @@ let state: StoreState = {
   },
 
   // Shipping & Governorates
-  governorates: INITIAL_GOVERNORATES,
+  governorates: localDeviceData.governorates || INITIAL_GOVERNORATES,
   updateGovernorateCost: async (name, newCost) => {
     try {
       await setDoc(doc(db, 'governorates', name), sanitizeForFirestore({ name, cost: newCost }));
@@ -883,32 +917,32 @@ let state: StoreState = {
 
 // Setup Firebase Real-Time Synchronization Listeners
 let isSubscribed = false;
+let unsubscribeOrders: (() => void) | null = null;
+let isFirstOrdersSnapshot = true;
 
-function setupFirebaseSync() {
-  if (isSubscribed) return;
-  isSubscribed = true;
+function syncOrdersIfAdmin() {
+  if (!state.isAdminLoggedIn) {
+    if (unsubscribeOrders) {
+      unsubscribeOrders();
+      unsubscribeOrders = null;
+    }
+    return;
+  }
+  if (unsubscribeOrders) return; // already listening
 
-  // Test connection
-  testFirebaseConnection().catch(() => {});
-
-  // 1. Orders Listener (Real-time updates, scaled with query limit for high volume)
-  let isFirstOrdersSnapshot = true;
   try {
     const ordersCol = collection(db, 'orders');
-    // Using limit to scale gracefully to tens of thousands of orders
-    const ordersQuery = query(ordersCol, limit(300));
+    const ordersQuery = query(ordersCol, limit(150));
 
-    onSnapshot(ordersQuery, (snapshot) => {
+    unsubscribeOrders = onSnapshot(ordersQuery, (snapshot) => {
       if (!snapshot.empty) {
         const loadedOrders: Order[] = [];
         snapshot.forEach((docSnap) => {
           loadedOrders.push(docSnap.data() as Order);
         });
-        // Sort descending by creation date or order number
         loadedOrders.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
         update(() => ({ orders: loadedOrders }));
 
-        // Trigger phone and sound notifications for newly incoming orders
         if (!isFirstOrdersSnapshot) {
           snapshot.docChanges().forEach((change) => {
             if (change.type === 'added') {
@@ -932,6 +966,16 @@ function setupFirebaseSync() {
     });
   } catch (err) {
     console.error('Error setting up orders listener:', err);
+  }
+}
+
+function setupFirebaseSync() {
+  if (isSubscribed) return;
+  isSubscribed = true;
+
+  // 1. Orders Listener (Sync only if logged in as Admin to keep customer page lightning fast)
+  if (state.isAdminLoggedIn) {
+    syncOrdersIfAdmin();
   }
 
   // 2. Products Listener (Any change made by admin appears to everyone)

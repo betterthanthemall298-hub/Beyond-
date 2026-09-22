@@ -5,7 +5,7 @@
  * and applies JPEG compression to keep images sharp, fast to load, and well under 100-150KB.
  */
 
-export async function compressImageFile(file: File, maxDimension = 1200, quality = 0.82): Promise<string> {
+export async function compressImageFile(file: File, maxDimension = 900, quality = 0.78): Promise<string> {
   return new Promise((resolve, reject) => {
     // If SVG or small gif, read as data url directly if small enough
     if (file.type === 'image/svg+xml' || (file.type === 'image/gif' && file.size < 200 * 1024)) {
