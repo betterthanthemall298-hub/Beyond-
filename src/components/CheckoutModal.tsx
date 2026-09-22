@@ -87,18 +87,21 @@ export const CheckoutModal: React.FC = () => {
 
     setIsSubmitting(true);
     try {
-      const orderItems: OrderItem[] = cart.map((item) => ({
-        productId: item.productId,
-        productName: item.product.name,
-        subtitle: item.product.subtitle || '',
-        image: item.product.images?.[0] || '',
-        images: item.product.images || [],
-        size: item.size,
-        colorName: item.colorName,
-        colorHex: item.colorHex,
-        price: item.product.price,
-        quantity: item.quantity
-      }));
+      const orderItems: OrderItem[] = cart.map((item) => {
+        const firstImg = item.product.images?.[0] || '';
+        const isRemoteUrl = firstImg.startsWith('http');
+        return {
+          productId: item.productId,
+          productName: item.product.name,
+          subtitle: item.product.subtitle || '',
+          image: isRemoteUrl ? firstImg : '',
+          size: item.size,
+          colorName: item.colorName,
+          colorHex: item.colorHex,
+          price: item.product.price,
+          quantity: item.quantity
+        };
+      });
 
       await createOrder({
         customerName: customerName.trim(),

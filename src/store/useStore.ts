@@ -719,8 +719,18 @@ let state: StoreState = {
     const dateStr = new Date().toISOString().replace('T', ' ').substring(0, 16);
     const uniqueId = 'ord-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7);
 
+    const sanitizedItems = (orderData.items || []).map((it) => {
+      const cleanImg = it.image && it.image.startsWith('http') ? it.image : '';
+      return {
+        ...it,
+        image: cleanImg,
+        images: undefined
+      };
+    });
+
     const newOrder: Order = {
       ...orderData,
+      items: sanitizedItems,
       id: uniqueId,
       orderNumber: nextOrderNum,
       createdAt: dateStr,
