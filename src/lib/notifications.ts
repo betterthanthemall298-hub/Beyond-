@@ -165,6 +165,154 @@ export async function requestNotificationPermission(): Promise<NotificationPermi
 const PUSH_TOPIC_KEY = 'beyond_push_notification_topic';
 export const DEFAULT_PUSH_TOPIC = 'beyond_orders_alerts';
 
+export const DEFAULT_VAPID_PUBLIC_KEY = 'BHAMTxXec0bTYWzXsI9g008qduH8qwo4TwIhPP4PHXYO75OpBapmlCHQA06gvVRzNGz-Ur609mhV9iYqpggJgNw';
+
+/**
+ * Converts a Base64URL string into a Uint8Array required for applicationServerKey
+ */
+export function urlBase64ToUint8Array(base64String: string): Uint8Array {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding)
+    .replace(/-/g, '+')
+    .replace(/_/g, '/');
+
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+
+  for (let i = 0; i < rawData.length; ++i) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+  return outputArray;
+}
+
+/**
+ * Retrieves VAPID public key from backend server with fallback
+ */
+export async function getVapidPublicKey(): Promise<string> {
+  try {
+    const res = await fetch('/api/push/vapid-public-key');
+    if (res.ok) {
+      const data = await res.json();
+      if (data?.publicKey) return data.publicKey;
+    }
+  } catch (e) {
+    console.warn('Failed to fetch VAPID key from backend, using fallback:', e);
+  }
+  return DEFAULT_VAPID_PUBLIC_KEY;
+}
+
+/**
+ * Checks if current browser has an active PushManager subscription
+ */
+export async function getActivePushSubscription(): Promise<PushSubscription | null> {
+  if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return null;
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    return await reg.pushManager.getSubscription();
+  } catch (err) {
+    console.warn('Failed to get push subscription:', err);
+    return null;
+  }
+}
+
+/**
+ * Subscribes the current device to Web Push Notifications using VAPID keys,
+ * and registers the subscription in both the Node.js backend and Firestore database.
+ */
+export async function subscribeToWebPush(): Promise<{
+  success: boolean;
+  subscription?: PushSubscription;
+  error?: string;
+  isIosBrowser?: boolean;
+}> {
+  if (typeof window === 'undefined') {
+    return { success: false, error: 'نافذة المتصفح غير متاحة' };
+  }
+
+  // Detect iOS Safari running in regular browser (not standalone PWA)
+  const isIos = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
+  const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (navigator as any).standalone;
+
+  if (isIos && !isStandalone && !('PushManager' in window)) {
+    return {
+      success: false,
+      isIosBrowser: true,
+      error: 'على الآيفون، يجب إضافة الموقع إلى الشاشة الرئيسية (Add to Home Screen) أولاً لتفعيل إشعارات الويب Web Push.'
+    };
+  }
+
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+    return {
+      success: false,
+      error: 'المتصفح الحالي لا يدعم Web Push Notifications.'
+    };
+  }
+
+  try {
+    // 1. Request user permission
+    const permission = await Notification.requestPermission();
+    if (permission !== 'granted') {
+      return { success: false, error: 'تم رفض إذن الإشعارات من إعدادات المتصفح' };
+    }
+
+    // 2. Wait for Service Worker registration
+    const registration = await navigator.serviceWorker.ready;
+
+    // 3. Obtain VAPID Public Key
+    const vapidKey = await getVapidPublicKey();
+    const applicationServerKey = urlBase64ToUint8Array(vapidKey);
+
+    // 4. Subscribe with PushManager
+    let subscription = await registration.pushManager.getSubscription();
+    if (!subscription) {
+      subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey
+      });
+    }
+
+    const subJson = subscription.toJSON();
+
+    // 5. Send subscription to Node.js backend server
+    try {
+      await fetch('/api/push/subscribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          subscription: subJson,
+          userAgent: navigator.userAgent
+        })
+      });
+    } catch (apiErr) {
+      console.warn('Backend server push registration warning:', apiErr);
+    }
+
+    // 6. Save subscription into Firestore database (push_subscriptions collection)
+    try {
+      const { setDoc, doc } = await import('firebase/firestore');
+      const { db } = await import('./firebase');
+      const safeId = btoa(subscription.endpoint.slice(-40)).replace(/[^a-zA-Z0-9]/g, '_');
+      await setDoc(
+        doc(db, 'push_subscriptions', safeId),
+        {
+          endpoint: subscription.endpoint,
+          keys: subJson.keys || {},
+          userAgent: navigator.userAgent,
+          createdAt: new Date().toISOString()
+        },
+        { merge: true }
+      );
+    } catch (firestoreErr) {
+      console.warn('Firestore subscription save warning:', firestoreErr);
+    }
+
+    return { success: true, subscription };
+  } catch (err: any) {
+    console.error('Push subscription failed:', err);
+    return { success: false, error: err?.message || 'تعذر تسجيل اشتراك الإشعارات' };
+  }
+}
+
 export function getPushTopic(): string {
   if (typeof window === 'undefined') return DEFAULT_PUSH_TOPIC;
   return localStorage.getItem(PUSH_TOPIC_KEY) || DEFAULT_PUSH_TOPIC;
@@ -288,7 +436,41 @@ export async function dispatchRemotePushNotification(order: {
   const title = 'أوردر جديد';
   const body = `اسم العميل: ${order.customerName}\nسعر الأوردر: ${order.total} ج.م`;
 
-  // 1. Send via ntfy.sh (Direct lock-screen push)
+  // 1. Send via Backend Web Push API (Native Web Push Notifications using VAPID)
+  try {
+    let extraSubscriptions: any[] = [];
+    try {
+      const { collection, getDocs } = await import('firebase/firestore');
+      const { db } = await import('./firebase');
+      const snap = await getDocs(collection(db, 'push_subscriptions'));
+      snap.forEach((docSnap) => {
+        const d = docSnap.data();
+        if (d && d.endpoint && d.keys) {
+          extraSubscriptions.push({
+            endpoint: d.endpoint,
+            keys: d.keys
+          });
+        }
+      });
+    } catch {
+      // ignore Firestore fetch error if offline
+    }
+
+    await fetch('/api/push/send-order-alert', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        orderNumber: order.orderNumber,
+        customerName: order.customerName,
+        total: order.total,
+        extraSubscriptions
+      })
+    });
+  } catch (webPushErr) {
+    console.warn('Backend Web Push dispatch warning:', webPushErr);
+  }
+
+  // 2. Send via ntfy.sh (Direct lock-screen push)
   try {
     const origin = typeof window !== 'undefined' ? window.location.origin : '';
     await fetch(`https://ntfy.sh/${topic}`, {
@@ -305,7 +487,7 @@ export async function dispatchRemotePushNotification(order: {
     console.warn('ntfy remote push error:', err);
   }
 
-  // 2. Send via Telegram Bot if configured
+  // 3. Send via Telegram Bot if configured
   if (order.telegramBotToken && order.telegramChatId) {
     try {
       const msg = `🛍️ *أوردر جديد*\nاسم العميل: ${order.customerName}\nسعر الأوردر: ${order.total} ج.م`;
@@ -370,6 +552,15 @@ export async function testPhoneNotification(topicOverride?: string) {
   const body = 'اسم العميل: أحمد محمد\nسعر الأوردر: 890 ج.م';
 
   await sendDesktopNotification(title, body);
+
+  try {
+    await fetch('/api/push/test', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    });
+  } catch (e) {
+    console.warn('Direct backend test push error:', e);
+  }
 
   await dispatchRemotePushNotification({
     orderNumber: '101',

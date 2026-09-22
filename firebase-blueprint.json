@@ -76,9 +76,25 @@
         "updatedAt": { "type": "string" }
       },
       "required": ["username", "password"]
+    },
+    "PushSubscription": {
+      "title": "PushSubscription",
+      "description": "Admin browser and device push subscription for Web Push Notifications",
+      "type": "object",
+      "properties": {
+        "endpoint": { "type": "string" },
+        "keys": { "type": "object" },
+        "userAgent": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["endpoint"]
     }
   },
   "firestore": {
+    "/push_subscriptions/{subId}": {
+      "schema": "PushSubscription",
+      "description": "Admin Web Push subscriptions"
+    },
     "/products/{productId}": {
       "schema": "Product",
       "description": "Products available in the store"

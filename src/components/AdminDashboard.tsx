@@ -56,7 +56,9 @@ import {
   testPhoneNotification,
   getPushTopic,
   setPushTopic,
-  DEFAULT_PUSH_TOPIC
+  DEFAULT_PUSH_TOPIC,
+  subscribeToWebPush,
+  getActivePushSubscription
 } from '../lib/notifications';
 
 export const AdminDashboard: React.FC = () => {
@@ -209,6 +211,16 @@ export const AdminDashboard: React.FC = () => {
   const [showExportDropdown, setShowExportDropdown] = useState(false);
   const [soundNotificationOn, setSoundNotificationOn] = useState<boolean>(isSoundNotificationEnabled());
   const [notificationPerm, setNotificationPerm] = useState<string>(getNotificationPermission());
+  const [isSubscribingPush, setIsSubscribingPush] = useState(false);
+  const [isPushActive, setIsPushActive] = useState(false);
+
+  useEffect(() => {
+    getActivePushSubscription().then((sub) => {
+      if (sub) {
+        setIsPushActive(true);
+      }
+    });
+  }, []);
 
   // Settings state
   const [storeName, setStoreName] = useState(settings.storeName);
@@ -1569,25 +1581,62 @@ export const AdminDashboard: React.FC = () => {
                   )}
                 </button>
 
-                {/* Browser Permission Button */}
-                {notificationPerm !== 'granted' ? (
+                {/* Web Push Permission & Subscription Button */}
+                {notificationPerm !== 'granted' || !isPushActive ? (
                   <button
                     id="admin-enable-browser-notifications-btn"
                     type="button"
+                    disabled={isSubscribingPush}
                     onClick={async () => {
-                      const res = await requestNotificationPermission();
-                      setNotificationPerm(res);
+                      setIsSubscribingPush(true);
+                      try {
+                        const res = await subscribeToWebPush();
+                        if (res.success) {
+                          setNotificationPerm('granted');
+                          setIsPushActive(true);
+                          setTestPushMessage('✅ تم تفعيل Web Push بنجاح وحفظ الاشتراك بالداتابيز! ستصلك إشعارات الأوردرات حتى لو الموقع مقفول.');
+                        } else if (res.isIosBrowser) {
+                          setTestPushMessage('⚠️ على أجهزة الآيفون: اضغط زر المشاركة (Share ⬆️) ثم "إضافة إلى الشاشة الرئيسية" (Add to Home Screen) وافتح الموقع منها لتفعيل الإشعارات.');
+                        } else {
+                          setTestPushMessage(res.error || 'تعذر تفعيل الإشعارات');
+                        }
+                      } catch (err: any) {
+                        setTestPushMessage(err?.message || 'حدث خطأ أثناء تفعيل الإشعارات');
+                      } finally {
+                        setIsSubscribingPush(false);
+                      }
                     }}
-                    className="px-3 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-stone-950 text-xs font-bold flex items-center gap-1.5 transition-colors shadow-sm"
+                    className="px-3 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-stone-950 text-xs font-bold flex items-center gap-1.5 transition-colors shadow-sm disabled:opacity-50"
                   >
                     <Bell className="w-3.5 h-3.5" />
-                    <span>تفعيل الإشعارات</span>
+                    <span>{isSubscribingPush ? 'جاري التفعيل...' : 'فعّل الإشعارات (Web Push)'}</span>
                   </button>
                 ) : (
-                  <span className="px-3 py-2 rounded-xl bg-stone-800/80 border border-stone-700 text-stone-300 text-xs flex items-center gap-1.5">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>الإشعارات مفعّلة</span>
-                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="px-3 py-2 rounded-xl bg-stone-800/80 border border-stone-700 text-stone-300 text-xs flex items-center gap-1.5">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>الإشعارات مفعّلة</span>
+                    </span>
+                    <button
+                      type="button"
+                      disabled={isSubscribingPush}
+                      onClick={async () => {
+                        setIsSubscribingPush(true);
+                        try {
+                          const res = await subscribeToWebPush();
+                          if (res.success) {
+                            setTestPushMessage('✅ تم تجديد وتأكيد اشتراك Web Push في السيرفر والداتابيز بنجاح');
+                          }
+                        } finally {
+                          setIsSubscribingPush(false);
+                        }
+                      }}
+                      title="إعادة مزامنة وتأكيد الاشتراك"
+                      className="px-2.5 py-2 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-300 text-xs border border-stone-700 transition-colors"
+                    >
+                      {isSubscribingPush ? '...' : 'تحديث'}
+                    </button>
+                  </div>
                 )}
 
                 {/* Test Notification Button */}
