@@ -12,7 +12,8 @@ import {
   getDocs,
   where
 } from 'firebase/firestore';
-import { db, testFirebaseConnection, sanitizeForFirestore } from '../lib/firebase';
+import { signInAnonymously, signOut } from 'firebase/auth';
+import { db, auth, testFirebaseConnection, sanitizeForFirestore } from '../lib/firebase';
 import {
   triggerNewOrderNotification,
   dispatchRemotePushNotification,
@@ -206,10 +207,22 @@ function loadLocalDeviceData() {
         }
       : INITIAL_SETTINGS;
 
+    let savedCreds: AdminCredentials = { username: 'admin', password: 'admin123' };
+    try {
+      const storedCreds = localStorage.getItem('beyond_admin_creds');
+      if (storedCreds) {
+        const parsedC = JSON.parse(storedCreds);
+        if (parsedC?.username && parsedC?.password) {
+          savedCreds = parsedC;
+        }
+      }
+    } catch {}
+
     return {
       cart: parsed.cart || [],
       wishlist: parsed.wishlist || [],
       isAdminLoggedIn: Boolean(parsed.isAdminLoggedIn),
+      adminCredentials: savedCreds,
       activeView: (parsed.activeView === 'admin' ? 'admin' : 'home') as ActiveView,
       settings: parsedSettings,
       products: Array.isArray(parsed.products) ? parsed.products : INITIAL_PRODUCTS,
@@ -223,6 +236,7 @@ function loadLocalDeviceData() {
       cart: [],
       wishlist: [],
       isAdminLoggedIn: false,
+      adminCredentials: { username: 'admin', password: 'admin123' },
       activeView: 'home' as ActiveView,
       settings: INITIAL_SETTINGS,
       products: INITIAL_PRODUCTS,
@@ -318,7 +332,12 @@ let state: StoreState = {
   setIsAdminLoggedIn: (logged) => {
     update(() => ({ isAdminLoggedIn: logged }));
     if (logged) {
+      signInAnonymously(auth).catch((err) => {
+        console.warn('[Auth] Anonymous sign-in notice:', err);
+      });
       syncOrdersIfAdmin();
+    } else {
+      signOut(auth).catch(() => {});
     }
   },
   shareModalProduct: null,
@@ -376,8 +395,8 @@ let state: StoreState = {
   // Cloud status
   isFirebaseConnected: true,
 
-  // Admin Credentials (default: admin / admin123 until changed by owner)
-  adminCredentials: {
+  // Admin Credentials (stored securely in local device storage)
+  adminCredentials: localDeviceData.adminCredentials || {
     username: 'admin',
     password: 'admin123'
   },
@@ -393,29 +412,28 @@ let state: StoreState = {
         });
         return false;
       }
-      await setDoc(doc(db, 'admin_auth', 'credentials'), sanitizeForFirestore({
+      const updatedCreds = {
         username: cleanUser,
         password: cleanPass,
         updatedAt: new Date().toISOString()
-      }));
+      };
+      try {
+        localStorage.setItem('beyond_admin_creds', JSON.stringify(updatedCreds));
+      } catch {}
       update(() => ({
-        adminCredentials: {
-          username: cleanUser,
-          password: cleanPass,
-          updatedAt: new Date().toISOString()
-        }
+        adminCredentials: updatedCreds
       }));
       state.addToast({
         type: 'success',
         title: 'تم تحديث بيانات الدخول بنجاح',
-        description: 'يمكنك الآن تسجيل الدخول بالبيانات الجديدة من أي جهاز'
+        description: 'تم حفظ بيانات الدخول الجديدة في هذا الجهاز بأمان'
       });
       return true;
     } catch (err) {
-      console.error('Failed to update admin credentials in Firestore:', err);
+      console.error('Failed to update admin credentials:', err);
       state.addToast({
         type: 'error',
-        title: 'تعذر الحفظ السحابي',
+        title: 'تعذر حفظ البيانات',
         description: 'يرجى المحاولة مرة أخرى'
       });
       return false;
@@ -426,6 +444,10 @@ let state: StoreState = {
     const cleanPass = passInput.trim();
     const creds = state.adminCredentials;
     if (cleanUser === creds.username && cleanPass === creds.password) {
+      // Connect admin session to Firebase Auth so request.auth != null for secure Firestore rules
+      signInAnonymously(auth).catch((authErr) => {
+        console.warn('[Auth] Anonymous sign-in notice:', authErr);
+      });
       update(() => ({ isAdminLoggedIn: true }));
       syncOrdersIfAdmin();
       state.addToast({
@@ -1070,6 +1092,7 @@ function setupFirebaseSync() {
 
   // 1. Orders Listener (Sync only if logged in as Admin to keep customer page lightning fast)
   if (state.isAdminLoggedIn) {
+    signInAnonymously(auth).catch(() => {});
     syncOrdersIfAdmin();
   }
 
@@ -1125,23 +1148,7 @@ function setupFirebaseSync() {
     console.error('Error setting up settings listener:', err);
   }
 
-  // 4. Admin Credentials Listener
-  try {
-    onSnapshot(doc(db, 'admin_auth', 'credentials'), (docSnap) => {
-      if (docSnap.exists()) {
-        const data = docSnap.data() as AdminCredentials;
-        if (data.username && data.password) {
-          update(() => ({ adminCredentials: data }));
-        }
-      }
-    }, (error) => {
-      console.warn('Admin credentials onSnapshot error:', error);
-    });
-  } catch (err) {
-    console.error('Error setting up admin credentials listener:', err);
-  }
-
-  // 5. Coupons Listener
+  // 4. Coupons Listener
   try {
     onSnapshot(collection(db, 'coupons'), (snapshot) => {
       if (!snapshot.empty) {

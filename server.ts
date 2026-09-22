@@ -10,26 +10,33 @@ import { getFirestore, collection, getDocs, getDoc, deleteDoc, doc, setDoc } fro
 dotenv.config();
 
 // VAPID keys configuration
-const DEFAULT_VAPID_PUBLIC_KEY = 'BK-YuLDxApl-Gt3kS6awCGqMNUcsodMJB6UG79jJ1_fgeP_pQ34_Xv2ofazDyt6-jak32qW16snJQvOLwgy9BLk';
-const DEFAULT_VAPID_PRIVATE_KEY = 'WS9dkAbvZ4ob8rumdNTcf2T9htduSNvJnr2hk6tByeM';
-const DEFAULT_VAPID_EMAIL = 'mailto:betterthanthemall298@gmail.com';
+const VAPID_PUBLIC_KEY = (process.env.VAPID_PUBLIC_KEY || '').trim();
+const VAPID_PRIVATE_KEY = (process.env.VAPID_PRIVATE_KEY || '').trim();
 
-const VAPID_PUBLIC_KEY = (process.env.VAPID_PUBLIC_KEY || DEFAULT_VAPID_PUBLIC_KEY).trim();
-const VAPID_PRIVATE_KEY = (process.env.VAPID_PRIVATE_KEY || DEFAULT_VAPID_PRIVATE_KEY).trim();
+if (!VAPID_PRIVATE_KEY) {
+  console.error('[Push ERROR] VAPID_PRIVATE_KEY environment variable is missing! Web Push notifications cannot be signed without a valid private key.');
+}
+if (!VAPID_PUBLIC_KEY) {
+  console.error('[Push ERROR] VAPID_PUBLIC_KEY environment variable is missing! Admin devices cannot register push subscriptions.');
+}
 
 // Ensure VAPID subject is a valid URL/URI (RFC 8292 requires mailto: or https://)
-let rawVapidEmail = (process.env.VAPID_EMAIL || DEFAULT_VAPID_EMAIL).trim();
+let rawVapidEmail = (process.env.VAPID_EMAIL || 'mailto:admin@store.local').trim();
 if (!rawVapidEmail.startsWith('mailto:') && !rawVapidEmail.startsWith('https://') && !rawVapidEmail.startsWith('http://')) {
   rawVapidEmail = `mailto:${rawVapidEmail}`;
 }
 const VAPID_EMAIL = rawVapidEmail;
 
-// Initialize web-push
-try {
-  webpush.setVapidDetails(VAPID_EMAIL, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
-  console.log(`[Push] VAPID configuration initialized successfully with subject: ${VAPID_EMAIL}`);
-} catch (err) {
-  console.error('[Push] Failed to set VAPID details:', err);
+// Initialize web-push only if valid keys are provided via environment variables
+if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
+  try {
+    webpush.setVapidDetails(VAPID_EMAIL, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
+    console.log(`[Push] VAPID configuration initialized successfully with subject: ${VAPID_EMAIL}`);
+  } catch (err) {
+    console.error('[Push] Failed to set VAPID details:', err);
+  }
+} else {
+  console.warn('[Push WARNING] Web Push is not initialized because VAPID keys are missing from environment variables.');
 }
 
 // Connect to Firestore for multi-device push subscription persistence across all admin instances

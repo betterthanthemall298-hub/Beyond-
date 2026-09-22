@@ -1,4 +1,5 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
+import { getAuth } from 'firebase/auth';
 import {
   initializeFirestore,
   getFirestore,
@@ -18,6 +19,7 @@ const firebaseConfig = {
 };
 
 export const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
+export const auth = getAuth(app);
 
 const targetDatabaseId =
   config.firestoreDatabaseId && config.firestoreDatabaseId !== '(default)'

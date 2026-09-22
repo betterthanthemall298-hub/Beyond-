@@ -66,8 +66,7 @@ import {
   setPushTopic,
   DEFAULT_PUSH_TOPIC,
   subscribeToWebPush,
-  getActivePushSubscription,
-  initFCMBackgroundListener
+  getActivePushSubscription
 } from '../lib/notifications';
 
 export const AdminDashboard: React.FC = () => {
@@ -230,7 +229,6 @@ export const AdminDashboard: React.FC = () => {
         setIsPushActive(true);
       }
     });
-    initFCMBackgroundListener();
   }, []);
 
   // Settings state

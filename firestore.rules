@@ -1,67 +1,77 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Products can be read by everyone, and managed by store owners
+    // 1. Products: read by all customers, write/update/delete by admin only
     match /products/{productId} {
-      allow read, write: if true;
+      allow read: if true;
+      allow write: if request.auth != null;
     }
 
-    // Orders can be created by any customer from any device, and managed by admin
+    // 2. Orders: any customer can create a new order, but only admin can read, modify or delete orders
     match /orders/{orderId} {
-      allow read, write: if true;
+      allow create: if true;
+      allow read, update, delete: if request.auth != null;
     }
 
-    // Settings can be read by all customers, and updated by admin
+    // 3. Settings: read by all customers, updated by admin only
     match /settings/{settingId} {
-      allow read, write: if true;
+      allow read: if true;
+      allow write: if request.auth != null;
     }
 
-    // Admin authentication credentials can be read and updated
+    // 4. Admin credentials: completely forbidden from frontend access under any circumstance
     match /admin_auth/{authId} {
-      allow read, write: if true;
+      allow read, write: if false;
     }
 
-    // Web Push & FCM Tokens for Admin Notifications
+    // 5. Push Subscriptions: devices can register/create subscriptions, but cannot read other devices' endpoints
     match /push_subscriptions/{subId} {
-      allow read, write: if true;
+      allow create: if true;
+      allow read, update, delete: if request.auth != null;
     }
 
     match /fcm_tokens/{tokenId} {
-      allow read, write: if true;
+      allow create: if true;
+      allow read, update, delete: if request.auth != null;
     }
 
-    // Coupons
+    // 6. Coupons: read by all customers to validate discounts, created/updated by admin only
     match /coupons/{couponId} {
-      allow read, write: if true;
+      allow read: if true;
+      allow write: if request.auth != null;
     }
 
-    // Customer review images
-    match /reviewImages/{reviewId} {
-      allow read, write: if true;
-    }
-
-    // Shipping governorates
+    // 7. Shipping governorates: read by all, edited by admin only
     match /governorates/{govId} {
-      allow read, write: if true;
+      allow read: if true;
+      allow write: if request.auth != null;
     }
 
-    // Realtime Admin Order & Test Broadcast Alerts (Instant cross-device push synchronization)
+    // 8. Realtime Admin Broadcast Alerts (Instant cross-device push synchronization)
     match /admin_alerts/{alertId} {
-      allow read, write: if true;
+      allow read: if true;
+      allow create: if true;
+      allow update, delete: if request.auth != null;
     }
 
-    // Test connection doc
-    match /test/{docId} {
-      allow read, write: if true;
+    // 9. Customer review images
+    match /reviewImages/{reviewId} {
+      allow read, create: if true;
+      allow update, delete: if request.auth != null;
     }
 
-    // Analytics (Daily aggregates & customer sessions)
+    // 10. Analytics
     match /analytics_daily/{dateId} {
       allow read, write: if true;
     }
 
     match /analytics_sessions/{sessionId} {
       allow read, write: if true;
+    }
+
+    // Default deny for any unspecified path
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }
