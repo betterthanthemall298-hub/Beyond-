@@ -14,6 +14,7 @@ import {
 } from 'firebase/firestore';
 import { db, testFirebaseConnection, sanitizeForFirestore } from '../lib/firebase';
 import { triggerNewOrderNotification, dispatchRemotePushNotification } from '../lib/notifications';
+import { trackAddToCart, trackInitiateCheckout, trackOrderCompleted } from '../lib/analytics';
 import {
   Product,
   CartItem,
@@ -299,7 +300,12 @@ let state: StoreState = {
   isSizeAdvisorOpen: false,
   setIsSizeAdvisorOpen: (open) => update(() => ({ isSizeAdvisorOpen: open })),
   isCheckoutOpen: false,
-  setIsCheckoutOpen: (open) => update(() => ({ isCheckoutOpen: open })),
+  setIsCheckoutOpen: (open) => {
+    update(() => ({ isCheckoutOpen: open }));
+    if (open) {
+      trackInitiateCheckout().catch(() => {});
+    }
+  },
   isAdminLoggedIn: localDeviceData.isAdminLoggedIn,
   setIsAdminLoggedIn: (logged) => {
     update(() => ({ isAdminLoggedIn: logged }));
@@ -545,6 +551,12 @@ let state: StoreState = {
       title: 'تمت الإضافة إلى السلة بنجاح',
       description: `${product.name} (مقاس ${size}${finalColorName ? ` - ${finalColorName}` : ''})`
     });
+
+    trackAddToCart({
+      productId: product.id,
+      productName: product.name,
+      price: product.price
+    }).catch(() => {});
   },
   updateCartQuantity: (itemId, quantity) => {
     if (quantity <= 0) {
@@ -781,6 +793,11 @@ let state: StoreState = {
       cart: [],
       appliedCoupon: null
     }));
+
+    trackOrderCompleted({
+      orderNumber: newOrder.orderNumber,
+      total: newOrder.total
+    }).catch(() => {});
 
     return newOrder;
   },

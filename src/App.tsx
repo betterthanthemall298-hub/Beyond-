@@ -19,6 +19,7 @@ import { ToastContainer } from './components/ToastContainer';
 import { ShopifyOrderBanner } from './components/ShopifyOrderBanner';
 import { ProductShareModal } from './components/ProductShareModal';
 import { Footer } from './components/Footer';
+import { trackVisit } from './lib/analytics';
 
 interface HistoryState {
   view: ActiveView;
@@ -51,6 +52,10 @@ export default function App() {
   const isPoppingRef = React.useRef(false);
   const isInitializedRef = React.useRef(false);
   const lastPushedKeyRef = React.useRef<string>('');
+
+  React.useEffect(() => {
+    trackVisit().catch(() => {});
+  }, []);
 
   // Always keep latest state in a ref so popstate handler always sees fresh values
   const stateRef = React.useRef({

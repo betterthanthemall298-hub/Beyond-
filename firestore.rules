@@ -45,5 +45,14 @@ service cloud.firestore {
     match /test/{docId} {
       allow read, write: if true;
     }
+
+    // Analytics (Daily aggregates & customer sessions)
+    match /analytics_daily/{dateId} {
+      allow read, write: if true;
+    }
+
+    match /analytics_sessions/{sessionId} {
+      allow read, write: if true;
+    }
   }
 }

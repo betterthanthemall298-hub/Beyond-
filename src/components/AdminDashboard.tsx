@@ -37,8 +37,10 @@ import {
   Copy,
   ExternalLink,
   Send,
-  Info
+  Info,
+  BarChart3
 } from 'lucide-react';
+import { AdminCustomerAnalytics } from './AdminCustomerAnalytics';
 import { HoodieCategory, HoodieSize, OrderStatus, Product, ProductColor, OrderItem } from '../types';
 import { compressImageFile } from '../lib/imageCompressor';
 import {
@@ -93,7 +95,7 @@ export const AdminDashboard: React.FC = () => {
   } = useStore();
 
   const [activeTab, setActiveTab] = useState<
-    'products' | 'orders' | 'coupons' | 'reviews' | 'shipping' | 'settings' | 'security'
+    'products' | 'orders' | 'analytics' | 'coupons' | 'reviews' | 'shipping' | 'settings' | 'security'
   >('products');
 
   // Login Form States
@@ -847,6 +849,20 @@ export const AdminDashboard: React.FC = () => {
         >
           <ShoppingBag className="w-4 h-4" />
           <span>الطلبات والشحنات ({orders.length})</span>
+        </button>
+
+        <button
+          id="admin-tab-analytics"
+          type="button"
+          onClick={() => setActiveTab('analytics')}
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 ${
+            activeTab === 'analytics'
+              ? 'bg-amber-500 text-black shadow-sm'
+              : 'bg-stone-900 border border-stone-800 text-stone-300 hover:text-white'
+          }`}
+        >
+          <BarChart3 className="w-4 h-4" />
+          <span>تحليل العملاء والأداء</span>
         </button>
 
         <button
@@ -2082,6 +2098,11 @@ export const AdminDashboard: React.FC = () => {
         </div>
         );
       })()}
+
+      {/* TAB CONTENT: CUSTOMER ANALYTICS */}
+      {activeTab === 'analytics' && (
+        <AdminCustomerAnalytics />
+      )}
 
       {/* TAB CONTENT: COUPONS */}
       {activeTab === 'coupons' && (
