@@ -122,6 +122,10 @@
     "/governorates/{govId}": {
       "schema": "object",
       "description": "Shipping costs per governorate"
+    },
+    "/admin_alerts/{alertId}": {
+      "schema": "object",
+      "description": "Realtime admin notifications and order alerts broadcast across devices"
     }
   }
 }

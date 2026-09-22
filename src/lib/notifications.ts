@@ -323,12 +323,88 @@ export async function subscribeToWebPush(): Promise<{
           endpoint: subscription.endpoint,
           keys: subJson.keys || {},
           userAgent: navigator.userAgent,
+          priority: 'high',
           createdAt: new Date().toISOString()
         },
         { merge: true }
       );
     } catch (firestoreErr) {
       console.warn('Firestore subscription save warning:', firestoreErr);
+    }
+
+    // 7. Register and configure Firebase Cloud Messaging (FCM) for instant High-Priority background delivery
+    let fcmToken: string | null = null;
+    try {
+      const { getMessaging, getToken, isSupported, onMessage } = await import('firebase/messaging');
+      const { app } = await import('./firebase');
+
+      if (await isSupported()) {
+        const messaging = getMessaging(app);
+
+        // Register dedicated firebase-messaging-sw.js
+        let fcmSwReg: ServiceWorkerRegistration | undefined;
+        try {
+          fcmSwReg = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+        } catch {
+          fcmSwReg = registration;
+        }
+
+        fcmToken = await getToken(messaging, {
+          vapidKey,
+          serviceWorkerRegistration: fcmSwReg || registration
+        });
+
+        if (fcmToken) {
+          console.log('[FCM] Successfully acquired High-Priority FCM token:', fcmToken);
+
+          // Save FCM token in Firestore fcm_tokens collection
+          const { setDoc, doc } = await import('firebase/firestore');
+          const { db } = await import('./firebase');
+          const tokenDocId = btoa(fcmToken.slice(-36)).replace(/[^a-zA-Z0-9]/g, '_');
+
+          await setDoc(
+            doc(db, 'fcm_tokens', tokenDocId),
+            {
+              token: fcmToken,
+              userAgent: navigator.userAgent,
+              priority: 'high',
+              updatedAt: new Date().toISOString()
+            },
+            { merge: true }
+          );
+
+          // Inform Node.js backend of new FCM token
+          await fetch('/api/push/fcm-token', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              token: fcmToken,
+              userAgent: navigator.userAgent
+            })
+          }).catch(() => {});
+        }
+
+        // Foreground real-time message handler (zero-latency in-app WhatsApp chime)
+        onMessage(messaging, (payload) => {
+          console.log('[FCM] Foreground push received with High Priority:', payload);
+          playOrderNotificationSound();
+          triggerPhoneVibration();
+
+          const title = payload.notification?.title || payload.data?.title || 'أوردر جديد 🛒';
+          const body = payload.notification?.body || payload.data?.body || 'وصل طلب جديد في متجر Beyond';
+          const logo = payload.notification?.icon || payload.data?.icon || payload.data?.logoUrl || '/beyond-logo.jpg';
+
+          sendDesktopNotification(title, body, logo);
+          dispatchShopifyOrderAlert({
+            orderNumber: payload.data?.orderNumber || '101',
+            customerName: payload.data?.customerName || 'عميل جديد',
+            total: Number(payload.data?.total) || 890,
+            logoUrl: logo
+          });
+        });
+      }
+    } catch (fcmInitErr) {
+      console.warn('[FCM] Setup warning (non-fatal, Web Push fallback active):', fcmInitErr);
     }
 
     return { success: true, subscription };
@@ -350,9 +426,91 @@ export function setPushTopic(topic: string) {
 }
 
 /**
+ * Automatically initializes Firebase Cloud Messaging (FCM) background and foreground handlers
+ * if permission was previously granted, ensuring zero-latency push delivery without user interaction.
+ */
+export async function initFCMBackgroundListener() {
+  if (typeof window === 'undefined' || !('Notification' in window) || Notification.permission !== 'granted') {
+    return;
+  }
+
+  try {
+    const { getMessaging, getToken, isSupported, onMessage } = await import('firebase/messaging');
+    const { app } = await import('./firebase');
+
+    if (await isSupported()) {
+      const messaging = getMessaging(app);
+      const vapidKey = await getVapidPublicKey();
+
+      let fcmSwReg: ServiceWorkerRegistration | undefined;
+      try {
+        fcmSwReg = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+      } catch {
+        fcmSwReg = await navigator.serviceWorker.ready;
+      }
+
+      const token = await getToken(messaging, {
+        vapidKey,
+        serviceWorkerRegistration: fcmSwReg
+      });
+
+      if (token) {
+        // Keep Firestore and server tokens updated
+        const { setDoc, doc } = await import('firebase/firestore');
+        const { db } = await import('./firebase');
+        const tokenDocId = btoa(token.slice(-36)).replace(/[^a-zA-Z0-9]/g, '_');
+
+        setDoc(
+          doc(db, 'fcm_tokens', tokenDocId),
+          {
+            token,
+            userAgent: navigator.userAgent,
+            priority: 'high',
+            updatedAt: new Date().toISOString()
+          },
+          { merge: true }
+        ).catch(() => {});
+
+        fetch('/api/push/fcm-token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token, userAgent: navigator.userAgent })
+        }).catch(() => {});
+      }
+
+      onMessage(messaging, (payload) => {
+        console.log('[FCM] Instant order notification received:', payload);
+        playOrderNotificationSound();
+        triggerPhoneVibration();
+
+        const title = payload.notification?.title || payload.data?.title || 'أوردر جديد 🛒';
+        const body = payload.notification?.body || payload.data?.body || 'وصل طلب جديد في متجر Beyond';
+        const logo = payload.notification?.icon || payload.data?.icon || payload.data?.logoUrl || '/beyond-logo.jpg';
+
+        sendDesktopNotification(title, body, logo);
+        dispatchShopifyOrderAlert({
+          orderNumber: payload.data?.orderNumber || '101',
+          customerName: payload.data?.customerName || 'عميل جديد',
+          total: Number(payload.data?.total) || 890,
+          logoUrl: logo
+        });
+      });
+    }
+  } catch (err) {
+    console.warn('[FCM] Auto-init notice:', err);
+  }
+}
+
+
+/**
  * Send a phone / desktop notification using Service Worker (so it works when browser tab is inactive/backgrounded)
  */
-export async function sendDesktopNotification(title: string, body: string, onClick?: () => void) {
+export async function sendDesktopNotification(
+  title: string,
+  body: string,
+  logoUrl?: string,
+  onClick?: () => void
+) {
   if (!isDesktopNotificationSupported()) return;
 
   // Attempt vibration
@@ -362,6 +520,8 @@ export async function sendDesktopNotification(title: string, body: string, onCli
     return;
   }
 
+  const finalIcon = logoUrl || '/beyond-logo.jpg';
+
   // 1. Try Service Worker showNotification first (Standard for Android & mobile background notifications)
   if ('serviceWorker' in navigator) {
     try {
@@ -369,8 +529,8 @@ export async function sendDesktopNotification(title: string, body: string, onCli
       if (registration && 'showNotification' in registration) {
         await registration.showNotification(title, {
           body,
-          icon: '/icon-192.png',
-          badge: '/icon-192.png',
+          icon: finalIcon,
+          badge: finalIcon,
           tag: 'beyond-order-' + Date.now(),
           vibrate: [250, 100, 250, 100, 250],
           data: { url: '/?view=admin' }
@@ -387,8 +547,8 @@ export async function sendDesktopNotification(title: string, body: string, onCli
     if ('Notification' in window && Notification.permission === 'granted') {
       const notification = new Notification(title, {
         body,
-        icon: '/icon-192.png',
-        badge: '/icon-192.png',
+        icon: finalIcon,
+        badge: finalIcon,
         tag: 'beyond-order-' + Date.now()
       });
 
@@ -414,6 +574,7 @@ export interface ShopifyOrderAlertData {
   itemsCount?: number;
   itemsSummary?: string;
   timestamp: number;
+  logoUrl?: string;
 }
 
 const shopifyAlertListeners = new Set<(data: ShopifyOrderAlertData) => void>();
@@ -441,7 +602,7 @@ export function dispatchShopifyOrderAlert(data: Omit<ShopifyOrderAlertData, 'id'
 }
 
 /**
- * Dispatches remote background push notification to phone lock screen
+ * Dispatches remote background push notification to phone lock screen with zero latency
  */
 export async function dispatchRemotePushNotification(order: {
   orderNumber: string;
@@ -454,49 +615,55 @@ export async function dispatchRemotePushNotification(order: {
   pushTopic?: string;
   telegramBotToken?: string;
   telegramChatId?: string;
+  logoUrl?: string;
 }) {
   const topic = (order.pushTopic && order.pushTopic.trim()) || getPushTopic();
   const title = 'أوردر جديد';
   const body = `اسم العميل: ${order.customerName}\nسعر الأوردر: ${order.total} ج.م`;
+  const logo = order.logoUrl || '/beyond-logo.jpg';
 
-  // 1. Send via Backend Web Push API (Native Web Push Notifications using VAPID)
+  // Broadcast instantly to Firestore admin_alerts collection for instant WebSocket push to all open devices
   try {
-    let extraSubscriptions: any[] = [];
-    try {
-      const { collection, getDocs } = await import('firebase/firestore');
-      const { db } = await import('./firebase');
-      const snap = await getDocs(collection(db, 'push_subscriptions'));
-      snap.forEach((docSnap) => {
-        const d = docSnap.data();
-        if (d && d.endpoint && d.keys) {
-          extraSubscriptions.push({
-            endpoint: d.endpoint,
-            keys: d.keys
-          });
-        }
-      });
-    } catch {
-      // ignore Firestore fetch error if offline
-    }
+    const { doc, setDoc } = await import('firebase/firestore');
+    const { db } = await import('./firebase');
+    const alertId = 'alert-' + Date.now();
+    setDoc(doc(db, 'admin_alerts', alertId), {
+      id: alertId,
+      orderNumber: order.orderNumber,
+      customerName: order.customerName,
+      total: order.total,
+      governorate: order.governorate || '',
+      itemsCount: order.itemsCount || 1,
+      title,
+      body,
+      logoUrl: logo,
+      createdAt: new Date().toISOString()
+    }).catch(() => {});
+  } catch {
+    // ignore
+  }
 
-    await fetch('/api/push/send-order-alert', {
+  // 1. Dispatch Web Push and external services in parallel (Non-blocking high-speed execution)
+  const tasks: Promise<any>[] = [];
+
+  // Backend Web Push API
+  tasks.push(
+    fetch('/api/push/send-order-alert', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         orderNumber: order.orderNumber,
         customerName: order.customerName,
         total: order.total,
-        extraSubscriptions
+        logoUrl: logo
       })
-    });
-  } catch (webPushErr) {
-    console.warn('Backend Web Push dispatch warning:', webPushErr);
-  }
+    }).catch((err) => console.warn('WebPush API warning:', err))
+  );
 
-  // 2. Send via ntfy.sh (Direct lock-screen push)
-  try {
-    const origin = typeof window !== 'undefined' ? window.location.origin : '';
-    await fetch(`https://ntfy.sh/${topic}`, {
+  // ntfy.sh direct push
+  const origin = typeof window !== 'undefined' ? window.location.origin : '';
+  tasks.push(
+    fetch(`https://ntfy.sh/${topic}`, {
       method: 'POST',
       headers: {
         'Title': title,
@@ -505,16 +672,14 @@ export async function dispatchRemotePushNotification(order: {
         'Click': origin ? `${origin}/?view=admin` : '/?view=admin'
       },
       body: body
-    });
-  } catch (err) {
-    console.warn('ntfy remote push error:', err);
-  }
+    }).catch((err) => console.warn('ntfy warning:', err))
+  );
 
-  // 3. Send via Telegram Bot if configured
+  // Telegram if configured
   if (order.telegramBotToken && order.telegramChatId) {
-    try {
-      const msg = `🛍️ *أوردر جديد*\nاسم العميل: ${order.customerName}\nسعر الأوردر: ${order.total} ج.م`;
-      await fetch(`https://api.telegram.org/bot${order.telegramBotToken}/sendMessage`, {
+    const msg = `🛍️ *أوردر جديد - Beyond*\nاسم العميل: ${order.customerName}\nسعر الأوردر: ${order.total} ج.م`;
+    tasks.push(
+      fetch(`https://api.telegram.org/bot${order.telegramBotToken}/sendMessage`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -522,11 +687,11 @@ export async function dispatchRemotePushNotification(order: {
           text: msg,
           parse_mode: 'Markdown'
         })
-      });
-    } catch (err) {
-      console.warn('Telegram push error:', err);
-    }
+      }).catch((err) => console.warn('Telegram warning:', err))
+    );
   }
+
+  await Promise.allSettled(tasks);
 }
 
 /**
@@ -538,7 +703,8 @@ export function triggerNewOrderNotification(
   total: number,
   governorate?: string,
   itemsCount?: number,
-  itemsSummary?: string
+  itemsSummary?: string,
+  logoUrl?: string
 ) {
   playOrderNotificationSound();
   triggerPhoneVibration();
@@ -548,45 +714,74 @@ export function triggerNewOrderNotification(
     total,
     governorate,
     itemsCount,
-    itemsSummary
+    itemsSummary,
+    logoUrl
   });
 
   const title = 'أوردر جديد';
   const body = `اسم العميل: ${customerName}\nسعر الأوردر: ${total} ج.م`;
 
-  sendDesktopNotification(title, body, () => {
+  sendDesktopNotification(title, body, logoUrl, () => {
     window.focus();
   });
 }
 
 /**
- * Test phone notification directly for the store manager
+ * Test phone notification directly for the store manager with instantaneous delivery
  */
-export async function testPhoneNotification(topicOverride?: string): Promise<{
+export async function testPhoneNotification(topicOverride?: string, customLogoUrl?: string): Promise<{
   success: boolean;
   sentCount: number;
   totalSubscribers: number;
   error?: string;
 }> {
+  const logo = customLogoUrl || '/beyond-logo.jpg';
+
+  // 1. Instant local feedback on current device
   playOrderNotificationSound();
   triggerPhoneVibration();
   dispatchShopifyOrderAlert({
     orderNumber: '101',
     customerName: 'أحمد محمد',
-    total: 890
+    total: 890,
+    logoUrl: logo
   });
 
-  const title = 'أوردر جديد';
+  const title = 'أوردر تجريبي جديد';
   const body = 'اسم العميل: أحمد محمد\nسعر الأوردر: 890 ج.م';
 
-  await sendDesktopNotification(title, body);
+  sendDesktopNotification(title, body, logo);
+
+  // 2. Real-time broadcast to all other open admin devices via Firestore WebSocket (<100ms)
+  try {
+    const { doc, setDoc } = await import('firebase/firestore');
+    const { db } = await import('./firebase');
+    const alertId = 'test-' + Date.now();
+    setDoc(doc(db, 'admin_alerts', alertId), {
+      id: alertId,
+      type: 'test',
+      orderNumber: '101',
+      customerName: 'أحمد محمد',
+      total: 890,
+      title: 'أوردر جديد',
+      body: 'اسم العميل: أحمد محمد\nسعر الأوردر: 890 ج.م',
+      logoUrl: logo,
+      createdAt: new Date().toISOString()
+    }).catch(() => {});
+  } catch (err) {
+    console.warn('Realtime broadcast warning:', err);
+  }
 
   const result = { success: true, sentCount: 0, totalSubscribers: 0, error: '' };
 
+  // 3. High-urgency Web Push to background & locked devices via backend
   try {
     const res = await fetch('/api/push/test', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' }
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        logoUrl: logo
+      })
     });
     if (res.ok) {
       const data = await res.json();
@@ -602,11 +797,13 @@ export async function testPhoneNotification(topicOverride?: string): Promise<{
     result.error = e?.message || 'Failed to reach push server';
   }
 
-  await dispatchRemotePushNotification({
+  // 4. Also trigger ntfy as backup in background without blocking
+  dispatchRemotePushNotification({
     orderNumber: '101',
     customerName: 'أحمد محمد',
     total: 890,
-    pushTopic: topicOverride
+    pushTopic: topicOverride,
+    logoUrl: logo
   }).catch(() => {});
 
   return result;

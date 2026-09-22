@@ -13,7 +13,14 @@ import {
   where
 } from 'firebase/firestore';
 import { db, testFirebaseConnection, sanitizeForFirestore } from '../lib/firebase';
-import { triggerNewOrderNotification, dispatchRemotePushNotification } from '../lib/notifications';
+import {
+  triggerNewOrderNotification,
+  dispatchRemotePushNotification,
+  playOrderNotificationSound,
+  triggerPhoneVibration,
+  dispatchShopifyOrderAlert,
+  sendDesktopNotification
+} from '../lib/notifications';
 import { trackAddToCart, trackInitiateCheckout, trackOrderCompleted } from '../lib/analytics';
 import {
   Product,
@@ -146,7 +153,8 @@ export interface StoreState {
 
   // Shipping & Governorates (synced with Firebase Firestore)
   governorates: GovernorateShipping[];
-  updateGovernorateCost: (name: string, newCost: number) => Promise<void>;
+  updateGovernorateCost: (name: string, newCost: number, deliveryDays?: string) => Promise<void>;
+  saveAllGovernorates: (newList: GovernorateShipping[]) => Promise<void>;
 
   // Store Settings (synced with Firebase Firestore)
   settings: StoreSettings;
@@ -772,6 +780,7 @@ let state: StoreState = {
     try {
       const totalItems = newOrder.items.reduce((sum, it) => sum + (it.quantity || 1), 0);
       const summary = newOrder.items.map((it) => `${it.productName} (${it.size})`).join(', ');
+      const logo = state.settings.notificationLogoUrl || state.settings.brandLogo || '/beyond-logo.jpg';
       dispatchRemotePushNotification({
         orderNumber: newOrder.orderNumber,
         customerName: newOrder.customerName,
@@ -782,7 +791,8 @@ let state: StoreState = {
         address: newOrder.address,
         pushTopic: state.settings.pushNotificationTopic,
         telegramBotToken: state.settings.telegramBotToken,
-        telegramChatId: state.settings.telegramChatId
+        telegramChatId: state.settings.telegramChatId,
+        logoUrl: logo
       }).catch(() => {});
     } catch {
       // Non-blocking notification dispatch
@@ -910,20 +920,53 @@ let state: StoreState = {
 
   // Shipping & Governorates
   governorates: localDeviceData.governorates || INITIAL_GOVERNORATES,
-  updateGovernorateCost: async (name, newCost) => {
+  updateGovernorateCost: async (name, newCost, deliveryDays) => {
+    const updatedList = state.governorates.map((g) =>
+      g.name === name ? { ...g, cost: newCost, ...(deliveryDays ? { deliveryDays } : {}) } : g
+    );
+    update(() => ({ governorates: updatedList }));
     try {
-      await setDoc(doc(db, 'governorates', name), sanitizeForFirestore({ name, cost: newCost }));
+      await setDoc(
+        doc(db, 'settings', 'shipping'),
+        sanitizeForFirestore({
+          list: updatedList,
+          updatedAt: new Date().toISOString()
+        }),
+        { merge: true }
+      );
+      await setDoc(
+        doc(db, 'governorates', name),
+        sanitizeForFirestore({ name, cost: newCost, ...(deliveryDays ? { deliveryDays } : {}) })
+      );
     } catch (err) {
       console.error('Failed to update governorate cost:', err);
     }
-    update((prev) => ({
-      governorates: prev.governorates.map((g) =>
-        g.name === name ? { ...g, cost: newCost } : g
-      )
-    }));
     state.addToast({
       type: 'info',
       title: `تم تحديث سعر الشحن لمحافظة ${name} إلى ${newCost} ج.م`
+    });
+  },
+  saveAllGovernorates: async (newList) => {
+    update(() => ({ governorates: newList }));
+    try {
+      await setDoc(
+        doc(db, 'settings', 'shipping'),
+        sanitizeForFirestore({
+          list: newList,
+          updatedAt: new Date().toISOString()
+        }),
+        { merge: true }
+      );
+      // Update individual docs in background for maximum compatibility
+      for (const item of newList) {
+        setDoc(doc(db, 'governorates', item.name), sanitizeForFirestore(item)).catch(() => {});
+      }
+    } catch (err) {
+      console.error('Failed to save all governorates:', err);
+    }
+    state.addToast({
+      type: 'success',
+      title: 'تم حفظ وتحديث كافة أسعار الشحن سحابياً لجميع الزوار'
     });
   },
 
@@ -1002,7 +1045,8 @@ function syncOrdersIfAdmin() {
                 newOrder.total,
                 newOrder.governorate,
                 itemsCount,
-                summary
+                summary,
+                state.settings.notificationLogoUrl || state.settings.brandLogo || '/beyond-logo.jpg'
               );
             }
           });
@@ -1129,6 +1173,68 @@ function setupFirebaseSync() {
     });
   } catch (err) {
     console.error('Error setting up review images listener:', err);
+  }
+
+  // 7. Shipping Governorates Real-Time Listener
+  try {
+    onSnapshot(doc(db, 'settings', 'shipping'), (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        if (Array.isArray(data?.list) && data.list.length > 0) {
+          update(() => ({ governorates: data.list }));
+        }
+      } else {
+        // Seed Firestore with default governorates
+        setDoc(doc(db, 'settings', 'shipping'), sanitizeForFirestore({
+          list: INITIAL_GOVERNORATES,
+          updatedAt: new Date().toISOString()
+        })).catch(() => {});
+      }
+    }, (error) => {
+      console.warn('Shipping governorates onSnapshot error:', error);
+    });
+  } catch (err) {
+    console.error('Error setting up shipping listener:', err);
+  }
+
+  // 8. Real-time Admin Notification & Test Broadcast Listener (Direct cross-device sync <100ms)
+  let isFirstAlertSnapshot = true;
+  try {
+    const alertsQuery = query(collection(db, 'admin_alerts'), limit(25));
+    onSnapshot(alertsQuery, (snapshot) => {
+      if (!isFirstAlertSnapshot && !snapshot.empty) {
+        snapshot.docChanges().forEach((change) => {
+          if (change.type === 'added') {
+            const alertData = change.doc.data();
+            const createdAt = alertData.createdAt ? new Date(alertData.createdAt).getTime() : Date.now();
+            // Trigger only for recent alerts (within last 60 seconds)
+            if (Date.now() - createdAt < 60000) {
+              const finalLogo = alertData.logoUrl || state.settings.notificationLogoUrl || state.settings.brandLogo || '/beyond-logo.jpg';
+              playOrderNotificationSound();
+              triggerPhoneVibration();
+              dispatchShopifyOrderAlert({
+                orderNumber: alertData.orderNumber || '101',
+                customerName: alertData.customerName || 'عميل جديد',
+                total: alertData.total || 0,
+                governorate: alertData.governorate,
+                itemsCount: alertData.itemsCount,
+                itemsSummary: alertData.itemsSummary,
+                logoUrl: finalLogo
+              });
+
+              const title = alertData.title || 'أوردر جديد';
+              const body = alertData.body || `اسم العميل: ${alertData.customerName}\nسعر الأوردر: ${alertData.total} ج.م`;
+              sendDesktopNotification(title, body, finalLogo).catch(() => {});
+            }
+          }
+        });
+      }
+      isFirstAlertSnapshot = false;
+    }, (error) => {
+      console.warn('Admin alerts onSnapshot error:', error);
+    });
+  } catch (err) {
+    console.error('Error setting up admin alerts listener:', err);
   }
 }
 

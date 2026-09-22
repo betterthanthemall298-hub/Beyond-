@@ -5,7 +5,7 @@ import webpush from 'web-push';
 import dotenv from 'dotenv';
 import fs from 'fs';
 import { initializeApp, getApps } from 'firebase/app';
-import { getFirestore, collection, getDocs, deleteDoc, doc, setDoc } from 'firebase/firestore';
+import { getFirestore, collection, getDocs, getDoc, deleteDoc, doc, setDoc } from 'firebase/firestore';
 
 dotenv.config();
 
@@ -61,8 +61,45 @@ interface SubscriberRecord {
   docId?: string;
 }
 
+// In-memory cache for fast push dispatch with zero latency
+let cachedSubscribers: SubscriberRecord[] = [];
+let lastSubscriberFetchTime = 0;
+const SUBSCRIBER_CACHE_TTL = 15000; // 15 seconds
+
+// Helper to retrieve brand logo from Firestore settings
+let cachedBrandLogo = '';
+let lastLogoFetchTime = 0;
+
+async function getStoreBrandLogo(): Promise<string> {
+  const now = Date.now();
+  if (cachedBrandLogo && now - lastLogoFetchTime < 30000) {
+    return cachedBrandLogo;
+  }
+  if (firestoreDb) {
+    try {
+      const docSnap = await getDoc(doc(firestoreDb, 'settings', 'general'));
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        if (data?.brandLogo) {
+          cachedBrandLogo = data.brandLogo;
+          lastLogoFetchTime = now;
+          return cachedBrandLogo;
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+  return cachedBrandLogo || '/icon-192.png';
+}
+
 // Helper to retrieve all active subscriptions from memory and Firestore
-async function getAllActiveSubscribers(): Promise<SubscriberRecord[]> {
+async function getAllActiveSubscribers(forceRefresh = false): Promise<SubscriberRecord[]> {
+  const now = Date.now();
+  if (!forceRefresh && cachedSubscribers.length > 0 && now - lastSubscriberFetchTime < SUBSCRIBER_CACHE_TTL) {
+    return cachedSubscribers;
+  }
+
   const subscriberMap = new Map<string, SubscriberRecord>();
 
   // 1. In-memory subscriptions
@@ -94,7 +131,9 @@ async function getAllActiveSubscribers(): Promise<SubscriberRecord[]> {
     }
   }
 
-  return Array.from(subscriberMap.values());
+  cachedSubscribers = Array.from(subscriberMap.values());
+  lastSubscriberFetchTime = now;
+  return cachedSubscribers;
 }
 
 async function startServer() {
@@ -158,6 +197,11 @@ async function startServer() {
     });
   });
 
+  // 2b. Optional token registration endpoint
+  app.post('/api/push/fcm-token', (_req, res) => {
+    return res.json({ success: true });
+  });
+
   // 3. Unsubscribe Web Push Subscription
   app.post('/api/push/unsubscribe', async (req, res) => {
     const { endpoint } = req.body || {};
@@ -188,7 +232,7 @@ async function startServer() {
 
   // 5. Send order notification to ALL admin devices using Web Push API
   app.post('/api/push/send-order-alert', async (req, res) => {
-    const { orderNumber, customerName, total, extraSubscriptions } = req.body || {};
+    const { orderNumber, customerName, total, extraSubscriptions, logoUrl, icon } = req.body || {};
 
     const allSubscribers = await getAllActiveSubscribers();
     const subscriberMap = new Map<string, SubscriberRecord>();
@@ -208,14 +252,18 @@ async function startServer() {
       }
     }
 
+    const finalLogo = logoUrl || icon || (await getStoreBrandLogo()) || '/icon-192.png';
+
     const payload = JSON.stringify({
       title: 'أوردر جديد',
       body: `اسم العميل: ${customerName || 'عميل جديد'}\nسعر الأوردر: ${total || 0} ج.م`,
-      icon: '/icon-192.png',
-      badge: '/icon-192.png',
+      icon: finalLogo,
+      badge: finalLogo,
+      logoUrl: finalLogo,
       url: '/?view=admin',
       orderNumber: String(orderNumber || ''),
-      tag: `order-${orderNumber || Date.now()}`
+      tag: `order-${orderNumber || Date.now()}`,
+      timestamp: Date.now()
     });
 
     const sendPromises: Promise<{ endpoint: string; success: boolean; error?: string }>[] = [];
@@ -231,8 +279,12 @@ async function startServer() {
             },
             payload,
             {
-              TTL: 86400, // 24 hours
-              urgency: 'high'
+              TTL: 60, // Immediate high-priority delivery, no 24-hour queuing
+              urgency: 'high',
+              headers: {
+                Urgency: 'high',
+                Topic: 'order-alert'
+              }
             }
           )
           .then(() => ({ endpoint: sub.endpoint, success: true }))
@@ -250,13 +302,17 @@ async function startServer() {
     const sentCount = results.filter((r) => r.success).length;
     const failedCount = results.filter((r) => !r.success).length;
 
-    // Prune dead subscriptions from memory and Firestore
-    deadSubscribers.forEach((sub) => {
-      pushSubscriptions.delete(sub.endpoint);
-      if (sub.docId && firestoreDb) {
-        deleteDoc(doc(firestoreDb, 'push_subscriptions', sub.docId)).catch(() => {});
-      }
-    });
+    // Prune dead subscriptions from memory and Firestore asynchronously
+    if (deadSubscribers.length > 0) {
+      setTimeout(() => {
+        deadSubscribers.forEach((sub) => {
+          pushSubscriptions.delete(sub.endpoint);
+          if (sub.docId && firestoreDb) {
+            deleteDoc(doc(firestoreDb, 'push_subscriptions', sub.docId)).catch(() => {});
+          }
+        });
+      }, 0);
+    }
 
     console.log(`[Push] Order #${orderNumber} alert sent. Success: ${sentCount}, Failed: ${failedCount}, Pruned: ${deadSubscribers.length}`);
 
@@ -270,7 +326,7 @@ async function startServer() {
 
   // 6. Test push notification endpoint (Sends to ALL subscribed admin devices)
   app.post('/api/push/test', async (req, res) => {
-    const { subscription } = req.body || {};
+    const { subscription, logoUrl, icon } = req.body || {};
     const allSubscribers = await getAllActiveSubscribers();
     const subscriberMap = new Map<string, SubscriberRecord>();
 
@@ -292,13 +348,17 @@ async function startServer() {
       });
     }
 
+    const finalLogo = logoUrl || icon || (await getStoreBrandLogo()) || '/icon-192.png';
+
     const payload = JSON.stringify({
       title: 'أوردر جديد',
       body: 'اسم العميل: أحمد محمد\nسعر الأوردر: 890 ج.م',
-      icon: '/icon-192.png',
-      badge: '/icon-192.png',
+      icon: finalLogo,
+      badge: finalLogo,
+      logoUrl: finalLogo,
       url: '/?view=admin',
-      tag: 'test-push-' + Date.now()
+      tag: 'test-push-' + Date.now(),
+      timestamp: Date.now()
     });
 
     const deadSubscribers: SubscriberRecord[] = [];
@@ -313,7 +373,14 @@ async function startServer() {
               keys: sub.keys
             },
             payload,
-            { TTL: 86400, urgency: 'high' }
+            {
+              TTL: 60, // Immediate high-priority delivery, no 24-hour queuing
+              urgency: 'high',
+              headers: {
+                Urgency: 'high',
+                Topic: 'order-alert'
+              }
+            }
           )
           .then(() => ({ success: true, endpoint: sub.endpoint }))
           .catch((err: any) => {
@@ -330,17 +397,19 @@ async function startServer() {
     const sentCount = results.filter((r) => r.success).length;
     const failedCount = results.filter((r) => !r.success).length;
 
-    // Prune dead subscriptions
-    deadSubscribers.forEach((sub) => {
-      pushSubscriptions.delete(sub.endpoint);
-      if (sub.docId && firestoreDb) {
-        deleteDoc(doc(firestoreDb, 'push_subscriptions', sub.docId)).catch(() => {});
-      }
-    });
+    if (deadSubscribers.length > 0) {
+      setTimeout(() => {
+        deadSubscribers.forEach((sub) => {
+          pushSubscriptions.delete(sub.endpoint);
+          if (sub.docId && firestoreDb) {
+            deleteDoc(doc(firestoreDb, 'push_subscriptions', sub.docId)).catch(() => {});
+          }
+        });
+      }, 0);
+    }
 
     return res.json({
       success: true,
-      message: 'Test notification processed for all admin devices',
       sentCount,
       failedCount,
       totalSubscribers: subscriberMap.size

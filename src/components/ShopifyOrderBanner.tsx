@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 
 export const ShopifyOrderBanner: React.FC = () => {
-  const { setActiveView, isAdminLoggedIn } = useStore();
+  const { setActiveView, isAdminLoggedIn, settings } = useStore();
   const [activeAlert, setActiveAlert] = useState<ShopifyOrderAlertData | null>(null);
   const [visible, setVisible] = useState(false);
 
@@ -44,6 +44,8 @@ export const ShopifyOrderBanner: React.FC = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  const displayLogo = activeAlert.logoUrl || settings.notificationLogoUrl || settings.brandLogo || '/beyond-logo.jpg';
+
   return (
     <div
       id="new-order-banner"
@@ -53,11 +55,21 @@ export const ShopifyOrderBanner: React.FC = () => {
         {/* Subtle top indicator */}
         <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-amber-500 via-amber-400 to-amber-600" />
 
-        {/* Header */}
+        {/* Header with Brand Logo */}
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
-              <Bell className="w-5 h-5 animate-bounce" />
+            <div className="w-10 h-10 rounded-xl overflow-hidden border border-amber-500/40 bg-stone-900 shrink-0 relative flex items-center justify-center shadow-md">
+              <img
+                src={displayLogo}
+                alt="Brand Logo"
+                className="w-full h-full object-contain p-0.5"
+                onError={(e) => {
+                  (e.currentTarget as HTMLImageElement).src = '/beyond-logo.jpg';
+                }}
+              />
+              <span className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full bg-amber-500 text-stone-950 flex items-center justify-center text-[9px] font-black shadow">
+                🔔
+              </span>
             </div>
             <div>
               <p className="text-sm font-black text-amber-400 tracking-tight">

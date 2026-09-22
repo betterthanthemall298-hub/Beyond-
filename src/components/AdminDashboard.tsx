@@ -38,10 +38,16 @@ import {
   ExternalLink,
   Send,
   Info,
-  BarChart3
+  BarChart3,
+  Save,
+  RotateCcw,
+  MapPin,
+  RefreshCw,
+  Sparkles
 } from 'lucide-react';
 import { AdminCustomerAnalytics } from './AdminCustomerAnalytics';
-import { HoodieCategory, HoodieSize, OrderStatus, Product, ProductColor, OrderItem } from '../types';
+import { HoodieCategory, HoodieSize, OrderStatus, Product, ProductColor, OrderItem, GovernorateShipping } from '../types';
+import { INITIAL_GOVERNORATES } from '../data/initialData';
 import { compressImageFile } from '../lib/imageCompressor';
 import {
   exportOrdersToCSV,
@@ -60,7 +66,8 @@ import {
   setPushTopic,
   DEFAULT_PUSH_TOPIC,
   subscribeToWebPush,
-  getActivePushSubscription
+  getActivePushSubscription,
+  initFCMBackgroundListener
 } from '../lib/notifications';
 
 export const AdminDashboard: React.FC = () => {
@@ -84,6 +91,7 @@ export const AdminDashboard: React.FC = () => {
     deleteReviewImage,
     governorates,
     updateGovernorateCost,
+    saveAllGovernorates,
     settings,
     updateSettings,
     openDeleteModal,
@@ -222,6 +230,7 @@ export const AdminDashboard: React.FC = () => {
         setIsPushActive(true);
       }
     });
+    initFCMBackgroundListener();
   }, []);
 
   // Settings state
@@ -240,6 +249,19 @@ export const AdminDashboard: React.FC = () => {
   const [copiedTopic, setCopiedTopic] = useState(false);
   const [isSendingTestPush, setIsSendingTestPush] = useState(false);
   const [testPushMessage, setTestPushMessage] = useState('');
+
+  // Manual Shipping Rates States
+  const [editableGovernorates, setEditableGovernorates] = useState<GovernorateShipping[]>(governorates);
+  const [shippingSearch, setShippingSearch] = useState('');
+  const [bulkRateInput, setBulkRateInput] = useState<string>('');
+  const [isSavingShipping, setIsSavingShipping] = useState(false);
+  const [hasUnsavedShippingChanges, setHasUnsavedShippingChanges] = useState(false);
+  const [newGovName, setNewGovName] = useState('');
+  const [newGovCost, setNewGovCost] = useState('60');
+
+  useEffect(() => {
+    setEditableGovernorates(governorates);
+  }, [governorates]);
 
   // Synchronize form states when settings or credentials load/update from Firestore
   useEffect(() => {
@@ -640,9 +662,11 @@ export const AdminDashboard: React.FC = () => {
 
   const handleSaveSettings = (e: React.FormEvent) => {
     e.preventDefault();
+    const cleanLogo = brandLogo.trim() || '/beyond-logo.jpg';
     updateSettings({
       storeName,
-      brandLogo,
+      brandLogo: cleanLogo,
+      notificationLogoUrl: cleanLogo,
       announcementText,
       whatsappNumber,
       whatsappUrl,
@@ -1631,7 +1655,7 @@ export const AdminDashboard: React.FC = () => {
                         if (res.success) {
                           setNotificationPerm('granted');
                           setIsPushActive(true);
-                          setTestPushMessage('✅ تم تفعيل Web Push بنجاح وحفظ الاشتراك بالداتابيز! ستصلك إشعارات الأوردرات حتى لو الموقع مقفول.');
+                          setTestPushMessage('✅ تم تفعيل إشعارات الويب الفورية بنجاح (High Priority Web Push)! ستصلك إشعارات الأوردرات في الخلفية وعلى شاشة القفل فوراً مثل واتساب.');
                         } else if (res.isInIframe) {
                           setTestPushMessage('⚠️ المتصفح يمنع طلب إذن الإشعارات داخل المعاينة. اضغط زر "فتح في تبويب مستقل" بالأعلى لتفعيلها فوراً.');
                         } else if (res.isIosBrowser) {
@@ -1648,13 +1672,13 @@ export const AdminDashboard: React.FC = () => {
                     className="px-3 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-stone-950 text-xs font-bold flex items-center gap-1.5 transition-colors shadow-sm disabled:opacity-50"
                   >
                     <Bell className="w-3.5 h-3.5" />
-                    <span>{isSubscribingPush ? 'جاري التفعيل...' : 'فعّل الإشعارات (Web Push)'}</span>
+                    <span>{isSubscribingPush ? 'جاري التفعيل...' : 'فعّل إشعارات الويب الفورية (High Priority)'}</span>
                   </button>
                 ) : (
                   <div className="flex items-center gap-1.5">
                     <span className="px-3 py-2 rounded-xl bg-stone-800/80 border border-stone-700 text-stone-300 text-xs flex items-center gap-1.5">
                       <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                      <span>الإشعارات مفعّلة</span>
+                      <span>إشعارات الويب الفورية مفعّلة</span>
                     </span>
                     <button
                       type="button"
@@ -1664,7 +1688,7 @@ export const AdminDashboard: React.FC = () => {
                         try {
                           const res = await subscribeToWebPush();
                           if (res.success) {
-                            setTestPushMessage('✅ تم تجديد وتأكيد اشتراك Web Push في السيرفر والداتابيز بنجاح');
+                            setTestPushMessage('✅ تم تجديد وتأكيد اشتراك الويب Push في السيرفر والداتابيز بنجاح');
                           }
                         } finally {
                           setIsSubscribingPush(false);
@@ -1691,13 +1715,14 @@ export const AdminDashboard: React.FC = () => {
                       } catch {}
                     }
                     try {
-                      const res = await testPhoneNotification(pushTopic);
+                      const activeLogo = brandLogo || settings.notificationLogoUrl || settings.brandLogo || '/beyond-logo.jpg';
+                      const res = await testPhoneNotification(pushTopic, activeLogo);
                       if (res.sentCount > 0) {
-                        setTestPushMessage(`✅ تم إرسال الإشعار لجميع الأجهزة المشتركة بنجاح! (استلمته ${res.sentCount} أجهزة من إجمالي ${res.totalSubscribers} مسجلة)`);
+                        setTestPushMessage(`✅ تم إرسال الإشعار لجميع الأجهزة المشتركة فورياً بشعار المتجر! (استلمته ${res.sentCount} أجهزة من إجمالي ${res.totalSubscribers} مسجلة)`);
                       } else if (res.totalSubscribers === 0) {
                         setTestPushMessage('⚠️ لا توجد أجهزة مسجلة حالياً! اضغط زر "فعّل الإشعارات" على كل جهاز أولاً.');
                       } else {
-                        setTestPushMessage(`⚠️ تم إرسال الطلب، تأكد من الضغط على زر "تحديث" في الأجهزة لتجديد المفاتيح.`);
+                        setTestPushMessage(`⚡ تم بث الإشعار فورياً عبر السحابة لجميع أجهزة الآدمن.`);
                       }
                     } catch {
                       setTestPushMessage('تم إرسال الإشعار التجريبي');
@@ -2407,40 +2432,324 @@ export const AdminDashboard: React.FC = () => {
         </div>
       )}
 
-      {/* TAB CONTENT: SHIPPING RATES (Governorate Name only as requested) */}
+      {/* TAB CONTENT: SHIPPING RATES - MANUAL & BULK MANAGEMENT */}
       {activeTab === 'shipping' && (
-        <div className="space-y-6">
-          <div>
-            <h3 className="text-sm font-bold text-stone-200">أسعار الشحن لمحافظات مصر الـ 27</h3>
-            <p className="text-xs text-stone-400 mt-0.5">
-              تحديد تكلفة الشحن لكل محافظة (تظهر في خانة المحافظات بالموقع)
-            </p>
+        <div className="space-y-6 max-w-4xl">
+          {/* Header */}
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-stone-900/80 border border-stone-800 p-5 rounded-2xl">
+            <div>
+              <div className="flex items-center gap-2">
+                <Truck className="w-5 h-5 text-amber-400" />
+                <h3 className="text-base font-bold text-stone-100">
+                  إدارة أسعار الشحن يدوياً لمحافظات مصر ({editableGovernorates.length} محافظة ومنطقة)
+                </h3>
+              </div>
+              <p className="text-xs text-stone-400 mt-1">
+                أدخل أو عدّل أسعار الشحن يدوياً لكل محافظة أو طبق سعراً موحداً بنقرة واحدة، وتُحفظ الأسعار فوراً لجميع الزوار.
+              </p>
+            </div>
+
+            {/* Bulk Save Button */}
+            <div className="flex items-center gap-2 shrink-0">
+              {hasUnsavedShippingChanges && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditableGovernorates(governorates);
+                    setHasUnsavedShippingChanges(false);
+                  }}
+                  className="px-3 py-2 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-300 text-xs font-semibold flex items-center gap-1.5 transition-colors border border-stone-700"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>تراجع</span>
+                </button>
+              )}
+              <button
+                id="admin-save-all-shipping-btn"
+                type="button"
+                disabled={isSavingShipping}
+                onClick={async () => {
+                  setIsSavingShipping(true);
+                  try {
+                    await saveAllGovernorates(editableGovernorates);
+                    setHasUnsavedShippingChanges(false);
+                  } catch (err) {
+                    console.error('Error saving shipping:', err);
+                  } finally {
+                    setIsSavingShipping(false);
+                  }
+                }}
+                className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all shadow-lg ${
+                  hasUnsavedShippingChanges
+                    ? 'bg-amber-500 hover:bg-amber-400 text-stone-950 ring-2 ring-amber-400/50 animate-pulse'
+                    : 'bg-emerald-600 hover:bg-emerald-500 text-white'
+                }`}
+              >
+                <Save className="w-4 h-4" />
+                <span>
+                  {isSavingShipping
+                    ? 'جاري الحفظ السحابي...'
+                    : hasUnsavedShippingChanges
+                    ? '💾 حفظ كافة أسعار الشحن الآن (تعديلات غير محفوظة)'
+                    : '✅ كافة أسعار الشحن محفوظة سحابياً'}
+                </span>
+              </button>
+            </div>
           </div>
 
-          <div className="bg-stone-900/60 border border-stone-800 rounded-2xl overflow-hidden shadow-xl max-w-xl">
-            <div className="max-h-96 overflow-y-auto">
+          {/* Quick Bulk Tools */}
+          <div className="bg-stone-900/60 border border-stone-800/90 rounded-2xl p-4 space-y-3">
+            <div className="flex items-center gap-2 text-xs font-bold text-stone-300">
+              <Sparkles className="w-4 h-4 text-amber-400" />
+              <span>أدوات الإدخال والتعديل السريع:</span>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3">
+              {/* Uniform rate tool */}
+              <div className="flex items-center gap-2 bg-stone-950 border border-stone-800 rounded-xl p-1.5">
+                <span className="text-xs text-stone-400 pr-2">سعر موحد للكل:</span>
+                <input
+                  id="bulk-shipping-rate-input"
+                  type="number"
+                  placeholder="مثال: 60"
+                  value={bulkRateInput}
+                  onChange={(e) => setBulkRateInput(e.target.value)}
+                  className="w-20 bg-stone-900 border border-stone-700 rounded-lg px-2.5 py-1 text-xs text-amber-400 font-mono text-center focus:border-amber-500"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    const rate = Number(bulkRateInput);
+                    if (isNaN(rate) || rate < 0) return;
+                    setEditableGovernorates((prev) =>
+                      prev.map((g) => ({ ...g, cost: rate }))
+                    );
+                    setHasUnsavedShippingChanges(true);
+                  }}
+                  className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-stone-950 text-xs font-bold transition-colors"
+                >
+                  تطبيق على الكل
+                </button>
+              </div>
+
+              {/* Preset 1: Cairo & Giza 45 / Rest 65 */}
+              <button
+                type="button"
+                onClick={() => {
+                  setEditableGovernorates((prev) =>
+                    prev.map((g) => {
+                      if (g.name.includes('القاهرة') || g.name.includes('الجيزة')) {
+                        return { ...g, cost: 45 };
+                      }
+                      if (g.name.includes('الإسكندرية') || g.name.includes('القليوبية')) {
+                        return { ...g, cost: 50 };
+                      }
+                      return { ...g, cost: 65 };
+                    })
+                  );
+                  setHasUnsavedShippingChanges(true);
+                }}
+                className="px-3 py-2 rounded-xl bg-stone-950 hover:bg-stone-800 text-stone-300 text-xs border border-stone-800 transition-colors"
+              >
+                القاهرة/الجيزة (45 ج.م) وباقي المحافظات (65 ج.م)
+              </button>
+
+              {/* Preset 2: Free Shipping */}
+              <button
+                type="button"
+                onClick={() => {
+                  setEditableGovernorates((prev) =>
+                    prev.map((g) => ({ ...g, cost: 0 }))
+                  );
+                  setHasUnsavedShippingChanges(true);
+                }}
+                className="px-3 py-2 rounded-xl bg-stone-950 hover:bg-stone-800 text-emerald-400 text-xs border border-stone-800 transition-colors"
+              >
+                شحن مجاني للجميع (0 ج.م)
+              </button>
+
+              {/* Reset to Default */}
+              <button
+                type="button"
+                onClick={() => {
+                  setEditableGovernorates(INITIAL_GOVERNORATES);
+                  setHasUnsavedShippingChanges(true);
+                }}
+                className="px-3 py-2 rounded-xl bg-stone-950 hover:bg-stone-800 text-rose-400 text-xs border border-stone-800 transition-colors flex items-center gap-1"
+              >
+                <RotateCcw className="w-3 h-3" />
+                <span>استعادة أسعار مصر الافتراضية</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Search & Add New Area */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+            {/* Search filter */}
+            <div className="relative flex-1 max-w-sm">
+              <Search className="w-4 h-4 text-stone-500 absolute right-3 top-1/2 -translate-y-1/2" />
+              <input
+                id="shipping-search-input"
+                type="text"
+                placeholder="ابحث عن محافظة (القاهرة، الإسكندرية، أسوان...)"
+                value={shippingSearch}
+                onChange={(e) => setShippingSearch(e.target.value)}
+                className="w-full bg-stone-900 border border-stone-800 rounded-xl pr-9 pl-3 py-2 text-xs text-stone-100 placeholder-stone-600 focus:border-amber-500"
+              />
+            </div>
+
+            {/* Add custom shipping zone */}
+            <div className="flex items-center gap-2 bg-stone-900 border border-stone-800 rounded-xl p-1.5">
+              <input
+                type="text"
+                placeholder="اسم منطقة جديدة..."
+                value={newGovName}
+                onChange={(e) => setNewGovName(e.target.value)}
+                className="w-32 bg-stone-950 border border-stone-800 rounded-lg px-2.5 py-1 text-xs text-stone-200 placeholder-stone-600 focus:border-amber-500"
+              />
+              <input
+                type="number"
+                placeholder="السعر"
+                value={newGovCost}
+                onChange={(e) => setNewGovCost(e.target.value)}
+                className="w-16 bg-stone-950 border border-stone-800 rounded-lg px-2 py-1 text-xs text-amber-400 font-mono text-center focus:border-amber-500"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  const trimmed = newGovName.trim();
+                  if (!trimmed) return;
+                  if (editableGovernorates.some((g) => g.name === trimmed)) {
+                    alert('هذه المنطقة أو المحافظة موجودة بالفعل');
+                    return;
+                  }
+                  setEditableGovernorates((prev) => [
+                    ...prev,
+                    { name: trimmed, cost: Number(newGovCost) || 60, deliveryDays: '2-4 أيام عمل' }
+                  ]);
+                  setNewGovName('');
+                  setHasUnsavedShippingChanges(true);
+                }}
+                className="px-3 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-stone-950 text-xs font-bold flex items-center gap-1 transition-colors"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>إضافة</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Governorates Table */}
+          <div className="bg-stone-900/70 border border-stone-800 rounded-2xl overflow-hidden shadow-xl">
+            <div className="max-h-[520px] overflow-y-auto">
               <table className="w-full text-right text-xs text-stone-300">
-                <thead className="sticky top-0 bg-stone-950 text-stone-400 uppercase text-[11px] border-b border-stone-800">
+                <thead className="sticky top-0 bg-stone-950 text-stone-400 uppercase text-[11px] border-b border-stone-800 z-10">
                   <tr>
-                    <th className="p-3.5">المحافظة</th>
+                    <th className="p-3.5">المحافظة / المنطقة</th>
+                    <th className="p-3.5">مدة التوصيل التقديرية</th>
                     <th className="p-3.5 text-center">تكلفة الشحن (ج.م)</th>
+                    <th className="p-3.5 text-center">إجراءات سريعة</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-stone-800/80">
-                  {governorates.map((gov) => (
-                    <tr key={gov.name} className="hover:bg-stone-900/90 transition-colors">
-                      <td className="p-3.5 font-bold text-stone-200">{gov.name}</td>
-                      <td className="p-3.5 text-center">
-                        <input
-                          id={`shipping-rate-${gov.name}`}
-                          type="number"
-                          value={gov.cost}
-                          onChange={(e) => updateGovernorateCost(gov.name, Number(e.target.value))}
-                          className="w-24 bg-stone-950 border border-stone-800 rounded-lg px-2.5 py-1 text-xs text-amber-400 font-mono text-center focus:border-amber-500"
-                        />
-                      </td>
-                    </tr>
-                  ))}
+                  {editableGovernorates
+                    .filter((gov) =>
+                      shippingSearch.trim()
+                        ? gov.name.toLowerCase().includes(shippingSearch.toLowerCase().trim())
+                        : true
+                    )
+                    .map((gov) => (
+                      <tr key={gov.name} className="hover:bg-stone-900/90 transition-colors">
+                        <td className="p-3.5 font-bold text-stone-200">
+                          <div className="flex items-center gap-2">
+                            <MapPin className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                            <span>{gov.name}</span>
+                          </div>
+                        </td>
+                        <td className="p-3.5">
+                          <input
+                            type="text"
+                            placeholder="مثال: 2-3 أيام عمل"
+                            value={gov.deliveryDays || '2-3 أيام عمل'}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setEditableGovernorates((prev) =>
+                                prev.map((g) =>
+                                  g.name === gov.name ? { ...g, deliveryDays: val } : g
+                                )
+                              );
+                              setHasUnsavedShippingChanges(true);
+                            }}
+                            className="w-32 bg-stone-950 border border-stone-800 rounded-lg px-2.5 py-1 text-xs text-stone-300 focus:border-amber-500"
+                          />
+                        </td>
+                        <td className="p-3.5 text-center">
+                          <div className="inline-flex items-center gap-1.5">
+                            {/* -10 button */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const newCost = Math.max(0, gov.cost - 10);
+                                setEditableGovernorates((prev) =>
+                                  prev.map((g) => (g.name === gov.name ? { ...g, cost: newCost } : g))
+                                );
+                                setHasUnsavedShippingChanges(true);
+                              }}
+                              className="w-6 h-6 rounded bg-stone-800 hover:bg-stone-700 text-stone-300 font-bold text-xs flex items-center justify-center transition-colors"
+                              title="تخفيض 10 ج.م"
+                            >
+                              -
+                            </button>
+
+                            {/* Manual Number Input */}
+                            <input
+                              id={`shipping-rate-${gov.name}`}
+                              type="number"
+                              min="0"
+                              value={gov.cost}
+                              onChange={(e) => {
+                                const val = Number(e.target.value);
+                                setEditableGovernorates((prev) =>
+                                  prev.map((g) =>
+                                    g.name === gov.name ? { ...g, cost: isNaN(val) ? 0 : val } : g
+                                  )
+                                );
+                                setHasUnsavedShippingChanges(true);
+                              }}
+                              className="w-20 bg-stone-950 border border-stone-700 focus:border-amber-500 rounded-lg px-2 py-1 text-xs text-amber-400 font-mono font-bold text-center"
+                            />
+
+                            {/* +10 button */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const newCost = gov.cost + 10;
+                                setEditableGovernorates((prev) =>
+                                  prev.map((g) => (g.name === gov.name ? { ...g, cost: newCost } : g))
+                                );
+                                setHasUnsavedShippingChanges(true);
+                              }}
+                              className="w-6 h-6 rounded bg-stone-800 hover:bg-stone-700 text-stone-300 font-bold text-xs flex items-center justify-center transition-colors"
+                              title="زيادة 10 ج.م"
+                            >
+                              +
+                            </button>
+                            <span className="text-[11px] text-stone-500">ج.م</span>
+                          </div>
+                        </td>
+                        <td className="p-3.5 text-center">
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              await updateGovernorateCost(gov.name, gov.cost, gov.deliveryDays);
+                            }}
+                            className="px-2.5 py-1 rounded-lg bg-stone-800 hover:bg-stone-700 text-amber-400 text-[11px] font-bold border border-stone-700 transition-colors"
+                            title="حفظ فوري لهذه المحافظة فقط"
+                          >
+                            حفظ
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
                 </tbody>
               </table>
             </div>
@@ -2452,38 +2761,47 @@ export const AdminDashboard: React.FC = () => {
       {activeTab === 'settings' && (
         <form
           onSubmit={handleSaveSettings}
-          className="bg-stone-900 border border-stone-800 rounded-2xl p-6 space-y-5 max-w-2xl"
+          className="bg-stone-900 border border-stone-800 rounded-2xl p-6 space-y-6 max-w-3xl"
         >
           <div>
-            <h3 className="text-sm font-bold text-stone-200">تخصيص بيانات وروابط التواصل للمتجر</h3>
+            <h3 className="text-base font-bold text-stone-100">تخصيص هوية المتجر وبيانات التواصل والإشعارات</h3>
             <p className="text-xs text-stone-400 mt-0.5">
-              يتم تحديث جميع الروابط والشعار في الواجهة الرئيسية فوراً بعد الحفظ
+              يتم تحديث جميع الروابط، الشعار، وأيقونة الإشعارات في الواجهة الرئيسية وإشعارات الهواتف فوراً.
             </p>
           </div>
 
-          <div className="space-y-4">
-            {/* Brand Logo Upload Section */}
-            <div className="p-4 rounded-xl bg-stone-950/80 border border-stone-800/90 space-y-3">
-              <label className="block text-xs font-bold text-amber-400">
-                شعار البراند (Brand Logo)
-              </label>
+          <div className="space-y-5">
+            {/* Brand & Notification Logo Upload Section */}
+            <div className="p-5 rounded-2xl bg-stone-950/90 border border-stone-800 space-y-4 shadow-inner">
+              <div className="flex items-center justify-between">
+                <div>
+                  <label className="block text-xs font-bold text-amber-400">
+                    شعار البراند وأيقونة الإشعارات (Brand & Notification Logo)
+                  </label>
+                  <p className="text-[11px] text-stone-400 mt-0.5">
+                    هذا الشعار هو الهوية البصرية لمتجر Beyond، وهو الأيقونة الرسمية التي تظهر في إشعارات الأوردرات الجديدة على شاشة قفل الهاتف والكمبيوتر بدلاً من أي شعار آخر.
+                  </p>
+                </div>
+              </div>
 
               <div className="flex flex-col sm:flex-row sm:items-center gap-4">
                 {/* Logo Preview */}
-                <div className="w-16 h-16 rounded-xl bg-stone-900 border border-stone-700 flex items-center justify-center overflow-hidden shrink-0 shadow-inner">
-                  {brandLogo ? (
-                    <img
-                      src={brandLogo}
-                      alt="Brand Logo Preview"
-                      className="w-full h-full object-contain p-1"
-                    />
-                  ) : (
-                    <span className="font-serif font-black text-amber-400 text-2xl">N</span>
-                  )}
+                <div className="w-20 h-20 rounded-2xl bg-stone-900 border-2 border-amber-500/40 flex items-center justify-center overflow-hidden shrink-0 shadow-lg relative group">
+                  <img
+                    src={brandLogo || '/beyond-logo.jpg'}
+                    alt="Brand Logo Preview"
+                    className="w-full h-full object-contain p-1"
+                    onError={(e) => {
+                      (e.currentTarget as HTMLImageElement).src = '/beyond-logo.jpg';
+                    }}
+                  />
+                  <span className="absolute bottom-1 right-1 w-5 h-5 rounded-full bg-amber-500 text-stone-950 flex items-center justify-center text-[10px] shadow font-black">
+                    🔔
+                  </span>
                 </div>
 
-                <div className="flex-1 space-y-2">
-                  <div className="flex items-center gap-2">
+                <div className="flex-1 space-y-2.5">
+                  <div className="flex flex-wrap items-center gap-2">
                     <input
                       ref={logoFileInputRef}
                       type="file"
@@ -2492,12 +2810,23 @@ export const AdminDashboard: React.FC = () => {
                       className="hidden"
                     />
                     <button
+                      id="admin-upload-brand-logo-btn"
                       type="button"
                       onClick={() => logoFileInputRef.current?.click()}
                       className="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-black text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm"
                     >
                       <Upload className="w-3.5 h-3.5" />
-                      <span>رفع لوجو من جهازك</span>
+                      <span>رفع لوجو مخصص من جهازك</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setBrandLogo('/beyond-logo.jpg')}
+                      className="px-3 py-2 rounded-xl bg-stone-900 hover:bg-stone-800 border border-amber-500/30 text-amber-300 text-xs font-semibold flex items-center gap-1 transition-colors"
+                      title="استخدام لوجو Beyond الرسمي"
+                    >
+                      <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                      <span>استخدام لوجو Beyond الذهبي</span>
                     </button>
 
                     {brandLogo && (
@@ -2507,25 +2836,85 @@ export const AdminDashboard: React.FC = () => {
                         className="px-3 py-2 rounded-xl bg-stone-900 hover:bg-stone-800 border border-stone-700 text-rose-400 text-xs font-semibold flex items-center gap-1 transition-colors"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
-                        <span>إزالة الشعار</span>
+                        <span>إزالة</span>
                       </button>
                     )}
                   </div>
 
-                  {/* Or image url input */}
+                  {/* Image URL input */}
                   <div>
                     <input
                       id="brand-logo-url-input"
                       type="url"
-                      placeholder="أو ضع رابط صورة اللوجو هنا (URL)..."
+                      placeholder="أو ضع رابط صورة اللوجو هنا مباشرة (URL)..."
                       value={brandLogo}
                       onChange={(e) => setBrandLogo(e.target.value)}
-                      className="w-full bg-stone-900 border border-stone-800 rounded-xl px-3 py-1.5 text-xs text-stone-100 placeholder-stone-600 focus:border-amber-500"
+                      className="w-full bg-stone-900 border border-stone-800 rounded-xl px-3 py-2 text-xs text-stone-100 placeholder-stone-600 focus:border-amber-500 font-mono"
                     />
                   </div>
-                  <p className="text-[11px] text-stone-500">
-                    يظهر اللوجو مباشرة في أعلى المتجر (شريط التنقل) وبجوار اسم المتجر.
-                  </p>
+                </div>
+              </div>
+
+              {/* Realistic Notification Mockup with this logo */}
+              <div className="mt-3 pt-3 border-t border-stone-800/80">
+                <p className="text-[11px] font-bold text-stone-300 mb-2 flex items-center gap-1.5">
+                  <Bell className="w-3.5 h-3.5 text-amber-400" />
+                  <span>معاينة شكل الإشعار عند وصول أوردر جديد بهذا اللوجو على هواتفكم وأجهزتكم:</span>
+                </p>
+
+                <div className="bg-stone-900/90 border border-amber-500/30 rounded-xl p-3 flex items-start gap-3 shadow-md max-w-md">
+                  <div className="w-10 h-10 rounded-xl overflow-hidden bg-black border border-amber-500/40 shrink-0 flex items-center justify-center">
+                    <img
+                      src={brandLogo || '/beyond-logo.jpg'}
+                      alt="Notification Logo"
+                      className="w-full h-full object-contain p-0.5"
+                      onError={(e) => {
+                        (e.currentTarget as HTMLImageElement).src = '/beyond-logo.jpg';
+                      }}
+                    />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-1">
+                      <span className="text-[11px] font-bold text-amber-400 truncate">
+                        {storeName || 'Beyond'} • أوردر جديد 🛒
+                      </span>
+                      <span className="text-[10px] text-stone-500 shrink-0">الآن</span>
+                    </div>
+                    <p className="text-xs text-stone-100 font-bold mt-0.5">
+                      اسم العميل: محمد أحمد
+                    </p>
+                    <p className="text-[11px] text-amber-400 font-bold">
+                      سعر الأوردر: 890 ج.م (القاهرة)
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-3 flex items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={isSendingTestPush}
+                    onClick={async () => {
+                      setIsSendingTestPush(true);
+                      if (soundNotificationOn) {
+                        try {
+                          playOrderNotificationSound();
+                        } catch {}
+                      }
+                      try {
+                        const activeLogo = brandLogo || '/beyond-logo.jpg';
+                        const res = await testPhoneNotification(pushTopic, activeLogo);
+                        setTestPushMessage(`✅ تم إرسال إشعار تجريبي باللوجو الجديد بنجاح!`);
+                      } catch {
+                        setTestPushMessage('تم إرسال الإشعار التجريبي');
+                      } finally {
+                        setIsSendingTestPush(false);
+                        setTimeout(() => setTestPushMessage(''), 7000);
+                      }
+                    }}
+                    className="px-3.5 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 text-xs font-bold flex items-center gap-1.5 transition-colors"
+                  >
+                    <span>📱 تجربة إرسال إشعار فوري بهذا اللوجو الآن</span>
+                  </button>
                 </div>
               </div>
             </div>

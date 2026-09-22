@@ -42,17 +42,23 @@ self.addEventListener('push', (event) => {
     }
   }
 
+  // Dynamic logo from store settings or fallback to Beyond brand logo
+  const finalIcon = data.icon || data.logoUrl || '/beyond-logo.jpg';
+
   // Ensure high-visibility notification options compatible with Android, iOS PWA, Windows & Mac
   const options = {
     body: data.body || 'وصل أوردر جديد في المتجر',
-    icon: '/icon-192.png',
-    badge: '/icon-192.png',
-    vibrate: [300, 100, 300, 100, 300],
+    icon: finalIcon,
+    badge: finalIcon,
+    image: data.image || undefined,
+    vibrate: [350, 100, 350, 100, 350],
     tag: data.tag || 'beyond-order-' + Date.now(),
     renotify: true,
+    requireInteraction: true, // Keep notification visible until dismissed (WhatsApp style)
     data: {
       url: data.url || '/?view=admin',
-      orderNumber: data.orderNumber || ''
+      orderNumber: data.orderNumber || '',
+      receivedAt: Date.now()
     },
     actions: [
       {

@@ -21,8 +21,12 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
-    // Web Push Subscriptions for Admin Notifications
+    // Web Push & FCM Tokens for Admin Notifications
     match /push_subscriptions/{subId} {
+      allow read, write: if true;
+    }
+
+    match /fcm_tokens/{tokenId} {
       allow read, write: if true;
     }
 
@@ -38,6 +42,11 @@ service cloud.firestore {
 
     // Shipping governorates
     match /governorates/{govId} {
+      allow read, write: if true;
+    }
+
+    // Realtime Admin Order & Test Broadcast Alerts (Instant cross-device push synchronization)
+    match /admin_alerts/{alertId} {
       allow read, write: if true;
     }
 

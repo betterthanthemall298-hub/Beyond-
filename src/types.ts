@@ -110,6 +110,7 @@ export interface StoreSettings {
   storeSubtitle: string;
   announcementText: string;
   brandLogo?: string;
+  notificationLogoUrl?: string;
   whatsappNumber: string;
   whatsappUrl: string;
   instagramUrl: string;
