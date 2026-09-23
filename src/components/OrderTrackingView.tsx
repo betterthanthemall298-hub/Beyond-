@@ -54,6 +54,27 @@ export const OrderTrackingView: React.FC = () => {
     }
   };
 
+  React.useEffect(() => {
+    try {
+      const savedQuery = localStorage.getItem('beyond_last_track_query');
+      if (savedQuery && savedQuery.trim()) {
+        const q = savedQuery.trim().toLowerCase();
+        setSearchInput(savedQuery.trim());
+        setSearched(true);
+        const hasLocal = orders.some(
+          (o) => o.orderNumber.toLowerCase().includes(q) || o.phone.includes(q)
+        );
+        if (!hasLocal) {
+          setIsSearchingRemote(true);
+          searchRemoteOrders(savedQuery.trim())
+            .then((res) => setRemoteResults(res))
+            .catch(() => {})
+            .finally(() => setIsSearchingRemote(false));
+        }
+      }
+    } catch {}
+  }, [orders]);
+
   const handleCancelOrderPrompt = (orderId: string, orderNumber: string) => {
     openDeleteModal({
       title: 'إلغاء وحذف الطلب',
