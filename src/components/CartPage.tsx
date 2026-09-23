@@ -8,7 +8,8 @@ import {
   ArrowRight,
   Tag,
   CheckCircle2,
-  X
+  X,
+  Package
 } from 'lucide-react';
 
 export const CartPage: React.FC = () => {
@@ -95,15 +96,27 @@ export const CartPage: React.FC = () => {
           </h1>
         </div>
 
-        <button
-          id="continue-shopping-btn"
-          type="button"
-          onClick={() => setActiveView('catalog')}
-          className="self-start sm:self-auto inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-stone-900 hover:bg-stone-800 border border-stone-800 text-stone-300 hover:text-white text-xs font-bold transition-all shadow-sm"
-        >
-          <ArrowRight className="w-4 h-4 text-amber-400" />
-          <span>متابعة تصفح الهوديز</span>
-        </button>
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <button
+            id="cart-page-track-order-btn"
+            type="button"
+            onClick={() => setActiveView('tracking')}
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-400 text-xs font-bold transition-all shadow-sm"
+          >
+            <Package className="w-4 h-4" />
+            <span>تتبع حالة طلب سابق</span>
+          </button>
+
+          <button
+            id="continue-shopping-btn"
+            type="button"
+            onClick={() => setActiveView('catalog')}
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-stone-900 hover:bg-stone-800 border border-stone-800 text-stone-300 hover:text-white text-xs font-bold transition-all shadow-sm"
+          >
+            <ArrowRight className="w-4 h-4 text-amber-400" />
+            <span>متابعة تصفح الهوديز</span>
+          </button>
+        </div>
       </div>
 
       {cart.length === 0 ? (
@@ -115,17 +128,28 @@ export const CartPage: React.FC = () => {
           <div>
             <h2 className="text-xl font-bold text-stone-100">سلة المشتريات فارغة حالياً</h2>
             <p className="text-xs text-stone-400 mt-1 max-w-sm mx-auto leading-relaxed">
-              لم تقم بإضافة أي هودي حتى الآن. تصفح تشكيلة الهوديز الأوفر سايز واختر قطعتك الشتوية المفضلة.
+              لم تقم بإضافة أي هودي حتى الآن. تصفح تشكيلة الهوديز الأوفر سايز أو تتبع طلبك الذي قمت به مسبقاً.
             </p>
           </div>
-          <button
-            id="empty-cart-browse-btn"
-            type="button"
-            onClick={() => setActiveView('catalog')}
-            className="px-6 py-3 rounded-xl bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-black font-bold text-xs transition-colors shadow-lg shadow-amber-950/40"
-          >
-            تصفح كولكشن الهوديز الآن
-          </button>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
+            <button
+              id="empty-cart-browse-btn"
+              type="button"
+              onClick={() => setActiveView('catalog')}
+              className="w-full sm:w-auto px-6 py-3 rounded-xl bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-black font-bold text-xs transition-colors shadow-lg shadow-amber-950/40"
+            >
+              تصفح كولكشن الهوديز الآن
+            </button>
+            <button
+              id="empty-cart-track-order-btn"
+              type="button"
+              onClick={() => setActiveView('tracking')}
+              className="w-full sm:w-auto px-5 py-3 rounded-xl bg-stone-900 hover:bg-stone-800 border border-stone-800 text-stone-200 text-xs font-bold flex items-center justify-center gap-2 transition-colors"
+            >
+              <Package className="w-4 h-4 text-amber-400" />
+              <span>تتبع حالة طلب سابق</span>
+            </button>
+          </div>
         </div>
       ) : (
         /* Cart Full Page Content Grid */
@@ -334,6 +358,22 @@ export const CartPage: React.FC = () => {
               <ShoppingBag className="w-5 h-5" />
               <span>متابعة إتمام الطلب والدفع</span>
             </button>
+
+            {/* Tracking Option in Cart Summary */}
+            <div className="mt-4 pt-4 border-t border-stone-800/80 flex items-center justify-between text-xs">
+              <div className="flex items-center gap-2 text-stone-400">
+                <Package className="w-4 h-4 text-amber-400 shrink-0" />
+                <span>هل لديك طلب سابق وتريد متابعته؟</span>
+              </div>
+              <button
+                id="cart-page-summary-track-btn"
+                type="button"
+                onClick={() => setActiveView('tracking')}
+                className="text-amber-400 hover:text-amber-300 font-bold transition-colors hover:underline shrink-0 mr-2"
+              >
+                تتبع حالة طلبك
+              </button>
+            </div>
           </div>
         </div>
       )}

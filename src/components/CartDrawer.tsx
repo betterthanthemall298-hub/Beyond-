@@ -10,7 +10,8 @@ import {
   Tag,
   Check,
   ShieldCheck,
-  Truck
+  Truck,
+  Package
 } from 'lucide-react';
 
 export const CartDrawer: React.FC = () => {
@@ -27,7 +28,8 @@ export const CartDrawer: React.FC = () => {
     getCartSubtotal,
     getCartDiscount,
     setIsCheckoutOpen,
-    openDeleteModal
+    openDeleteModal,
+    setActiveView
   } = useStore();
 
   const [couponCodeInput, setCouponCodeInput] = useState('');
@@ -131,6 +133,34 @@ export const CartDrawer: React.FC = () => {
           <span className="text-stone-400">معاينة قبل الدفع عند الاستلام</span>
         </div>
 
+        {/* Order Tracking Option in Cart Header */}
+        <button
+          id="cart-drawer-track-order-banner"
+          type="button"
+          onClick={() => {
+            setIsCartOpen(false);
+            setActiveView('tracking');
+          }}
+          className="w-full bg-gradient-to-r from-amber-500/10 via-stone-900/80 to-amber-500/5 hover:from-amber-500/20 hover:to-amber-500/10 border-b border-stone-800/80 px-4 py-2.5 flex items-center justify-between text-xs transition-all group cursor-pointer text-right"
+        >
+          <div className="flex items-center gap-2.5">
+            <div className="w-7 h-7 rounded-lg bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
+              <Package className="w-4 h-4" />
+            </div>
+            <div>
+              <div className="flex items-center gap-1.5">
+                <span className="font-bold text-amber-400">تتبع حالة طلبك</span>
+                <span className="text-[10px] bg-amber-500/20 text-amber-300 px-1.5 py-0.2 rounded border border-amber-500/30">متاح الآن</span>
+              </div>
+              <p className="text-[11px] text-stone-400">هل قمت بطلب هودي مسبقاً؟ اضغط لمتابعة الشحنة</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-1 text-[11px] font-bold text-amber-400 group-hover:text-amber-300 transition-colors">
+            <span>تتبع</span>
+            <ArrowLeft className="w-3.5 h-3.5 transition-transform group-hover:-translate-x-1" />
+          </div>
+        </button>
+
         {/* Cart Items List */}
         <div className="flex-1 overflow-y-auto p-4 space-y-3">
           {cart.length === 0 ? (
@@ -144,14 +174,28 @@ export const CartDrawer: React.FC = () => {
                   تصفح تشكيلة الهوديز الشتوية الأوفر سايز الفاخرة واختر ما يناسب ذوقك.
                 </p>
               </div>
-              <button
-                id="browse-hoodies-from-cart-btn"
-                type="button"
-                onClick={() => setIsCartOpen(false)}
-                className="px-5 py-2.5 rounded-xl bg-amber-500 text-black text-xs font-bold hover:bg-amber-400 transition-colors"
-              >
-                تصفح الهوديز الآن
-              </button>
+              <div className="flex flex-col sm:flex-row items-center gap-2 w-full max-w-xs pt-1">
+                <button
+                  id="browse-hoodies-from-cart-btn"
+                  type="button"
+                  onClick={() => setIsCartOpen(false)}
+                  className="w-full py-2.5 rounded-xl bg-amber-500 text-black text-xs font-bold hover:bg-amber-400 transition-colors"
+                >
+                  تصفح الهوديز الآن
+                </button>
+                <button
+                  id="track-order-from-empty-cart-btn"
+                  type="button"
+                  onClick={() => {
+                    setIsCartOpen(false);
+                    setActiveView('tracking');
+                  }}
+                  className="w-full py-2.5 rounded-xl bg-stone-900 hover:bg-stone-800 border border-stone-800 text-stone-300 hover:text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-colors"
+                >
+                  <Package className="w-3.5 h-3.5 text-amber-400" />
+                  <span>تتبع طلب سابق</span>
+                </button>
+              </div>
             </div>
           ) : (
             cart.map((item) => (
@@ -345,6 +389,23 @@ export const CartDrawer: React.FC = () => {
             <div className="flex items-center justify-center gap-2 text-[11px] text-stone-500 pt-1">
               <ShieldCheck className="w-3.5 h-3.5 text-amber-500" />
               <span>دفع عند الاستلام مع حق الفتح والمعاينة قبل الاستلام</span>
+            </div>
+
+            {/* Tracking Option Link */}
+            <div className="pt-2 border-t border-stone-800/60 flex items-center justify-between text-xs">
+              <span className="text-stone-400 text-[11px]">هل لديك طلب سابق وترغب في تتبعه؟</span>
+              <button
+                id="cart-drawer-track-footer-btn"
+                type="button"
+                onClick={() => {
+                  setIsCartOpen(false);
+                  setActiveView('tracking');
+                }}
+                className="text-amber-400 hover:text-amber-300 font-bold flex items-center gap-1 transition-colors hover:underline"
+              >
+                <Package className="w-3.5 h-3.5" />
+                <span>تتبع طلبك</span>
+              </button>
             </div>
           </div>
         )}
