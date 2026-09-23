@@ -1307,7 +1307,10 @@ function setupFirebaseSync() {
       if (docSnap.exists()) {
         const data = docSnap.data();
         if (Array.isArray(data?.list) && data.list.length > 0) {
-          update(() => ({ governorates: data.list }));
+          const existingNames = new Set(data.list.map((g: any) => g.name));
+          const missing = INITIAL_GOVERNORATES.filter((g) => !existingNames.has(g.name));
+          const fullList = missing.length > 0 ? [...data.list, ...missing] : data.list;
+          update(() => ({ governorates: fullList }));
         }
       } else {
         // Seed Firestore with default governorates
