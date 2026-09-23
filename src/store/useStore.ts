@@ -12,8 +12,7 @@ import {
   getDocs,
   where
 } from 'firebase/firestore';
-import { signInAnonymously, signOut } from 'firebase/auth';
-import { db, auth, testFirebaseConnection, sanitizeForFirestore } from '../lib/firebase';
+import { db, testFirebaseConnection, sanitizeForFirestore } from '../lib/firebase';
 import {
   triggerNewOrderNotification,
   dispatchRemotePushNotification,
@@ -332,12 +331,12 @@ let state: StoreState = {
   setIsAdminLoggedIn: (logged) => {
     update(() => ({ isAdminLoggedIn: logged }));
     if (logged) {
-      signInAnonymously(auth).catch((err) => {
-        console.warn('[Auth] Anonymous sign-in notice:', err);
-      });
       syncOrdersIfAdmin();
     } else {
-      signOut(auth).catch(() => {});
+      if (unsubscribeOrders) {
+        unsubscribeOrders();
+        unsubscribeOrders = null;
+      }
     }
   },
   shareModalProduct: null,
@@ -444,10 +443,6 @@ let state: StoreState = {
     const cleanPass = passInput.trim();
     const creds = state.adminCredentials;
     if (cleanUser === creds.username && cleanPass === creds.password) {
-      // Connect admin session to Firebase Auth so request.auth != null for secure Firestore rules
-      signInAnonymously(auth).catch((authErr) => {
-        console.warn('[Auth] Anonymous sign-in notice:', authErr);
-      });
       update(() => ({ isAdminLoggedIn: true }));
       syncOrdersIfAdmin();
       state.addToast({
@@ -1092,7 +1087,6 @@ function setupFirebaseSync() {
 
   // 1. Orders Listener (Sync only if logged in as Admin to keep customer page lightning fast)
   if (state.isAdminLoggedIn) {
-    signInAnonymously(auth).catch(() => {});
     syncOrdersIfAdmin();
   }
 
