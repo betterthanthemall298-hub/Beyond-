@@ -308,7 +308,7 @@ export const AdminDashboard: React.FC = () => {
       if (success) {
         setLoginError('');
       } else {
-        setLoginError('بيانات الدخول غير صحيحة. يرجى إدخال البريد الإلكتروني وكلمة المرور المسجلة في Firebase.');
+        setLoginError('البريد الإلكتروني أو كلمة المرور غير صحيحة. يرجى التأكد من إدخال الإيميل كاملاً والباسورد المسجلين في Firebase Authentication -> Users.');
       }
     } catch {
       setLoginError('حدث خطأ أثناء الاتصال بخدمة المصادقة. يرجى المحاولة مرة أخرى.');

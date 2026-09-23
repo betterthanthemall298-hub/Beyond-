@@ -458,11 +458,20 @@ let state: StoreState = {
         return true;
       }
     } catch (err: any) {
-      console.error('Firebase Auth sign in error:', err);
+      const code = err?.code || '';
+      let userFriendlyMsg = 'البريد الإلكتروني أو كلمة المرور غير صحيحة في Firebase.';
+      if (code === 'auth/invalid-credential' || code === 'auth/user-not-found' || code === 'auth/wrong-password') {
+        userFriendlyMsg = 'بيانات الدخول غير صحيحة، أو الحساب لم تتم إضافته بعد في قسم Authentication -> Users في Firebase.';
+      } else if (code === 'auth/too-many-requests') {
+        userFriendlyMsg = 'تم حظر المحاولات مؤقتاً بسبب كثرة الإدخال الخاطئ. يرجى الانتظار قليلاً والمحاولة مجدداً.';
+      } else if (code === 'auth/network-request-failed') {
+        userFriendlyMsg = 'تعذر الاتصال بخدمة Firebase. يرجى التحقق من اتصالك بالإنترنت.';
+      }
+      console.warn('Firebase Auth sign-in verification response:', code || err?.message);
       state.addToast({
         type: 'error',
         title: 'فشل تسجيل الدخول',
-        description: 'البريد الإلكتروني أو كلمة المرور غير صحيحة في Firebase'
+        description: userFriendlyMsg
       });
       return false;
     }

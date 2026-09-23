@@ -520,6 +520,93 @@ async function startServer() {
     }
   });
 
+  // -------------------------------------------------------------
+  // ADMIN USERS MANAGEMENT (Firebase Admin Auth)
+  // Allows the owner to list and create new admin accounts safely
+  // -------------------------------------------------------------
+  app.get('/api/admin/users', async (req, res) => {
+    try {
+      if (!adminAuth) {
+        return res.status(503).json({ success: false, error: 'Firebase Admin Auth غير متصل' });
+      }
+      const listUsersResult = await adminAuth.listUsers(100);
+      const users = listUsersResult.users.map((u: any) => ({
+        uid: u.uid,
+        email: u.email,
+        displayName: u.displayName || 'مشرف',
+        creationTime: u.metadata?.creationTime || '',
+        lastSignInTime: u.metadata?.lastSignInTime || ''
+      }));
+      return res.json({ success: true, users });
+    } catch (err: any) {
+      console.error('Error listing admin users:', err);
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.post('/api/admin/create-user', async (req, res) => {
+    try {
+      if (!adminAuth) {
+        return res.status(503).json({ success: false, error: 'Firebase Admin Auth غير متصل' });
+      }
+      const { email, password, displayName } = req.body || {};
+      if (!email || !password) {
+        return res.status(400).json({ success: false, error: 'يرجى كتابة البريد الإلكتروني وكلمة المرور' });
+      }
+      if (String(password).length < 6) {
+        return res.status(400).json({ success: false, error: 'يجب ألا تقل كلمة المرور عن 6 خانات' });
+      }
+
+      const cleanEmail = String(email).trim().toLowerCase();
+      const userRecord = await adminAuth.createUser({
+        email: cleanEmail,
+        password: String(password).trim(),
+        displayName: displayName ? String(displayName).trim() : 'مشرف المتجر'
+      });
+
+      console.log(`[Admin Created] Successfully created admin: ${userRecord.email}`);
+      return res.status(201).json({
+        success: true,
+        user: {
+          uid: userRecord.uid,
+          email: userRecord.email,
+          displayName: userRecord.displayName
+        }
+      });
+    } catch (err: any) {
+      console.error('Error creating admin user:', err);
+      const msg = err.code === 'auth/email-already-exists'
+        ? 'هذا الإيميل مسجل بالفعل كمستخدم في Firebase'
+        : err.code === 'auth/invalid-email'
+        ? 'صيغة البريد الإلكتروني غير صحيحة'
+        : (err.message || 'حدث خطأ أثناء إنشاء المستخدم');
+      return res.status(400).json({ success: false, error: msg });
+    }
+  });
+
+  app.post('/api/admin/delete-user', async (req, res) => {
+    try {
+      if (!adminAuth) {
+        return res.status(503).json({ success: false, error: 'Firebase Admin Auth غير متصل' });
+      }
+      const { uid, email } = req.body || {};
+      if (!uid) {
+        return res.status(400).json({ success: false, error: 'معرف المستخدم غير محدد' });
+      }
+      // Protect original owner email
+      if (email && email.toLowerCase() === 'vdbbdv1234567889@gmail.com') {
+        return res.status(403).json({ success: false, error: 'لا يمكن حذف حساب المالك الأساسي للمتجر' });
+      }
+
+      await adminAuth.deleteUser(uid);
+      console.log(`[Admin Deleted] Deleted admin user: ${uid}`);
+      return res.json({ success: true, message: 'تم حذف حساب الأدمن بنجاح' });
+    } catch (err: any) {
+      console.error('Error deleting admin user:', err);
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
   // Send test push notification
   app.post('/api/push/test', async (req, res) => {
     const { logoUrl, icon } = req.body || {};
