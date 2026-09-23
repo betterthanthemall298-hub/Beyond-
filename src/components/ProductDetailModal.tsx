@@ -34,9 +34,13 @@ export const ProductDetailModal: React.FC = () => {
 
   const isFav = wishlist.includes(selectedProduct.id);
   const sizes: HoodieSize[] = ['M', 'L', 'XL', '2XL'];
-  const currentStock = selectedProduct.sizesStock[selectedSize] || 0;
+  const totalStock = sizes.reduce((sum, sz) => sum + (Number(selectedProduct.sizesStock?.[sz]) || 0), 0);
+  const isAllOutOfStock = totalStock <= 0;
+  const currentStock = Number(selectedProduct.sizesStock?.[selectedSize]) || 0;
+  const isCurrentOutOfStock = currentStock <= 0;
 
   const handleAddToCart = () => {
+    if (isCurrentOutOfStock) return;
     addToCart(selectedProduct, selectedSize, quantity);
   };
 
@@ -249,11 +253,24 @@ export const ProductDetailModal: React.FC = () => {
               <button
                 id="modal-add-to-cart-btn"
                 type="button"
+                disabled={isCurrentOutOfStock}
                 onClick={handleAddToCart}
-                className="flex-1 py-3.5 px-6 rounded-xl bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-black font-bold text-sm flex items-center justify-center gap-2 transition-all shadow-lg shadow-amber-950/40"
+                className={`flex-1 py-3.5 px-6 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all shadow-lg ${
+                  isAllOutOfStock
+                    ? 'bg-stone-800 text-stone-500 border border-stone-700/50 cursor-not-allowed'
+                    : isCurrentOutOfStock
+                    ? 'bg-stone-800 text-stone-500 border border-stone-700/50 cursor-not-allowed'
+                    : 'bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-black shadow-amber-950/40'
+                }`}
               >
                 <ShoppingBag className="w-5 h-5" />
-                <span>إضافة إلى السلة (مقاس {selectedSize})</span>
+                <span>
+                  {isAllOutOfStock
+                    ? 'نفدت كمية المنتج بالكامل'
+                    : isCurrentOutOfStock
+                    ? `المقاس (${selectedSize}) نفد من المخزون`
+                    : `إضافة إلى السلة (مقاس ${selectedSize})`}
+                </span>
               </button>
 
               <button

@@ -568,6 +568,16 @@ let state: StoreState = {
   // Cart
   cart: localDeviceData.cart,
   addToCart: (product, size, colorName, colorHex, quantity = 1) => {
+    const availableStock = Number(product?.sizesStock?.[size]) || 0;
+    if (availableStock <= 0) {
+      state.addToast({
+        type: 'error',
+        title: 'نفدت الكمية',
+        description: `عذراً، مقاس (${size}) من "${product.name}" نفد من المخزون حالياً.`
+      });
+      return;
+    }
+
     const defaultColor = product.colors && product.colors.length > 0 ? product.colors[0] : undefined;
     const finalColorName = colorName || defaultColor?.name;
     const finalColorHex = colorHex || defaultColor?.hex;
@@ -576,6 +586,16 @@ let state: StoreState = {
     const existingIndex = state.cart.findIndex((item) => item.id === cartItemId);
 
     if (existingIndex > -1) {
+      const currentInCart = state.cart[existingIndex].quantity;
+      if (currentInCart + quantity > availableStock) {
+        state.addToast({
+          type: 'error',
+          title: 'الكمية غير كافية',
+          description: `المتبقي في المخزون (${availableStock} قطع فقط)، لديك بالفعل ${currentInCart} في السلة.`
+        });
+        return;
+      }
+
       update((prev) => {
         const updated = [...prev.cart];
         updated[existingIndex] = {
@@ -585,6 +605,15 @@ let state: StoreState = {
         return { cart: updated };
       });
     } else {
+      if (quantity > availableStock) {
+        state.addToast({
+          type: 'error',
+          title: 'الكمية غير كافية',
+          description: `المتبقي في المخزون (${availableStock} قطع فقط).`
+        });
+        return;
+      }
+
       const newItem: CartItem = {
         id: cartItemId,
         productId: product.id,
@@ -616,6 +645,18 @@ let state: StoreState = {
     if (quantity <= 0) {
       state.removeFromCart(itemId);
       return;
+    }
+    const cartItem = state.cart.find((c) => c.id === itemId);
+    if (cartItem && cartItem.product) {
+      const maxAvailable = Number(cartItem.product.sizesStock?.[cartItem.size]) || 0;
+      if (quantity > maxAvailable && maxAvailable > 0) {
+        state.addToast({
+          type: 'error',
+          title: 'الحد الأقصى للمخزون',
+          description: `المتبقي في المخزون ${maxAvailable} قطع فقط.`
+        });
+        quantity = maxAvailable;
+      }
     }
     update((prev) => ({
       cart: prev.cart.map((item) =>

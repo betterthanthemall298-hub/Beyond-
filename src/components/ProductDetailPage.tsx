@@ -57,10 +57,16 @@ export const ProductDetailPage: React.FC = () => {
 
   const isFav = wishlist.includes(product.id);
   const sizes: HoodieSize[] = ['M', 'L', 'XL', '2XL'];
+  const totalStock = sizes.reduce((sum, sz) => sum + (Number(product.sizesStock?.[sz]) || 0), 0);
+  const isAllOutOfStock = totalStock <= 0;
+  const currentStock = Number(product.sizesStock?.[selectedSize]) || 0;
+  const isCurrentOutOfStock = currentStock <= 0;
+
   const colors = product.colors || [];
   const currentColor = colors[selectedColorIndex] || colors[0];
 
   const handleAddToCart = () => {
+    if (isCurrentOutOfStock) return;
     addToCart(
       product,
       selectedSize,
@@ -71,6 +77,7 @@ export const ProductDetailPage: React.FC = () => {
   };
 
   const handleBuyNow = () => {
+    if (isCurrentOutOfStock) return;
     addToCart(
       product,
       selectedSize,
@@ -300,13 +307,23 @@ export const ProductDetailPage: React.FC = () => {
               })}
             </div>
 
-            {/* Low stock alert only if less than 5 pieces available */}
-            {product.sizesStock[selectedSize] > 0 && product.sizesStock[selectedSize] < 5 && (
+            {/* Low stock or Out of Stock Alert */}
+            {isAllOutOfStock ? (
+              <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-rose-500 shrink-0" />
+                <span>نفدت كمية هذا المنتج بالكامل حالياً. يمكنك إضافته للمفضلة لتصلك تنبيهات عند إعادة التوفر!</span>
+              </div>
+            ) : isCurrentOutOfStock ? (
+              <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-rose-500 shrink-0" />
+                <span>المقاس المختار ({selectedSize}) نفد من المخزون، يرجى اختيار مقاس آخر متوفر.</span>
+              </div>
+            ) : currentStock > 0 && currentStock < 5 ? (
               <div className="flex items-center gap-2 p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs">
                 <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse shrink-0" />
-                <span>سارع بالطلب، متبقي <strong className="font-mono font-bold text-amber-200">{product.sizesStock[selectedSize]} قطع فقط</strong> في المخزون!</span>
+                <span>سارع بالطلب، متبقي <strong className="font-mono font-bold text-amber-200">{currentStock} قطع فقط</strong> في المخزون!</span>
               </div>
-            )}
+            ) : null}
           </div>
 
           {/* Quantity & Action Buttons */}
@@ -316,8 +333,9 @@ export const ProductDetailPage: React.FC = () => {
               <div className="flex items-center bg-stone-950 border border-stone-800 rounded-xl p-1 shrink-0">
                 <button
                   type="button"
+                  disabled={isCurrentOutOfStock}
                   onClick={() => setQuantity(Math.max(1, quantity - 1))}
-                  className="w-9 h-9 rounded-lg hover:bg-stone-800 text-stone-400 hover:text-white flex items-center justify-center text-sm"
+                  className="w-9 h-9 rounded-lg hover:bg-stone-800 text-stone-400 hover:text-white disabled:opacity-30 disabled:hover:bg-transparent flex items-center justify-center text-sm"
                 >
                   -
                 </button>
@@ -326,8 +344,9 @@ export const ProductDetailPage: React.FC = () => {
                 </span>
                 <button
                   type="button"
+                  disabled={isCurrentOutOfStock || quantity >= currentStock}
                   onClick={() => setQuantity(quantity + 1)}
-                  className="w-9 h-9 rounded-lg hover:bg-stone-800 text-stone-400 hover:text-white flex items-center justify-center text-sm"
+                  className="w-9 h-9 rounded-lg hover:bg-stone-800 text-stone-400 hover:text-white disabled:opacity-30 disabled:hover:bg-transparent flex items-center justify-center text-sm"
                 >
                   +
                 </button>
@@ -337,11 +356,16 @@ export const ProductDetailPage: React.FC = () => {
               <button
                 id="product-page-add-to-cart-btn"
                 type="button"
+                disabled={isCurrentOutOfStock}
                 onClick={handleAddToCart}
-                className="flex-1 py-3 px-4 rounded-xl bg-stone-900 hover:bg-stone-800 border border-stone-700 text-stone-200 hover:text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all shadow-sm"
+                className={`flex-1 py-3 px-4 rounded-xl border text-xs sm:text-sm font-bold flex items-center justify-center gap-2 transition-all shadow-sm ${
+                  isCurrentOutOfStock
+                    ? 'bg-stone-900 border-stone-800 text-stone-500 cursor-not-allowed'
+                    : 'bg-stone-900 hover:bg-stone-800 border-stone-700 text-stone-200 hover:text-white'
+                }`}
               >
                 <ShoppingBag className="w-4 h-4 text-amber-400" />
-                <span>إضافة إلى السلة</span>
+                <span>{isCurrentOutOfStock ? 'نفد المقاس' : 'إضافة إلى السلة'}</span>
               </button>
             </div>
 
@@ -349,11 +373,24 @@ export const ProductDetailPage: React.FC = () => {
             <button
               id="product-page-buy-now-btn"
               type="button"
+              disabled={isCurrentOutOfStock}
               onClick={handleAddToCart}
-              className="w-full py-3.5 px-4 rounded-xl bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-black font-extrabold text-sm flex items-center justify-center gap-2 transition-all shadow-lg shadow-amber-950/40"
+              className={`w-full py-3.5 px-4 rounded-xl font-extrabold text-sm flex items-center justify-center gap-2 transition-all shadow-lg ${
+                isAllOutOfStock
+                  ? 'bg-stone-800 text-stone-500 border border-stone-700/50 cursor-not-allowed'
+                  : isCurrentOutOfStock
+                  ? 'bg-stone-800 text-stone-500 border border-stone-700/50 cursor-not-allowed'
+                  : 'bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-black shadow-amber-950/40'
+              }`}
             >
               <ShoppingBag className="w-5 h-5" />
-              <span>أضف إلى السلة</span>
+              <span>
+                {isAllOutOfStock
+                  ? 'نفدت كمية المنتج بالكامل'
+                  : isCurrentOutOfStock
+                  ? `المقاس (${selectedSize}) غير متوفر حالياً`
+                  : 'أضف إلى السلة'}
+              </span>
             </button>
           </div>
 

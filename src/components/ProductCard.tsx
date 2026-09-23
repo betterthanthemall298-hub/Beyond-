@@ -17,13 +17,18 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
     openShareModal,
     openQuickLook
   } = useStore();
-  const [chosenSize, setChosenSize] = useState<HoodieSize>('L');
+  const sizes: HoodieSize[] = ['M', 'L', 'XL', '2XL'];
+  const totalStock = sizes.reduce((sum, sz) => sum + (Number(product.sizesStock?.[sz]) || 0), 0);
+  const isAllOutOfStock = totalStock <= 0;
+
+  const firstAvailableSize = sizes.find((sz) => (product.sizesStock?.[sz] || 0) > 0) || 'L';
+  const [chosenSize, setChosenSize] = useState<HoodieSize>(firstAvailableSize);
   const [chosenColorIndex, setChosenColorIndex] = useState(0);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [isHovered, setIsHovered] = useState(false);
 
+  const isCurrentSizeOutOfStock = (product.sizesStock?.[chosenSize] || 0) <= 0;
   const isFav = wishlist.includes(product.id);
-  const sizes: HoodieSize[] = ['M', 'L', 'XL', '2XL'];
   const colors = product.colors || [];
   const currentColor = colors[chosenColorIndex] || colors[0];
 
@@ -64,6 +69,13 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
     >
       {/* Image Container */}
       <div className="relative aspect-[4/5] bg-stone-950 overflow-hidden">
+        {isAllOutOfStock && (
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-[1px] flex items-center justify-center z-20 pointer-events-none">
+            <span className="px-3.5 py-1.5 rounded-xl bg-rose-600/90 text-white font-black text-xs tracking-wider shadow-lg border border-rose-500/40 animate-pulse">
+              نفدت الكمية
+            </span>
+          </div>
+        )}
         <img
           src={product.images[activeImageIndex] || product.images[0]}
           alt={product.name}
@@ -255,12 +267,23 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
           <button
             id={`quick-add-${product.id}`}
             type="button"
+            disabled={isAllOutOfStock || isCurrentSizeOutOfStock}
             onClick={handleQuickAdd}
-            className="py-2 px-3 rounded-xl bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-black text-xs font-bold flex items-center gap-1.5 transition-all shadow-md shadow-amber-950/40"
-            title="إضافة سريعة إلى السلة"
+            className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-md ${
+              isAllOutOfStock || isCurrentSizeOutOfStock
+                ? 'bg-stone-800 text-stone-500 cursor-not-allowed border border-stone-700/50'
+                : 'bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-black shadow-amber-950/40'
+            }`}
+            title={isAllOutOfStock ? 'نفدت الكمية بالكامل' : isCurrentSizeOutOfStock ? 'المقاس نفد من المخزون' : 'إضافة سريعة إلى السلة'}
           >
             <ShoppingBag className="w-3.5 h-3.5" />
-            <span>أضف للسلة</span>
+            <span>
+              {isAllOutOfStock
+                ? 'نفدت الكمية'
+                : isCurrentSizeOutOfStock
+                ? 'المقاس نفد'
+                : 'أضف للسلة'}
+            </span>
           </button>
         </div>
       </div>

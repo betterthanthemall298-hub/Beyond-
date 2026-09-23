@@ -1466,17 +1466,26 @@ export const AdminDashboard: React.FC = () => {
                           </td>
                           <td className="p-3.5">
                             <div className="flex items-center gap-1.5 font-mono text-[11px]">
-                              <span className="text-stone-300">{p.sizesStock.M}</span>
+                              <span className={p.sizesStock.M === 0 ? 'text-rose-400/80 line-through' : 'text-stone-300'}>{p.sizesStock.M}</span>
                               <span className="text-stone-600">/</span>
-                              <span className="text-stone-300">{p.sizesStock.L}</span>
+                              <span className={p.sizesStock.L === 0 ? 'text-rose-400/80 line-through' : 'text-stone-300'}>{p.sizesStock.L}</span>
                               <span className="text-stone-600">/</span>
-                              <span className="text-stone-300">{p.sizesStock.XL}</span>
+                              <span className={p.sizesStock.XL === 0 ? 'text-rose-400/80 line-through' : 'text-stone-300'}>{p.sizesStock.XL}</span>
                               <span className="text-stone-600">/</span>
-                              <span className="text-stone-300">{p.sizesStock['2XL']}</span>
+                              <span className={p.sizesStock['2XL'] === 0 ? 'text-rose-400/80 line-through' : 'text-stone-300'}>{p.sizesStock['2XL']}</span>
                               <span className="text-stone-500 text-[10px] mr-1">
                                 (إجمالي {totalStock})
                               </span>
                             </div>
+                            {totalStock === 0 ? (
+                              <span className="inline-block mt-1 px-1.5 py-0.5 rounded bg-rose-500/15 border border-rose-500/30 text-rose-400 font-bold text-[10px]">
+                                ⚠️ نفد المخزون
+                              </span>
+                            ) : totalStock < 5 ? (
+                              <span className="inline-block mt-1 px-1.5 py-0.5 rounded bg-amber-500/15 border border-amber-500/30 text-amber-400 font-bold text-[10px]">
+                                ⚡ متبقي {totalStock} فقط
+                              </span>
+                            ) : null}
                           </td>
                           <td className="p-3.5 text-center">
                             <div className="inline-flex items-center gap-2 justify-center">
