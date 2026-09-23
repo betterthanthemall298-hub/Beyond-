@@ -1,67 +1,79 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // 1. Products: readable and manageable across the store
+    // Products: everyone can browse the catalog, but only a signed-in
+    // admin (via Firebase Authentication) can add/edit/delete products.
     match /products/{productId} {
-      allow read, write: if true;
+      allow read: if true;
+      allow write: if request.auth != null;
     }
 
-    // 2. Orders: customers create orders, admin reads, updates and manages orders
+    // Orders: customers create orders through the secure server endpoint
+    // (/api/orders/create) using Firebase Admin SDK.
+    // Read is allowed so customers can track orders.
+    // Update/delete is restricted to authenticated admins only.
     match /orders/{orderId} {
-      allow read, write: if true;
+      allow read: if true;
+      allow create: if false;
+      allow update, delete: if request.auth != null;
     }
 
-    // 3. Settings: store details, branding and shipping configuration
+    // Settings: publicly readable, only admin can edit
     match /settings/{settingId} {
-      allow read, write: if true;
+      allow read: if true;
+      allow write: if request.auth != null;
     }
 
-    // 4. Admin credentials: secure access
-    match /admin_auth/{authId} {
-      allow read, write: if true;
-    }
-
-    // 5. Push Subscriptions & Tokens for Web Push notifications
+    // Push subscriptions: clients can register their devices, but cannot read others
     match /push_subscriptions/{subId} {
-      allow read, write: if true;
+      allow create: if true;
+      allow read, update, delete: if false;
     }
 
-    match /fcm_tokens/{tokenId} {
-      allow read, write: if true;
-    }
-
-    // 6. Coupons
+    // Coupons: publicly readable for client cart validation, admin only writes
     match /coupons/{couponId} {
-      allow read, write: if true;
+      allow read: if true;
+      allow write: if request.auth != null;
     }
 
-    // 7. Shipping governorates and rates
-    match /governorates/{govId} {
-      allow read, write: if true;
-    }
-
-    // 8. Realtime Admin Broadcast Alerts
-    match /admin_alerts/{alertId} {
-      allow read, write: if true;
-    }
-
-    // 9. Customer review images
+    // Customer review images
     match /reviewImages/{reviewId} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+
+    // Shipping governorates & costs
+    match /governorates/{govId} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+
+    // Realtime admin broadcast alerts
+    match /admin_alerts/{alertId} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+
+    // Harmless connectivity probe
+    match /test/{docId} {
       allow read, write: if true;
     }
 
-    // 10. Analytics
+    // Analytics: write-only for visitors, read restricted to admin
     match /analytics_daily/{dateId} {
-      allow read, write: if true;
+      allow read: if request.auth != null;
+      allow write: if true;
     }
 
     match /analytics_sessions/{sessionId} {
-      allow read, write: if true;
+      allow read: if request.auth != null;
+      allow write: if true;
     }
 
-    // Fallback rule for any other collection
+    // Fallback
     match /{document=**} {
-      allow read, write: if true;
+      allow read: if true;
+      allow write: if request.auth != null;
     }
   }
 }

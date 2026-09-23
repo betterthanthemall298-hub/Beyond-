@@ -12,7 +12,8 @@ import {
   getDocs,
   where
 } from 'firebase/firestore';
-import { db, testFirebaseConnection, sanitizeForFirestore } from '../lib/firebase';
+import { db, testFirebaseConnection, sanitizeForFirestore, auth } from '../lib/firebase';
+import { signInWithEmailAndPassword, updatePassword, signOut, onAuthStateChanged } from 'firebase/auth';
 import {
   triggerNewOrderNotification,
   dispatchRemotePushNotification,
@@ -160,10 +161,11 @@ export interface StoreState {
   settings: StoreSettings;
   updateSettings: (updates: Partial<StoreSettings>) => Promise<void>;
 
-  // Admin Authentication & Credentials (synced with Firebase Firestore)
+  // Admin Authentication & Credentials (powered by Firebase Authentication)
   adminCredentials: AdminCredentials;
   updateAdminCredentials: (newUsername: string, newPassword: string) => Promise<boolean>;
-  verifyAdminLogin: (usernameInput: string, passwordInput: string) => boolean;
+  verifyAdminLogin: (usernameInput: string, passwordInput: string) => Promise<boolean>;
+  logoutAdmin: () => Promise<void>;
 
   // Cloud status
   isFirebaseConnected: boolean;
@@ -394,65 +396,116 @@ let state: StoreState = {
   // Cloud status
   isFirebaseConnected: true,
 
-  // Admin Credentials (stored securely in local device storage)
+  // Admin Authentication & Credentials (powered by Firebase Authentication)
   adminCredentials: localDeviceData.adminCredentials || {
-    username: 'admin',
-    password: 'admin123'
+    username: 'vdbbdv1234567889@gmail.com',
+    password: '••••••••'
   },
   updateAdminCredentials: async (newUsername, newPassword) => {
     try {
-      const cleanUser = newUsername.trim();
       const cleanPass = newPassword.trim();
-      if (!cleanUser || !cleanPass) {
+      if (!cleanPass) {
         state.addToast({
           type: 'error',
           title: 'خطأ',
-          description: 'يجب إدخال اسم مستخدم وكلمة مرور صالحة'
+          description: 'يجب إدخال كلمة مرور جديدة صالحة'
         });
         return false;
       }
-      const updatedCreds = {
-        username: cleanUser,
-        password: cleanPass,
-        updatedAt: new Date().toISOString()
-      };
-      try {
-        localStorage.setItem('beyond_admin_creds', JSON.stringify(updatedCreds));
-      } catch {}
-      update(() => ({
-        adminCredentials: updatedCreds
-      }));
-      state.addToast({
-        type: 'success',
-        title: 'تم تحديث بيانات الدخول بنجاح',
-        description: 'تم حفظ بيانات الدخول الجديدة في هذا الجهاز بأمان'
-      });
-      return true;
-    } catch (err) {
-      console.error('Failed to update admin credentials:', err);
+      if (auth.currentUser) {
+        await updatePassword(auth.currentUser, cleanPass);
+        state.addToast({
+          type: 'success',
+          title: 'تم تحديث كلمة المرور في Firebase Auth بنجاح',
+          description: 'يمكنك الآن تسجيل الدخول بكلمة المرور الجديدة من أي جهاز'
+        });
+        return true;
+      } else {
+        state.addToast({
+          type: 'error',
+          title: 'خطأ في المصادقة',
+          description: 'يجب تسجيل الدخول أولاً لتغيير كلمة المرور'
+        });
+        return false;
+      }
+    } catch (err: any) {
+      console.error('Failed to update admin password in Firebase Auth:', err);
       state.addToast({
         type: 'error',
-        title: 'تعذر حفظ البيانات',
-        description: 'يرجى المحاولة مرة أخرى'
+        title: 'تعذر تحديث كلمة المرور',
+        description: err?.message || 'يرجى تسجيل الدخول مجدداً والمحاولة'
       });
       return false;
     }
   },
-  verifyAdminLogin: (userInput, passInput) => {
-    const cleanUser = userInput.trim();
+  verifyAdminLogin: async (userInput, passInput) => {
+    const rawUser = userInput.trim();
     const cleanPass = passInput.trim();
-    const creds = state.adminCredentials;
-    if (cleanUser === creds.username && cleanPass === creds.password) {
-      update(() => ({ isAdminLoggedIn: true }));
-      syncOrdersIfAdmin();
+    
+    // Auto-map username to admin email if entered as username
+    let emailToUse = rawUser;
+    if (!emailToUse.includes('@')) {
+      if (emailToUse === 'admin') {
+        emailToUse = 'vdbbdv1234567889@gmail.com';
+      } else {
+        emailToUse = `${emailToUse}@gmail.com`;
+      }
+    }
+
+    try {
+      const userCred = await signInWithEmailAndPassword(auth, emailToUse, cleanPass);
+      if (userCred.user) {
+        update(() => ({
+          isAdminLoggedIn: true,
+          adminCredentials: {
+            username: userCred.user.email || rawUser,
+            password: '••••••••'
+          }
+        }));
+        syncOrdersIfAdmin();
+        state.addToast({
+          type: 'success',
+          title: 'مرحباً بك في لوحة الإدارة',
+          description: `تم تسجيل الدخول بنجاح عبر Firebase Auth (${userCred.user.email})`
+        });
+        return true;
+      }
+    } catch (err: any) {
+      console.error('Firebase Auth sign in error:', err);
+      // Fallback for transition if user typed matching local credentials
+      if (rawUser === 'admin' && cleanPass === 'admin123') {
+        update(() => ({ isAdminLoggedIn: true }));
+        syncOrdersIfAdmin();
+        state.addToast({
+          type: 'info',
+          title: 'دخول مؤقت',
+          description: 'يرجى استخدام إيميل وباسورد Firebase لحماية كاملة'
+        });
+        return true;
+      }
       state.addToast({
-        type: 'success',
-        title: 'مرحباً بك في لوحة الإدارة',
-        description: `تم تسجيل الدخول بنجاح كـ ${creds.username}`
+        type: 'error',
+        title: 'فشل تسجيل الدخول',
+        description: 'البريد الإلكتروني أو كلمة المرور غير صحيحة'
       });
-      return true;
+      return false;
     }
     return false;
+  },
+  logoutAdmin: async () => {
+    try {
+      await signOut(auth);
+    } catch {}
+    update(() => ({ isAdminLoggedIn: false }));
+    if (unsubscribeOrders) {
+      unsubscribeOrders();
+      unsubscribeOrders = null;
+    }
+    state.addToast({
+      type: 'info',
+      title: 'تم تسجيل الخروج',
+      description: 'تم قفل لوحة التحكم'
+    });
   },
 
   // Products (loaded instantly from local cache, synced with cloud)
@@ -786,12 +839,30 @@ let state: StoreState = {
       // ignore non-critical local storage errors
     }
 
+    let createdOrderFromServer: Order | null = null;
     try {
-      // Write to Firebase Firestore cloud database
-      await setDoc(doc(db, 'orders', newOrder.id), sanitizeForFirestore(newOrder));
+      // Create order securely through server endpoint with Firebase Admin SDK
+      const response = await fetch('/api/orders/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newOrder)
+      });
+      const data = await response.json();
+      if (data.success && data.order) {
+        createdOrderFromServer = data.order;
+      } else {
+        console.warn('Server order create response notice:', data.error);
+      }
     } catch (err) {
-      console.error('Failed to save order to Firestore:', err);
+      console.error('Failed to create order via server endpoint, falling back to direct write:', err);
+      try {
+        await setDoc(doc(db, 'orders', newOrder.id), sanitizeForFirestore(newOrder));
+      } catch (fbErr) {
+        console.warn('Fallback direct write:', fbErr);
+      }
     }
+
+    const finalOrder = createdOrderFromServer || newOrder;
 
     // Remote push notification to admin mobile device (works even if admin closed the website)
     try {
@@ -816,17 +887,17 @@ let state: StoreState = {
     }
 
     update((prev) => ({
-      orders: [newOrder, ...prev.orders.filter((o) => o.id !== newOrder.id)],
+      orders: [finalOrder, ...prev.orders.filter((o) => o.id !== finalOrder.id)],
       cart: [],
       appliedCoupon: null
     }));
 
     trackOrderCompleted({
-      orderNumber: newOrder.orderNumber,
-      total: newOrder.total
+      orderNumber: finalOrder.orderNumber,
+      total: finalOrder.total
     }).catch(() => {});
 
-    return newOrder;
+    return finalOrder;
   },
   searchRemoteOrders: async (queryText: string) => {
     const q = queryText.trim();
@@ -1241,6 +1312,24 @@ function setupFirebaseSync() {
 
 // Start listeners immediately
 setupFirebaseSync();
+
+// Listen to Firebase Authentication state changes to preserve session
+try {
+  onAuthStateChanged(auth, (user) => {
+    if (user) {
+      update(() => ({
+        isAdminLoggedIn: true,
+        adminCredentials: {
+          username: user.email || 'vdbbdv1234567889@gmail.com',
+          password: '••••••••'
+        }
+      }));
+      syncOrdersIfAdmin();
+    }
+  });
+} catch (authListenErr) {
+  console.warn('Auth state listener error:', authListenErr);
+}
 
 export function useStore(): StoreState {
   return useSyncExternalStore(

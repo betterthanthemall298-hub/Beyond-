@@ -1,12 +1,12 @@
 {
-  "projectId": "robotic-vial-mvxch",
-  "appId": "1:90304089159:web:d51f969fbd5fd7a253f562",
-  "apiKey": "AIzaSyAAeQsiCgJ3i4_hb4-rAo_gBnD54P5TW94",
-  "authDomain": "robotic-vial-mvxch.firebaseapp.com",
-  "firestoreDatabaseId": "ai-studio-nocturnehoodies-4fb6114c-e28c-4e2b-a294-a837d0c2acd3",
-  "storageBucket": "robotic-vial-mvxch.firebasestorage.app",
-  "messagingSenderId": "90304089159",
-  "measurementId": "",
-  "oAuthClientId": "90304089159-203k7d6d1vhpfdlhiesfja8dcmo32lhb.apps.googleusercontent.com",
+  "projectId": "beyond-a32a4",
+  "appId": "1:556088213393:web:dce5c57103f841c29b2430",
+  "apiKey": "AIzaSyCXNwJpf6AKyUHgB3T6RMWNmG5Gde7F6CM",
+  "authDomain": "beyond-a32a4.firebaseapp.com",
+  "firestoreDatabaseId": "(default)",
+  "storageBucket": "beyond-a32a4.firebasestorage.app",
+  "messagingSenderId": "556088213393",
+  "measurementId": "G-8TWSKCZ5XM",
+  "oAuthClientId": "",
   "recaptchaSiteKey": ""
 }

@@ -97,6 +97,7 @@ export const AdminDashboard: React.FC = () => {
     adminCredentials,
     updateAdminCredentials,
     verifyAdminLogin,
+    logoutAdmin,
     seedSampleProduct,
     isFirebaseConnected
   } = useStore();
@@ -297,13 +298,23 @@ export const AdminDashboard: React.FC = () => {
     );
   }, 0);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    const success = verifyAdminLogin(username, password);
-    if (success) {
-      setLoginError('');
-    } else {
-      setLoginError('اسم المستخدم أو كلمة المرور غير صحيحة. يرجى التأكد من البيانات والمحاولة مجدداً.');
+    setIsLoggingIn(true);
+    setLoginError('');
+    try {
+      const success = await verifyAdminLogin(username, password);
+      if (success) {
+        setLoginError('');
+      } else {
+        setLoginError('بيانات الدخول غير صحيحة. يرجى إدخال البريد الإلكتروني وكلمة المرور المسجلة في Firebase.');
+      }
+    } catch {
+      setLoginError('حدث خطأ أثناء الاتصال بخدمة المصادقة. يرجى المحاولة مرة أخرى.');
+    } finally {
+      setIsLoggingIn(false);
     }
   };
 
@@ -697,16 +708,16 @@ export const AdminDashboard: React.FC = () => {
           <form onSubmit={handleLogin} className="space-y-4">
             <div>
               <label className="block text-xs font-semibold text-stone-300 mb-1">
-                اسم المستخدم
+                البريد الإلكتروني أو اسم المستخدم
               </label>
               <input
                 id="admin-username-input"
                 type="text"
                 required
-                placeholder="أدخل اسم المستخدم"
+                placeholder="vdbbdv1234567889@gmail.com أو admin"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                className="w-full bg-stone-950 border border-stone-800 rounded-xl px-3.5 py-2.5 text-xs text-stone-100 placeholder-stone-600 focus:outline-none focus:border-amber-500"
+                className="w-full bg-stone-950 border border-stone-800 rounded-xl px-3.5 py-2.5 text-xs text-stone-100 placeholder-stone-600 focus:outline-none focus:border-amber-500 font-mono"
               />
             </div>
 
@@ -739,9 +750,17 @@ export const AdminDashboard: React.FC = () => {
             <button
               id="admin-login-submit-btn"
               type="submit"
-              className="w-full py-3 rounded-xl bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-black font-extrabold text-xs transition-colors shadow-md shadow-amber-950/40"
+              disabled={isLoggingIn}
+              className="w-full py-3 rounded-xl bg-amber-500 hover:bg-amber-400 active:bg-amber-600 disabled:opacity-50 text-black font-extrabold text-xs transition-colors shadow-md shadow-amber-950/40 flex items-center justify-center gap-2"
             >
-              دخول إلى لوحة التحكم
+              {isLoggingIn ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin" />
+                  <span>جاري التحقق وتسجيل الدخول...</span>
+                </>
+              ) : (
+                <span>دخول إلى لوحة التحكم</span>
+              )}
             </button>
           </form>
         </div>
@@ -784,8 +803,8 @@ export const AdminDashboard: React.FC = () => {
           <button
             id="admin-logout-btn"
             type="button"
-            onClick={() => {
-              setIsAdminLoggedIn(false);
+            onClick={async () => {
+              await logoutAdmin();
               setActiveView('home');
             }}
             className="px-4 py-2 rounded-xl bg-stone-900 hover:bg-stone-800 border border-stone-800 text-stone-300 text-xs font-semibold flex items-center gap-2 transition-colors"
