@@ -57,14 +57,15 @@ export function exportOrdersToCSV(orders: Order[], customFileName?: string) {
   rows.push(headers.map(escapeCell).join(','));
 
   orders.forEach((order) => {
-    const itemsDescription = order.items
+    const orderItems = order.items || [];
+    const itemsDescription = orderItems
       .map(
         (it) =>
-          `${it.productName}${it.subtitle ? ` (${it.subtitle})` : ''} [مقاس: ${it.size}${it.colorName ? ` - لون: ${it.colorName}` : ''}] × ${it.quantity} (${it.price * it.quantity} ج.م)`
+          `${it.productName}${it.subtitle ? ` (${it.subtitle})` : ''} [مقاس: ${it.size}${it.colorName ? ` - لون: ${it.colorName}` : ''}] × ${it.quantity || 1} (${(it.price || 0) * (it.quantity || 1)} ج.م)`
       )
       .join(' | ');
 
-    const totalQuantity = order.items.reduce((sum, it) => sum + (it.quantity || 1), 0);
+    const totalQuantity = orderItems.reduce((sum, it) => sum + (it.quantity || 1), 0);
     const statusLabel = ORDER_STATUS_LABELS[order.status] || order.status;
 
     const row = [

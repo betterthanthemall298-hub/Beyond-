@@ -324,7 +324,7 @@ export const OrderTrackingView: React.FC = () => {
                   <div className="space-y-2">
                     <h4 className="text-xs font-bold text-stone-400">المنتجات المطلوبة:</h4>
                     <div className="space-y-2">
-                      {order.items.map((item, idx) => {
+                      {(order.items || []).map((item, idx) => {
                         const matchingProduct = products.find((p) => p.id === item.productId);
                         const printSubtitle = item.subtitle || matchingProduct?.subtitle;
                         const itemImg = item.image || item.images?.[0] || matchingProduct?.images?.[0] || '';

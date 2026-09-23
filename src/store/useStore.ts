@@ -208,16 +208,7 @@ function loadLocalDeviceData() {
         }
       : INITIAL_SETTINGS;
 
-    let savedCreds: AdminCredentials = { username: 'admin', password: 'admin123' };
-    try {
-      const storedCreds = localStorage.getItem('beyond_admin_creds');
-      if (storedCreds) {
-        const parsedC = JSON.parse(storedCreds);
-        if (parsedC?.username && parsedC?.password) {
-          savedCreds = parsedC;
-        }
-      }
-    } catch {}
+    let savedCreds: AdminCredentials = { username: 'vdbbdv1234567889@gmail.com', password: '••••••••' };
 
     return {
       cart: parsed.cart || [],
@@ -237,7 +228,7 @@ function loadLocalDeviceData() {
       cart: [],
       wishlist: [],
       isAdminLoggedIn: false,
-      adminCredentials: { username: 'admin', password: 'admin123' },
+      adminCredentials: { username: 'vdbbdv1234567889@gmail.com', password: '••••••••' },
       activeView: 'home' as ActiveView,
       settings: INITIAL_SETTINGS,
       products: INITIAL_PRODUCTS,
@@ -442,14 +433,10 @@ let state: StoreState = {
     const rawUser = userInput.trim();
     const cleanPass = passInput.trim();
     
-    // Auto-map username to admin email if entered as username
+    // Auto-map username to admin email if entered without domain
     let emailToUse = rawUser;
     if (!emailToUse.includes('@')) {
-      if (emailToUse === 'admin') {
-        emailToUse = 'vdbbdv1234567889@gmail.com';
-      } else {
-        emailToUse = `${emailToUse}@gmail.com`;
-      }
+      emailToUse = 'vdbbdv1234567889@gmail.com';
     }
 
     try {
@@ -472,21 +459,10 @@ let state: StoreState = {
       }
     } catch (err: any) {
       console.error('Firebase Auth sign in error:', err);
-      // Fallback for transition if user typed matching local credentials
-      if (rawUser === 'admin' && cleanPass === 'admin123') {
-        update(() => ({ isAdminLoggedIn: true }));
-        syncOrdersIfAdmin();
-        state.addToast({
-          type: 'info',
-          title: 'دخول مؤقت',
-          description: 'يرجى استخدام إيميل وباسورد Firebase لحماية كاملة'
-        });
-        return true;
-      }
       state.addToast({
         type: 'error',
         title: 'فشل تسجيل الدخول',
-        description: 'البريد الإلكتروني أو كلمة المرور غير صحيحة'
+        description: 'البريد الإلكتروني أو كلمة المرور غير صحيحة في Firebase'
       });
       return false;
     }
@@ -866,8 +842,9 @@ let state: StoreState = {
 
     // Remote push notification to admin mobile device (works even if admin closed the website)
     try {
-      const totalItems = newOrder.items.reduce((sum, it) => sum + (it.quantity || 1), 0);
-      const summary = newOrder.items.map((it) => `${it.productName} (${it.size})`).join(', ');
+      const orderItemsList = newOrder.items || [];
+      const totalItems = orderItemsList.reduce((sum, it) => sum + (it.quantity || 1), 0);
+      const summary = orderItemsList.map((it) => `${it.productName} (${it.size})`).join(', ');
       const logo = state.settings.notificationLogoUrl || state.settings.brandLogo || '/beyond-logo.jpg';
       dispatchRemotePushNotification({
         orderNumber: newOrder.orderNumber,
@@ -1077,8 +1054,8 @@ let state: StoreState = {
 
   // Computations
   getCartSubtotal: () => {
-    return state.cart.reduce(
-      (sum, item) => sum + item.product.price * item.quantity,
+    return (state.cart || []).reduce(
+      (sum, item) => sum + (item.product?.price || 0) * (item.quantity || 1),
       0
     );
   },
@@ -1086,10 +1063,10 @@ let state: StoreState = {
     const coupon = state.appliedCoupon;
     if (!coupon) return 0;
     const subtotal = state.getCartSubtotal();
-    return Math.round((subtotal * coupon.discountPercent) / 100);
+    return Math.round((subtotal * (coupon.discountPercent || 0)) / 100);
   },
   getCartItemsCount: () => {
-    return state.cart.reduce((count, item) => count + item.quantity, 0);
+    return (state.cart || []).reduce((count, item) => count + (item.quantity || 1), 0);
   }
 };
 
@@ -1116,7 +1093,18 @@ function syncOrdersIfAdmin() {
       if (!snapshot.empty) {
         const loadedOrders: Order[] = [];
         snapshot.forEach((docSnap) => {
-          loadedOrders.push(docSnap.data() as Order);
+          const raw = docSnap.data() as any;
+          if (raw) {
+            loadedOrders.push({
+              ...raw,
+              items: Array.isArray(raw.items) ? raw.items : [],
+              total: typeof raw.total === 'number' ? raw.total : 0,
+              subtotal: typeof raw.subtotal === 'number' ? raw.subtotal : 0,
+              shippingCost: typeof raw.shippingCost === 'number' ? raw.shippingCost : 0,
+              discount: typeof raw.discount === 'number' ? raw.discount : 0,
+              status: raw.status || 'pending',
+            } as Order);
+          }
         });
         loadedOrders.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
         update(() => ({ orders: loadedOrders }));
@@ -1167,7 +1155,16 @@ function setupFirebaseSync() {
       if (!snapshot.empty) {
         const loadedProducts: Product[] = [];
         snapshot.forEach((docSnap) => {
-          loadedProducts.push(docSnap.data() as Product);
+          const raw = docSnap.data() as any;
+          if (raw) {
+            loadedProducts.push({
+              ...raw,
+              sizesStock: raw.sizesStock || { M: 0, L: 0, XL: 0, '2XL': 0 },
+              images: Array.isArray(raw.images) ? raw.images : (raw.image ? [raw.image] : []),
+              colors: Array.isArray(raw.colors) ? raw.colors : [],
+              tags: Array.isArray(raw.tags) ? raw.tags : [],
+            } as Product);
+          }
         });
         update(() => ({ products: loadedProducts }));
       } else {

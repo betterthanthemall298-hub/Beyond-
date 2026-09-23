@@ -5,7 +5,7 @@ import webpush from 'web-push';
 import dotenv from 'dotenv';
 import fs from 'fs';
 import { initializeApp, getApps, cert, type App } from 'firebase-admin/app';
-import { getFirestore } from 'firebase-admin/firestore';
+import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { getAuth } from 'firebase-admin/auth';
 
 dotenv.config();
@@ -90,6 +90,40 @@ function initFirebaseAdmin() {
   adminDb = getFirestore(adminApp);
   adminAuth = getAuth(adminApp);
   console.log('[Firebase Admin] Successfully initialized with project:', saCred.project_id || 'beyond-a32a4');
+
+  // Initialize counter asynchronously
+  ensureOrderCounterInitialized().catch((e) => console.warn('[Counter Init] notice:', e));
+}
+
+async function ensureOrderCounterInitialized(): Promise<number> {
+  if (!adminDb) return 1000;
+  try {
+    const counterRef = adminDb.collection('counters').doc('orders');
+    const snap = await counterRef.get();
+    if (snap.exists) {
+      return Number(snap.data()?.currentNumber) || 1000;
+    }
+
+    // Baseline calculation from existing orders
+    const ordersSnap = await adminDb.collection('orders').limit(150).get();
+    let maxFound = 1000;
+    ordersSnap.forEach((d) => {
+      const val = d.data()?.orderNumber;
+      const num = parseInt(String(val || '').replace(/\D/g, ''), 10);
+      if (!isNaN(num) && num > maxFound) maxFound = num;
+    });
+
+    await counterRef.set({
+      currentNumber: maxFound,
+      initializedAt: new Date().toISOString()
+    }, { merge: true });
+
+    console.log(`[Order Counter] Initialized counter with baseline #${maxFound}`);
+    return maxFound;
+  } catch (err) {
+    console.warn('[Order Counter] init error:', err);
+    return 1000;
+  }
 }
 
 initFirebaseAdmin();
@@ -251,10 +285,14 @@ async function startServer() {
 
   // -------------------------------------------------------------
   // SECURE SERVER-SIDE ORDER CREATION (Admin SDK)
-  // Bypasses client create restriction, validates payload & creates order
+  // Atomic numerical numbering, single-read product grouping, and case-insensitive coupon validation
   // -------------------------------------------------------------
   app.post('/api/orders/create', async (req, res) => {
     try {
+      if (!adminDb) {
+        return res.status(503).json({ success: false, error: 'قاعدة بيانات السيرفر غير متصلة حالياً' });
+      }
+
       const orderData = req.body;
       if (!orderData || !orderData.items || !Array.isArray(orderData.items) || orderData.items.length === 0) {
         return res.status(400).json({ success: false, error: 'بيانات الطلب غير مكتملة أو السلة فارغة' });
@@ -263,31 +301,6 @@ async function startServer() {
       if (!orderData.customerName || !orderData.phone || !orderData.governorate || !orderData.address) {
         return res.status(400).json({ success: false, error: 'يرجى إدخال جميع البيانات الأساسية (الاسم، الهاتف، المحافظة، العنوان)' });
       }
-
-      // Generate collision-free order number from Firestore
-      let nextOrderNum = '1001';
-      try {
-        const latestOrdersSnap = await adminDb.collection('orders')
-          .orderBy('orderNumber', 'desc')
-          .limit(20)
-          .get();
-
-        const numericList: number[] = [];
-        latestOrdersSnap.forEach((d) => {
-          const num = parseInt(String(d.data().orderNumber || '').replace(/\D/g, ''), 10);
-          if (!isNaN(num) && num > 0) numericList.push(num);
-        });
-
-        if (numericList.length > 0) {
-          nextOrderNum = String(Math.max(...numericList) + 1);
-        }
-      } catch (err) {
-        console.warn('Fallback numbering order:', err);
-        nextOrderNum = String(Math.floor(1000 + Math.random() * 9000));
-      }
-
-      const uniqueId = 'ord-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7);
-      const dateStr = new Date().toISOString().replace('T', ' ').substring(0, 16);
 
       const sanitizedItems = orderData.items.map((it: any) => ({
         productId: String(it.productId || ''),
@@ -301,30 +314,152 @@ async function startServer() {
         quantity: Number(it.quantity) || 1
       }));
 
-      const newOrder = {
-        id: uniqueId,
-        orderNumber: nextOrderNum,
-        customerName: String(orderData.customerName).trim(),
-        phone: String(orderData.phone).trim(),
-        alternatePhone: orderData.alternatePhone ? String(orderData.alternatePhone).trim() : '',
-        governorate: String(orderData.governorate).trim(),
-        center: orderData.center ? String(orderData.center).trim() : '',
-        address: String(orderData.address).trim(),
-        notes: orderData.notes ? String(orderData.notes).trim() : '',
-        items: sanitizedItems,
-        subtotal: Number(orderData.subtotal) || 0,
-        shippingCost: Number(orderData.shippingCost) || 0,
-        discount: Number(orderData.discount) || 0,
-        couponCode: orderData.couponCode ? String(orderData.couponCode).trim() : '',
-        total: Number(orderData.total) || 0,
-        status: 'pending',
-        createdAt: dateStr
-      };
+      // 1. Group ordered quantities by productId to avoid duplicate reads in Firestore transaction
+      const productDeltas = new Map<string, Record<string, number>>();
+      for (const it of sanitizedItems) {
+        if (!it.productId) continue;
+        if (!productDeltas.has(it.productId)) {
+          productDeltas.set(it.productId, {});
+        }
+        const sizeMap = productDeltas.get(it.productId)!;
+        sizeMap[it.size] = (sizeMap[it.size] || 0) + (it.quantity || 1);
+      }
 
-      // Save order to Firestore with Firebase Admin SDK (Privileged write)
-      await adminDb.collection('orders').doc(newOrder.id).set(newOrder);
+      // 2. Case-insensitive coupon lookup
+      let matchedCouponId: string | null = null;
+      let appliedDiscount = Number(orderData.discount) || 0;
+      if (orderData.couponCode) {
+        const cleanCouponCode = String(orderData.couponCode).trim().toUpperCase();
+        try {
+          const couponsSnap = await adminDb.collection('coupons').get();
+          for (const cDoc of couponsSnap.docs) {
+            const cData = cDoc.data();
+            if (cData && String(cData.code || '').trim().toUpperCase() === cleanCouponCode) {
+              if (cData.active !== false) {
+                matchedCouponId = cDoc.id;
+                if (cData.discountPercent && Number(cData.discountPercent) > 0) {
+                  const subtotal = Number(orderData.subtotal) || 0;
+                  if (subtotal >= (Number(cData.minOrderAmount) || 0)) {
+                    appliedDiscount = Math.round((subtotal * Number(cData.discountPercent)) / 100);
+                  }
+                }
+              }
+              break;
+            }
+          }
+        } catch (cErr) {
+          console.warn('Coupon lookup warning:', cErr);
+        }
+      }
 
-      // Save to admin_alerts for instant in-app alerts on open admin dashboards
+      const counterRef = adminDb.collection('counters').doc('orders');
+      const uniqueProductIds = Array.from(productDeltas.keys());
+      const productDocRefs = uniqueProductIds.map((pId) => adminDb.collection('products').doc(pId));
+      const couponRef = matchedCouponId ? adminDb.collection('coupons').doc(matchedCouponId) : null;
+
+      const uniqueId = 'ord-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7);
+      const orderRef = adminDb.collection('orders').doc(uniqueId);
+      const dateStr = new Date().toISOString().replace('T', ' ').substring(0, 16);
+
+      let createdOrder: any = null;
+
+      // 3. Atomic transaction ensuring purely numerical order numbering & safe stock updates
+      let transactionSuccess = false;
+      let lastTxError: any = null;
+
+      for (let attempt = 1; attempt <= 4; attempt++) {
+        try {
+          await adminDb.runTransaction(async (t) => {
+            // --- ALL READS FIRST ---
+            const counterSnap = await t.get(counterRef);
+            const productSnaps = await Promise.all(productDocRefs.map((ref) => t.get(ref)));
+            const couponSnap = couponRef ? await t.get(couponRef) : null;
+
+            let currentNum = 1000;
+            if (counterSnap.exists) {
+              currentNum = Number(counterSnap.data()?.currentNumber) || 1000;
+            }
+
+            const nextOrderNumInt = currentNum + 1;
+            const nextOrderNum = String(nextOrderNumInt);
+
+            const newOrder = {
+              id: uniqueId,
+              orderNumber: nextOrderNum,
+              customerName: String(orderData.customerName).trim(),
+              phone: String(orderData.phone).trim(),
+              alternatePhone: orderData.alternatePhone ? String(orderData.alternatePhone).trim() : '',
+              governorate: String(orderData.governorate).trim(),
+              center: orderData.center ? String(orderData.center).trim() : '',
+              address: String(orderData.address).trim(),
+              notes: orderData.notes ? String(orderData.notes).trim() : '',
+              items: sanitizedItems,
+              subtotal: Number(orderData.subtotal) || 0,
+              shippingCost: Number(orderData.shippingCost) || 0,
+              discount: appliedDiscount,
+              couponCode: orderData.couponCode ? String(orderData.couponCode).trim() : '',
+              total: Number(orderData.total) || 0,
+              status: 'pending',
+              createdAt: dateStr
+            };
+
+            createdOrder = newOrder;
+
+            // --- ALL WRITES AFTER READS ---
+            // Atomic numeric counter increment
+            t.set(counterRef, {
+              currentNumber: nextOrderNumInt,
+              updatedAt: new Date().toISOString()
+            }, { merge: true });
+
+            // Save order document
+            t.set(orderRef, newOrder);
+
+            // Deduct sizesStock for each product document
+            for (let i = 0; i < productSnaps.length; i++) {
+              const pSnap = productSnaps[i];
+              const pId = uniqueProductIds[i];
+              const orderedSizes = productDeltas.get(pId) || {};
+              if (pSnap && pSnap.exists) {
+                const pData = pSnap.data() || {};
+                const curSizesStock = { ...(pData.sizesStock || {}) };
+                for (const [sz, qty] of Object.entries(orderedSizes)) {
+                  const currentQty = Number(curSizesStock[sz]) || 0;
+                  curSizesStock[sz] = Math.max(0, currentQty - qty);
+                }
+                t.update(productDocRefs[i], { sizesStock: curSizesStock });
+              }
+            }
+
+            // Increment coupon timesUsed if matched
+            if (couponRef && couponSnap && couponSnap.exists) {
+              const curTimes = Number(couponSnap.data()?.timesUsed) || 0;
+              t.update(couponRef, { timesUsed: curTimes + 1 });
+            }
+          }, { maxAttempts: 15 });
+
+          transactionSuccess = true;
+          break;
+        } catch (err: any) {
+          lastTxError = err;
+          const isContention = err?.code === 10 ||
+            String(err?.message || '').includes('contention') ||
+            String(err?.message || '').includes('ABORTED');
+
+          if (isContention && attempt < 4) {
+            const delay = Math.floor(Math.random() * 150 + attempt * 75);
+            await new Promise((resolve) => setTimeout(resolve, delay));
+            continue;
+          }
+          throw err;
+        }
+      }
+
+      if (!transactionSuccess) {
+        throw lastTxError || new Error('Transaction failed');
+      }
+
+      // 4. Save in-app admin alert
       try {
         const alertId = 'alert-' + Date.now();
         const totalItems = sanitizedItems.reduce((sum: number, it: any) => sum + (it.quantity || 1), 0);
@@ -332,10 +467,10 @@ async function startServer() {
 
         await adminDb.collection('admin_alerts').doc(alertId).set({
           id: alertId,
-          orderNumber: newOrder.orderNumber,
-          customerName: newOrder.customerName,
-          total: newOrder.total,
-          governorate: newOrder.governorate,
+          orderNumber: createdOrder.orderNumber,
+          customerName: createdOrder.customerName,
+          total: createdOrder.total,
+          governorate: createdOrder.governorate,
           itemsCount: totalItems,
           itemsSummary: summary,
           createdAt: new Date().toISOString()
@@ -344,19 +479,19 @@ async function startServer() {
         console.warn('Could not post admin_alert:', alertErr);
       }
 
-      // Trigger Web Push Notifications to all subscribed admin devices
+      // 5. Trigger Web Push Notifications to all subscribed admin devices
       try {
         const subscribers = await getAllActiveSubscribers();
         const brandLogo = await getStoreBrandLogo();
         const payload = JSON.stringify({
           title: 'أوردر جديد',
-          body: `اسم العميل: ${newOrder.customerName}\nسعر الأوردر: ${newOrder.total} ج.م`,
+          body: `اسم العميل: ${createdOrder.customerName}\nسعر الأوردر: ${createdOrder.total} ج.م`,
           icon: brandLogo,
           badge: brandLogo,
           logoUrl: brandLogo,
           url: '/?view=admin',
-          orderNumber: newOrder.orderNumber,
-          tag: `order-${newOrder.orderNumber}`,
+          orderNumber: createdOrder.orderNumber,
+          tag: `order-${createdOrder.orderNumber}`,
           timestamp: Date.now()
         });
 
@@ -371,10 +506,10 @@ async function startServer() {
         console.warn('Push alert error:', pushErr);
       }
 
-      console.log(`[Order Created] Order #${newOrder.orderNumber} successfully saved to beyond-a32a4`);
+      console.log(`[Order Created] Order #${createdOrder.orderNumber} successfully saved`);
       return res.status(201).json({
         success: true,
-        order: newOrder
+        order: createdOrder
       });
     } catch (err: any) {
       console.error('Error in /api/orders/create:', err);

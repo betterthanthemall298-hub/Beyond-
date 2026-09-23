@@ -284,18 +284,17 @@ export const AdminDashboard: React.FC = () => {
   }, [adminCredentials.username]);
 
   // Stats calculation
-  const totalRevenue = orders
-    .filter((o) => o.status !== 'cancelled')
-    .reduce((sum, o) => sum + o.total, 0);
-  const totalOrdersCount = orders.length;
-  const pendingOrdersCount = orders.filter(
-    (o) => o.status === 'pending' || o.status === 'processing'
+  const totalRevenue = (orders || [])
+    .filter((o) => o && o.status !== 'cancelled')
+    .reduce((sum, o) => sum + (o.total || 0), 0);
+  const totalOrdersCount = (orders || []).length;
+  const pendingOrdersCount = (orders || []).filter(
+    (o) => o && (o.status === 'pending' || o.status === 'processing')
   ).length;
-  const totalStockCount = products.reduce((acc, p) => {
-    return (
-      acc +
-      Object.values(p.sizesStock).reduce((s: number, v: number) => s + (v || 0), 0)
-    );
+  const totalStockCount = (products || []).reduce((acc: number, p) => {
+    const stockObj = (p?.sizesStock || {}) as Record<string, number>;
+    const stockSum = Object.values(stockObj).reduce((s: number, v) => s + (Number(v) || 0), 0);
+    return acc + stockSum;
   }, 0);
 
   const [isLoggingIn, setIsLoggingIn] = useState(false);
@@ -323,16 +322,12 @@ export const AdminDashboard: React.FC = () => {
     setSecurityError('');
     setSecuritySuccess('');
 
-    if (!newUsername.trim()) {
-      setSecurityError('يرجى كتابة اسم المستخدم الجديد');
-      return;
-    }
     if (!newPassword.trim()) {
       setSecurityError('يرجى كتابة كلمة المرور الجديدة');
       return;
     }
-    if (newPassword.trim().length < 4) {
-      setSecurityError('يجب ألا تقل كلمة المرور عن 4 أحرف');
+    if (newPassword.trim().length < 6) {
+      setSecurityError('يجب ألا تقل كلمة المرور عن 6 أحرف لحماية حسابك في Firebase');
       return;
     }
     if (newPassword.trim() !== confirmPassword.trim()) {
@@ -341,15 +336,15 @@ export const AdminDashboard: React.FC = () => {
     }
 
     setIsUpdatingCreds(true);
-    const success = await updateAdminCredentials(newUsername.trim(), newPassword.trim());
+    const success = await updateAdminCredentials('', newPassword.trim());
     setIsUpdatingCreds(false);
 
     if (success) {
-      setSecuritySuccess('تم حفظ بيانات الدخول سحابياً بنجاح! يمكنك الآن استخدامها لتسجيل الدخول من أي جهاز.');
+      setSecuritySuccess('تم تحديث كلمة المرور في Firebase Auth بنجاح! يمكنك الآن استخدامها لتسجيل الدخول من أي جهاز.');
       setNewPassword('');
       setConfirmPassword('');
     } else {
-      setSecurityError('حدث خطأ أثناء الحفظ السحابي، يرجى المحاولة مرة أخرى.');
+      setSecurityError('حدث خطأ أثناء تحديث كلمة المرور في Firebase، يرجى المحاولة مرة أخرى.');
     }
   };
 
@@ -708,13 +703,13 @@ export const AdminDashboard: React.FC = () => {
           <form onSubmit={handleLogin} className="space-y-4">
             <div>
               <label className="block text-xs font-semibold text-stone-300 mb-1">
-                البريد الإلكتروني أو اسم المستخدم
+                البريد الإلكتروني لحساب الأدمن
               </label>
               <input
                 id="admin-username-input"
-                type="text"
+                type="email"
                 required
-                placeholder="vdbbdv1234567889@gmail.com أو admin"
+                placeholder="أدخل البريد الإلكتروني (مثال: admin@example.com)"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 className="w-full bg-stone-950 border border-stone-800 rounded-xl px-3.5 py-2.5 text-xs text-stone-100 placeholder-stone-600 focus:outline-none focus:border-amber-500 font-mono"
@@ -736,9 +731,9 @@ export const AdminDashboard: React.FC = () => {
               />
             </div>
 
-            <div className="flex items-center gap-2 px-1 py-1 text-[11px] text-amber-400/90 bg-amber-950/20 border border-amber-900/30 rounded-xl">
+            <div className="flex items-center gap-2 px-2.5 py-2 text-[11px] text-amber-400/90 bg-amber-950/20 border border-amber-900/30 rounded-xl">
               <Check className="w-4 h-4 text-amber-400 shrink-0 ml-1" />
-              <span>تذكر الدخول مفعل تلقائياً — لن تحتاج لكتابة البيانات مجدداً على هذا الجهاز.</span>
+              <span>محمي بواسطة Firebase Authentication — تسجيل الدخول محصور بحساب الأدمن المعتمد فقط.</span>
             </div>
 
             {loginError && (
@@ -1446,7 +1441,7 @@ export const AdminDashboard: React.FC = () => {
                   </thead>
                   <tbody className="divide-y divide-stone-800/80">
                     {products.map((p) => {
-                      const totalStock = Object.values(p.sizesStock).reduce((a, b) => a + (b || 0), 0);
+                      const totalStock = Object.values(p?.sizesStock || {}).reduce((a, b) => (Number(a) || 0) + (Number(b) || 0), 0);
                       return (
                         <tr key={p.id} className="hover:bg-stone-900/90 transition-colors">
                           <td className="p-3.5 flex items-center gap-3">
@@ -1809,7 +1804,7 @@ export const AdminDashboard: React.FC = () => {
                 <span>
                   إجمالي التحصيل:{' '}
                   <strong className="text-emerald-400 font-mono">
-                    {filteredByStatus.reduce((sum, o) => sum + (o.status !== 'cancelled' ? o.total : 0), 0)} ج.م
+                    {(filteredByStatus || []).reduce((sum, o) => sum + (o && o.status !== 'cancelled' ? (o.total || 0) : 0), 0)} ج.م
                   </strong>
                 </span>
               </div>
@@ -2017,13 +2012,13 @@ export const AdminDashboard: React.FC = () => {
                       <div className="flex items-center justify-between">
                         <p className="text-stone-300 font-bold text-xs flex items-center gap-1.5">
                           <Package className="w-3.5 h-3.5 text-amber-500" />
-                          <span>محتويات الشحنة ({order.items.reduce((s, it) => s + (it.quantity || 1), 0)} قطعة):</span>
+                          <span>محتويات الشحنة ({((order.items || []).reduce((s, it) => s + (it?.quantity || 1), 0))} قطعة):</span>
                         </p>
                         <span className="text-[10px] text-stone-500 hidden sm:inline">انقر على الصورة لمعاينة الطبعة</span>
                       </div>
 
                       <div className="space-y-2">
-                        {order.items.map((item, idx) => {
+                        {(order.items || []).map((item, idx) => {
                           const matchingProduct = products.find((p) => p.id === item.productId);
                           const printSubtitle = item.subtitle || matchingProduct?.subtitle;
                           const itemImg = item.image || item.images?.[0] || matchingProduct?.images?.[0] || '';
@@ -3118,45 +3113,30 @@ export const AdminDashboard: React.FC = () => {
           <div>
             <h3 className="text-base font-bold text-stone-100 flex items-center gap-2">
               <Lock className="w-5 h-5 text-amber-400" />
-              <span>إدارة بيانات حساب لوحة الإدارة وكلمة السر</span>
+              <span>إدارة كلمة سر حساب لوحة الإدارة (Firebase Auth)</span>
             </h3>
             <p className="text-xs text-stone-400 mt-1">
-              يمكنك هنا تغيير اسم المستخدم وكلمة المرور الخاصة بلوحة الإدارة. يتم حفظ البيانات مشفرة وسحابياً في قاعدة بيانات Firebase، بحيث يمكنك الدخول بها من هاتفك أو الكمبيوتر أو أي جهاز آخر في أي وقت.
+              يتم تأمين لوحة الإدارة حصرياً عبر Firebase Authentication. يمكنك هنا تحديث كلمة المرور لحسابك، وسيتم تطبيق التحديث فورياً على جميع الأجهزة.
             </p>
           </div>
 
           <div className="bg-stone-950/80 border border-stone-800/90 rounded-xl p-4 space-y-2 text-xs">
             <div className="flex items-center justify-between">
-              <span className="text-stone-400">اسم المستخدم الحالي المسجل:</span>
+              <span className="text-stone-400">حساب الأدمن المعتمد:</span>
               <span className="font-mono font-bold text-amber-400 px-2 py-0.5 rounded bg-stone-900 border border-stone-800">
                 {adminCredentials.username}
               </span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-stone-400">حالة المزامنة السحابية:</span>
+              <span className="text-stone-400">نظام المصادقة:</span>
               <span className="text-emerald-400 font-semibold flex items-center gap-1.5">
                 <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                متصل سحابياً (Firebase Firestore)
+                Firebase Authentication (مشفر ومحمي 100%)
               </span>
             </div>
           </div>
 
           <form onSubmit={handleChangeCredentials} className="space-y-4">
-            <div>
-              <label className="block text-xs font-semibold text-stone-300 mb-1">
-                اسم المستخدم الجديد
-              </label>
-              <input
-                id="security-new-username"
-                type="text"
-                required
-                value={newUsername}
-                onChange={(e) => setNewUsername(e.target.value)}
-                placeholder="أدخل اسم المستخدم الجديد"
-                className="w-full bg-stone-950 border border-stone-800 rounded-xl px-3.5 py-2.5 text-xs text-stone-100 placeholder-stone-600 focus:outline-none focus:border-amber-500 font-mono"
-              />
-            </div>
-
             <div>
               <label className="block text-xs font-semibold text-stone-300 mb-1">
                 كلمة المرور الجديدة
@@ -3167,7 +3147,7 @@ export const AdminDashboard: React.FC = () => {
                 required
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
-                placeholder="أدخل كلمة مرور جديدة (4 أحرف على الأقل)"
+                placeholder="أدخل كلمة مرور جديدة (6 أحرف على الأقل)"
                 className="w-full bg-stone-950 border border-stone-800 rounded-xl px-3.5 py-2.5 text-xs text-stone-100 placeholder-stone-600 focus:outline-none focus:border-amber-500"
               />
             </div>
@@ -3206,7 +3186,7 @@ export const AdminDashboard: React.FC = () => {
                 disabled={isUpdatingCreds}
                 className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-black font-bold text-xs transition-colors shadow-md shadow-amber-950/40 disabled:opacity-50"
               >
-                {isUpdatingCreds ? 'جاري الحفظ السحابي...' : 'حفظ بيانات الدخول الجديدة سحابياً'}
+                {isUpdatingCreds ? 'جاري تحديث كلمة المرور في Firebase...' : 'تحديث كلمة المرور في Firebase'}
               </button>
             </div>
           </form>

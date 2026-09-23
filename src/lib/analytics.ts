@@ -329,14 +329,15 @@ export async function getAnalyticsSummary(
     periodCutoff.setDate(periodCutoff.getDate() - 30);
   }
 
-  const periodOrders = realOrders.filter((o) => {
-    if (o.status === 'cancelled') return false;
+  const safeRealOrders = Array.isArray(realOrders) ? realOrders : [];
+  const periodOrders = safeRealOrders.filter((o) => {
+    if (!o || o.status === 'cancelled') return false;
     const od = new Date(o.createdAt);
     return od >= periodCutoff;
   });
 
   const periodOrdersCount = periodOrders.length;
-  const periodRevenue = periodOrders.reduce((sum, o) => sum + (o.total || 0), 0);
+  const periodRevenue = periodOrders.reduce((sum, o) => sum + (o?.total || 0), 0);
   const averageOrderValue = periodOrdersCount > 0 ? Math.round(periodRevenue / periodOrdersCount) : 0;
 
   // Aggregate daily records
