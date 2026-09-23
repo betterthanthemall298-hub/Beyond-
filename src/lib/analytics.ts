@@ -91,16 +91,26 @@ export async function trackVisit(): Promise<void> {
 
   // Run in background without affecting UI thread
   setTimeout(async () => {
-    try {
-      const isMobile = isMobileDevice();
-      const currentHour = String(new Date().getHours());
-      const dailyDocRef = doc(db, 'analytics_daily', today);
+    const isMobile = isMobileDevice();
+    const currentHour = new Date().getHours();
 
+    // 1. Send to server backend with Firebase Admin (guaranteed 100% success)
+    try {
+      fetch('/api/analytics/track', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'visit', isMobile, currentHour })
+      }).catch(() => {});
+    } catch {}
+
+    // 2. Direct Firestore client fallback
+    try {
+      const dailyDocRef = doc(db, 'analytics_daily', today);
       const snap = await getDoc(dailyDocRef);
       if (!snap.exists()) {
         const initialHourly: Record<string, number> = {};
         for (let h = 0; h < 24; h++) initialHourly[String(h)] = 0;
-        initialHourly[currentHour] = 1;
+        initialHourly[String(currentHour)] = 1;
 
         await setDoc(dailyDocRef, {
           date: today,
@@ -151,6 +161,20 @@ export async function trackAddToCart(item: { productId: string; productName: str
   if (typeof window === 'undefined') return;
   setTimeout(async () => {
     try {
+      fetch('/api/analytics/track', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'cart_add',
+          productId: item.productId,
+          productName: item.productName,
+          price: item.price,
+          currentHour: new Date().getHours()
+        })
+      }).catch(() => {});
+    } catch {}
+
+    try {
       const today = getTodayDateString();
       const currentHour = String(new Date().getHours());
       const dailyDocRef = doc(db, 'analytics_daily', today);
@@ -191,6 +215,14 @@ export async function trackAddToCart(item: { productId: string; productName: str
 export async function trackInitiateCheckout(): Promise<void> {
   if (typeof window === 'undefined') return;
   setTimeout(async () => {
+    try {
+      fetch('/api/analytics/track', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'checkout_start' })
+      }).catch(() => {});
+    } catch {}
+
     try {
       const today = getTodayDateString();
       const dailyDocRef = doc(db, 'analytics_daily', today);
@@ -280,6 +312,19 @@ export async function getAnalyticsSummary(
   period: 'today' | 'week' | 'month',
   realOrders: Order[]
 ): Promise<AnalyticsSummary> {
+  // 1. Try high-performance server-side analytics API powered by Firebase Admin
+  try {
+    const res = await fetch(`/api/analytics/summary?period=${encodeURIComponent(period)}`);
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.success && data.summary && Array.isArray(data.summary.chartData)) {
+        return data.summary as AnalyticsSummary;
+      }
+    }
+  } catch (err) {
+    console.warn('Server analytics API fallback:', err);
+  }
+
   const todayStr = getTodayDateString();
   let daysToFetch = 1;
   if (period === 'week') daysToFetch = 7;
@@ -287,7 +332,7 @@ export async function getAnalyticsSummary(
 
   const targetDates = getDatesInRange(daysToFetch);
 
-  // 1. Fetch daily docs from Firestore
+  // 2. Fetch daily docs from Firestore client fallback
   const dailyDataMap = new Map<string, DailyAnalyticsDoc>();
   try {
     const snap = await getDocs(collection(db, 'analytics_daily'));

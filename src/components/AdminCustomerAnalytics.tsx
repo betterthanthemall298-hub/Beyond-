@@ -278,11 +278,11 @@ export const AdminCustomerAnalytics: React.FC = () => {
 
             <div className="h-72 w-full pt-2">
               {data && data.chartData.length > 0 ? (
-                <ResponsiveContainer width="100%" height="100%">
+                <ResponsiveContainer width="100%" height={280} minHeight={280}>
                   <AreaChart data={data.chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                     <defs>
                       <linearGradient id="colorVisits" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.35} />
+                        <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.4} />
                         <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
                       </linearGradient>
                       <linearGradient id="colorCartAdds" x1="0" y1="0" x2="0" y2="1">
@@ -307,6 +307,8 @@ export const AdminCustomerAnalytics: React.FC = () => {
                       fontSize={10}
                       tickLine={false}
                       axisLine={{ stroke: '#404040' }}
+                      allowDecimals={false}
+                      domain={[0, 'auto']}
                     />
                     <Tooltip
                       contentStyle={{
@@ -332,9 +334,11 @@ export const AdminCustomerAnalytics: React.FC = () => {
                       type="monotone"
                       dataKey="visits"
                       stroke="#3b82f6"
-                      strokeWidth={2}
+                      strokeWidth={2.5}
                       fillOpacity={1}
                       fill="url(#colorVisits)"
+                      dot={false}
+                      activeDot={{ r: 5 }}
                     />
                     <Area
                       type="monotone"
@@ -343,6 +347,8 @@ export const AdminCustomerAnalytics: React.FC = () => {
                       strokeWidth={2}
                       fillOpacity={1}
                       fill="url(#colorCartAdds)"
+                      dot={false}
+                      activeDot={{ r: 4 }}
                     />
                     <Area
                       type="monotone"
@@ -351,12 +357,17 @@ export const AdminCustomerAnalytics: React.FC = () => {
                       strokeWidth={2.5}
                       fillOpacity={1}
                       fill="url(#colorOrders)"
+                      dot={false}
+                      activeDot={{ r: 5 }}
                     />
                   </AreaChart>
                 </ResponsiveContainer>
               ) : (
-                <div className="h-full flex items-center justify-center text-xs text-stone-500">
-                  جاري تجهيز الرسم البياني...
+                <div className="h-full min-h-[260px] flex items-center justify-center text-xs text-stone-500">
+                  <div className="flex flex-col items-center gap-2">
+                    <span className="w-5 h-5 border-2 border-stone-600 border-t-amber-400 rounded-full animate-spin"></span>
+                    <span>جاري تجهيز وتحديث الرسم البياني...</span>
+                  </div>
                 </div>
               )}
             </div>
