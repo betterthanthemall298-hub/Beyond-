@@ -2646,7 +2646,7 @@ export const AdminDashboard: React.FC = () => {
                   }
                   setEditableGovernorates((prev) => [
                     ...prev,
-                    { name: trimmed, cost: Number(newGovCost) || 60, deliveryDays: '2-4 أيام عمل' }
+                    { name: trimmed, cost: Number(newGovCost) || 60 }
                   ]);
                   setNewGovName('');
                   setHasUnsavedShippingChanges(true);
@@ -2666,7 +2666,6 @@ export const AdminDashboard: React.FC = () => {
                 <thead className="sticky top-0 bg-stone-950 text-stone-400 uppercase text-[11px] border-b border-stone-800 z-10">
                   <tr>
                     <th className="p-3.5">المحافظة / المنطقة</th>
-                    <th className="p-3.5">مدة التوصيل التقديرية</th>
                     <th className="p-3.5 text-center">تكلفة الشحن (ج.م)</th>
                     <th className="p-3.5 text-center">إجراءات سريعة</th>
                   </tr>
@@ -2685,23 +2684,6 @@ export const AdminDashboard: React.FC = () => {
                             <MapPin className="w-3.5 h-3.5 text-amber-500 shrink-0" />
                             <span>{gov.name}</span>
                           </div>
-                        </td>
-                        <td className="p-3.5">
-                          <input
-                            type="text"
-                            placeholder="مثال: 2-3 أيام عمل"
-                            value={gov.deliveryDays || '2-3 أيام عمل'}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              setEditableGovernorates((prev) =>
-                                prev.map((g) =>
-                                  g.name === gov.name ? { ...g, deliveryDays: val } : g
-                                )
-                              );
-                              setHasUnsavedShippingChanges(true);
-                            }}
-                            className="w-32 bg-stone-950 border border-stone-800 rounded-lg px-2.5 py-1 text-xs text-stone-300 focus:border-amber-500"
-                          />
                         </td>
                         <td className="p-3.5 text-center">
                           <div className="inline-flex items-center gap-1.5">
