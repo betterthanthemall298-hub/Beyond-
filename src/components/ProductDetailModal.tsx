@@ -41,7 +41,8 @@ export const ProductDetailModal: React.FC = () => {
 
   const handleAddToCart = () => {
     if (isCurrentOutOfStock) return;
-    addToCart(selectedProduct, selectedSize, quantity);
+    const defaultColor = selectedProduct.colors && selectedProduct.colors.length > 0 ? selectedProduct.colors[0] : undefined;
+    addToCart(selectedProduct, selectedSize, defaultColor?.name, defaultColor?.hex, quantity);
   };
 
   return (

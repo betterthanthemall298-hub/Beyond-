@@ -81,7 +81,6 @@ export const AdminDashboard: React.FC = () => {
     orders,
     updateOrderStatus,
     deleteOrder,
-    clearAllOrders,
     coupons,
     addCoupon,
     deleteCoupon,
@@ -623,17 +622,6 @@ export const AdminDashboard: React.FC = () => {
       itemLabel: `رقم الطلب: ${orderNumber}`,
       onConfirm: () => {
         deleteOrder(orderId);
-      }
-    });
-  };
-
-  const handleClearAllOrdersPrompt = () => {
-    openDeleteModal({
-      title: 'تصفير وحذف كافة الأوردرات التجريبية نهائياً؟',
-      description: 'سيتم حذف وتفريغ جميع الأوردرات والتنبيهات نهائياً من السجلات وتصفير عداد الطلبات ليبدأ من 1001. لا يمكن التراجع عن هذه الخطوة.',
-      itemLabel: `إجمالي الطلبات الحالية: ${orders.length}`,
-      onConfirm: async () => {
-        await clearAllOrders();
       }
     });
   };
@@ -1944,18 +1932,6 @@ export const AdminDashboard: React.FC = () => {
                     </div>
                   )}
                 </div>
-
-                {orders.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={handleClearAllOrdersPrompt}
-                    className="px-3 py-2 rounded-xl bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 border border-rose-800/60 text-xs font-bold flex items-center gap-1.5 transition-colors"
-                    title="حذف وتفريغ كافة الأوردرات والتنبيهات وتصفير العداد ليبدأ من 1001"
-                  >
-                    <Trash2 className="w-3.5 h-3.5 text-rose-400" />
-                    <span>تفريغ الأوردرات التجريبية</span>
-                  </button>
-                )}
               </div>
             </div>
 
