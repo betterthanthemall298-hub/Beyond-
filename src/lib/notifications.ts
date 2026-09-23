@@ -585,44 +585,18 @@ export async function testPhoneNotification(topicOverride?: string, customLogoUr
 }> {
   const logo = customLogoUrl || '/beyond-logo.jpg';
 
-  // 1. Instant local feedback on current device
+  // 1. Instant local feedback on current device (Sound + Vibration + Desktop Notification)
   playOrderNotificationSound();
   triggerPhoneVibration();
-  dispatchShopifyOrderAlert({
-    orderNumber: '101',
-    customerName: 'أحمد محمد',
-    total: 890,
-    logoUrl: logo
-  });
 
-  const title = 'أوردر تجريبي جديد';
-  const body = 'اسم العميل: أحمد محمد\nسعر الأوردر: 890 ج.م';
+  const title = 'Beyond | اختبار الإشعارات';
+  const body = 'نظام التنبيهات والصوت يعمل بنجاح وجاهز لاستقبال طلبات المتجر.';
 
   sendDesktopNotification(title, body, logo);
 
-  // 2. Real-time broadcast to all other open admin devices via Firestore WebSocket (<100ms)
-  try {
-    const { doc, setDoc } = await import('firebase/firestore');
-    const { db } = await import('./firebase');
-    const alertId = 'test-' + Date.now();
-    setDoc(doc(db, 'admin_alerts', alertId), {
-      id: alertId,
-      type: 'test',
-      orderNumber: '101',
-      customerName: 'أحمد محمد',
-      total: 890,
-      title: 'أوردر جديد',
-      body: 'اسم العميل: أحمد محمد\nسعر الأوردر: 890 ج.م',
-      logoUrl: logo,
-      createdAt: new Date().toISOString()
-    }).catch(() => {});
-  } catch (err) {
-    console.warn('Realtime broadcast warning:', err);
-  }
-
   const result = { success: true, sentCount: 0, totalSubscribers: 0, error: '' };
 
-  // 3. High-urgency Web Push to background & locked devices via backend
+  // 2. High-urgency Web Push to background & locked devices via backend
   try {
     const res = await fetch('/api/push/test', {
       method: 'POST',

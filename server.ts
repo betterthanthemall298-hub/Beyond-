@@ -614,8 +614,8 @@ async function startServer() {
     const finalLogo = logoUrl || icon || (await getStoreBrandLogo()) || '/icon-192.png';
 
     const payload = JSON.stringify({
-      title: 'أوردر تجريبي',
-      body: 'اسم العميل: أحمد محمد\nسعر الأوردر: 890 ج.م',
+      title: 'Beyond | تجربة الإشعارات',
+      body: 'نظام إشعارات المتجر متصل ويعمل بنجاح لاستقبال طلبات العملاء.',
       icon: finalLogo,
       badge: finalLogo,
       logoUrl: finalLogo,

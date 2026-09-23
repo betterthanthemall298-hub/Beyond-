@@ -481,11 +481,12 @@ let state: StoreState = {
     try {
       await signOut(auth);
     } catch {}
-    update(() => ({ isAdminLoggedIn: false }));
+    isFirstOrdersSnapshot = true;
     if (unsubscribeOrders) {
       unsubscribeOrders();
       unsubscribeOrders = null;
     }
+    update(() => ({ isAdminLoggedIn: false, orders: [] }));
     state.addToast({
       type: 'info',
       title: 'تم تسجيل الخروج',
@@ -1131,9 +1132,11 @@ function syncOrdersIfAdmin() {
       unsubscribeOrders();
       unsubscribeOrders = null;
     }
+    isFirstOrdersSnapshot = true;
     return;
   }
   if (unsubscribeOrders) return; // already listening
+  isFirstOrdersSnapshot = true;
 
   try {
     const ordersCol = collection(db, 'orders');
@@ -1163,6 +1166,10 @@ function syncOrdersIfAdmin() {
           snapshot.docChanges().forEach((change) => {
             if (change.type === 'added') {
               const newOrder = change.doc.data() as Order;
+              const orderTime = newOrder.createdAt ? new Date(newOrder.createdAt).getTime() : 0;
+              const isRecent = !orderTime || (Date.now() - orderTime < 5 * 60 * 1000);
+              if (!isRecent) return;
+
               const itemsCount = (newOrder.items || []).reduce((sum, it) => sum + (it.quantity || 1), 0);
               const summary = (newOrder.items || []).map((it) => `${it.productName} (${it.size})`).join(', ');
               triggerNewOrderNotification(
@@ -1325,6 +1332,7 @@ function setupFirebaseSync() {
         snapshot.docChanges().forEach((change) => {
           if (change.type === 'added') {
             const alertData = change.doc.data();
+            if (!alertData || alertData.type === 'test' || alertData.orderNumber === '101') return;
             const createdAt = alertData.createdAt ? new Date(alertData.createdAt).getTime() : Date.now();
             // Trigger only for recent alerts (within last 60 seconds)
             if (Date.now() - createdAt < 60000) {
