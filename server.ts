@@ -96,17 +96,17 @@ function initFirebaseAdmin() {
 }
 
 async function ensureOrderCounterInitialized(): Promise<number> {
-  if (!adminDb) return 1000;
+  if (!adminDb) return 0;
   try {
     const counterRef = adminDb.collection('counters').doc('orders');
     const snap = await counterRef.get();
-    if (snap.exists) {
-      return Number(snap.data()?.currentNumber) || 1000;
+    if (snap.exists && typeof snap.data()?.currentNumber === 'number') {
+      return Number(snap.data()?.currentNumber) || 0;
     }
 
     // Baseline calculation from existing orders
-    const ordersSnap = await adminDb.collection('orders').limit(150).get();
-    let maxFound = 1000;
+    const ordersSnap = await adminDb.collection('orders').get();
+    let maxFound = 0;
     ordersSnap.forEach((d) => {
       const val = d.data()?.orderNumber;
       const num = parseInt(String(val || '').replace(/\D/g, ''), 10);
@@ -122,7 +122,7 @@ async function ensureOrderCounterInitialized(): Promise<number> {
     return maxFound;
   } catch (err) {
     console.warn('[Order Counter] init error:', err);
-    return 1000;
+    return 0;
   }
 }
 
@@ -375,9 +375,9 @@ async function startServer() {
             const productSnaps = await Promise.all(productDocRefs.map((ref) => t.get(ref)));
             const couponSnap = couponRef ? await t.get(couponRef) : null;
 
-            let currentNum = 1000;
-            if (counterSnap.exists) {
-              currentNum = Number(counterSnap.data()?.currentNumber) || 1000;
+            let currentNum = 0;
+            if (counterSnap.exists && typeof counterSnap.data()?.currentNumber === 'number') {
+              currentNum = Number(counterSnap.data()?.currentNumber) || 0;
             }
 
             const nextOrderNumInt = currentNum + 1;

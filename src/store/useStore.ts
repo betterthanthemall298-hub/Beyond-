@@ -831,7 +831,7 @@ let state: StoreState = {
     const numericOrders = state.orders
       .map((o) => parseInt(o.orderNumber.replace(/\D/g, ''), 10))
       .filter((n) => !isNaN(n) && n > 0);
-    const maxNum = numericOrders.length > 0 ? Math.max(...numericOrders) : 1000;
+    const maxNum = numericOrders.length > 0 ? Math.max(...numericOrders) : 0;
     const nextOrderNum = (maxNum + 1).toString();
     const dateStr = new Date().toISOString().replace('T', ' ').substring(0, 16);
     const uniqueId = 'ord-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7);
@@ -914,11 +914,22 @@ let state: StoreState = {
       // Non-blocking notification dispatch
     }
 
-    update((prev) => ({
-      orders: [finalOrder, ...prev.orders.filter((o) => o.id !== finalOrder.id)],
-      cart: [],
-      appliedCoupon: null
-    }));
+    update((prev) => {
+      const allOrders = [finalOrder, ...prev.orders.filter((o) => o.id !== finalOrder.id)];
+      allOrders.sort((a, b) => {
+        const numA = parseInt(String(a.orderNumber || '').replace(/\D/g, ''), 10) || 0;
+        const numB = parseInt(String(b.orderNumber || '').replace(/\D/g, ''), 10) || 0;
+        if (numB !== numA) {
+          return numB - numA;
+        }
+        return (b.createdAt || '').localeCompare(a.createdAt || '');
+      });
+      return {
+        orders: allOrders,
+        cart: [],
+        appliedCoupon: null
+      };
+    });
 
     trackOrderCompleted({
       orderNumber: finalOrder.orderNumber,
@@ -928,17 +939,17 @@ let state: StoreState = {
     return finalOrder;
   },
   searchRemoteOrders: async (queryText: string) => {
-    const q = queryText.trim();
+    const q = queryText.trim().replace(/^#/, '');
     if (!q) return [];
     const results: Order[] = [];
     try {
-      // Search by exact orderNumber
-      const qByNumber = query(collection(db, 'orders'), where('orderNumber', '==', q), limit(10));
+      // Search by exact orderNumber first
+      const qByNumber = query(collection(db, 'orders'), where('orderNumber', '==', q), limit(1));
       const snapNumber = await getDocs(qByNumber);
       snapNumber.forEach((d) => results.push(d.data() as Order));
 
-      // If nothing found, try by phone
-      if (results.length === 0) {
+      // If nothing found and query looks like a phone number (at least 6 digits), search by phone
+      if (results.length === 0 && q.length >= 6) {
         const qByPhone = query(collection(db, 'orders'), where('phone', '==', q), limit(10));
         const snapPhone = await getDocs(qByPhone);
         snapPhone.forEach((d) => results.push(d.data() as Order));
@@ -1159,7 +1170,14 @@ function syncOrdersIfAdmin() {
             } as Order);
           }
         });
-        loadedOrders.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+        loadedOrders.sort((a, b) => {
+          const numA = parseInt(String(a.orderNumber || '').replace(/\D/g, ''), 10) || 0;
+          const numB = parseInt(String(b.orderNumber || '').replace(/\D/g, ''), 10) || 0;
+          if (numB !== numA) {
+            return numB - numA;
+          }
+          return (b.createdAt || '').localeCompare(a.createdAt || '');
+        });
         update(() => ({ orders: loadedOrders }));
 
         if (!isFirstOrdersSnapshot) {

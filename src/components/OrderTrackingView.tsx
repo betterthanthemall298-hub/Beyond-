@@ -23,18 +23,33 @@ export const OrderTrackingView: React.FC = () => {
   const [isSearchingRemote, setIsSearchingRemote] = useState(false);
 
   const cleanQuery = searchInput.trim().toLowerCase();
+  const queryNum = cleanQuery.replace(/^#/, '');
+  const isNumeric = /^\d+$/.test(queryNum);
 
   const localMatches = orders.filter((o) => {
     if (!cleanQuery) return false;
-    const matchNumber = o.orderNumber.toLowerCase().includes(cleanQuery);
-    const matchPhone = o.phone.includes(cleanQuery);
-    return matchNumber || matchPhone;
+    const orderNum = (o.orderNumber || '').toLowerCase();
+    if (isNumeric) {
+      if (orderNum === queryNum || `#${orderNum}` === cleanQuery) {
+        return true;
+      }
+      if (queryNum.length >= 6) {
+        return (o.phone || '').includes(queryNum) || (o.alternatePhone || '').includes(queryNum);
+      }
+      return false;
+    }
+    return (o.phone || '').includes(cleanQuery);
   });
 
   const matchedOrders = [
     ...localMatches,
     ...remoteResults.filter((r) => !localMatches.some((m) => m.id === r.id))
-  ];
+  ].sort((a, b) => {
+    const numA = parseInt(String(a.orderNumber || '').replace(/\D/g, ''), 10) || 0;
+    const numB = parseInt(String(b.orderNumber || '').replace(/\D/g, ''), 10) || 0;
+    if (numB !== numA) return numB - numA;
+    return (b.createdAt || '').localeCompare(a.createdAt || '');
+  });
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();

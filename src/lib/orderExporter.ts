@@ -56,7 +56,14 @@ export function exportOrdersToCSV(orders: Order[], customFileName?: string) {
   const rows: string[] = [];
   rows.push(headers.map(escapeCell).join(','));
 
-  orders.forEach((order) => {
+  const sortedOrders = [...orders].sort((a, b) => {
+    const numA = parseInt(String(a.orderNumber || '').replace(/\D/g, ''), 10) || 0;
+    const numB = parseInt(String(b.orderNumber || '').replace(/\D/g, ''), 10) || 0;
+    if (numB !== numA) return numB - numA;
+    return (b.createdAt || '').localeCompare(a.createdAt || '');
+  });
+
+  sortedOrders.forEach((order) => {
     const orderItems = order.items || [];
     const itemsDescription = orderItems
       .map(

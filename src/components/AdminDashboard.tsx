@@ -1539,15 +1539,37 @@ export const AdminDashboard: React.FC = () => {
             : orders.filter((o) => o.status === orderStatusFilter);
 
         const cleanQuery = orderSearchQuery.trim().toLowerCase();
+        const queryNum = cleanQuery.replace(/^#/, '');
+        const isNumeric = /^\d+$/.test(queryNum);
+
         const filteredOrders = filteredByStatus.filter((order) => {
           if (!cleanQuery) return true;
           const num = (order.orderNumber || '').toLowerCase();
-          const matchNum = num === cleanQuery || num.includes(cleanQuery) || `#${num}` === cleanQuery;
+
+          if (isNumeric) {
+            // Exact match for order number (e.g. "1" matches order #1 only)
+            if (num === queryNum || `#${num}` === cleanQuery) {
+              return true;
+            }
+            // Only match phone if query has 6+ digits (actual phone query)
+            if (queryNum.length >= 6) {
+              return (order.phone || '').includes(queryNum) || (order.alternatePhone || '').includes(queryNum);
+            }
+            return false;
+          }
+
           const matchName = (order.customerName || '').toLowerCase().includes(cleanQuery);
-          const matchPhone = (order.phone || '').includes(cleanQuery);
+          const matchGov = (order.governorate || '').toLowerCase().includes(cleanQuery);
           const matchCenter = (order.center || '').toLowerCase().includes(cleanQuery);
           const matchAddress = (order.address || '').toLowerCase().includes(cleanQuery);
-          return matchNum || matchName || matchPhone || matchCenter || matchAddress;
+          return matchName || matchGov || matchCenter || matchAddress;
+        }).sort((a, b) => {
+          const numA = parseInt(String(a.orderNumber || '').replace(/\D/g, ''), 10) || 0;
+          const numB = parseInt(String(b.orderNumber || '').replace(/\D/g, ''), 10) || 0;
+          if (numB !== numA) {
+            return numB - numA;
+          }
+          return (b.createdAt || '').localeCompare(a.createdAt || '');
         });
 
         const statusTabs: Array<{ id: 'all' | OrderStatus; label: string; count: number }> = [
