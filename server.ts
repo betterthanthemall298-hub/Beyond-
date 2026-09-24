@@ -4,11 +4,14 @@ import { createServer as createViteServer } from 'vite';
 import webpush from 'web-push';
 import dotenv from 'dotenv';
 import fs from 'fs';
+import rateLimit from 'express-rate-limit';
 import { initializeApp, getApps, cert, type App } from 'firebase-admin/app';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { getAuth } from 'firebase-admin/auth';
 
 dotenv.config();
+
+const OWNER_EMAIL = (process.env.OWNER_EMAIL || 'vdbbdv1234567889@gmail.com').toLowerCase().trim();
 
 // VAPID keys configuration
 const VAPID_PUBLIC_KEY = (process.env.VAPID_PUBLIC_KEY || '').trim();
@@ -37,21 +40,34 @@ if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
 }
 
 // -------------------------------------------------------------
-// Initialize Firebase Admin SDK with Service Account Key
+// Initialize Firebase Admin SDK
 // -------------------------------------------------------------
-let adminApp: App;
-let adminDb: FirebaseFirestore.Firestore;
+let adminApp: App | undefined;
+let adminDb: FirebaseFirestore.Firestore | undefined;
 let adminAuth: any;
 
 function initFirebaseAdmin() {
   let saCred: any = null;
 
   // 1. Try env variable FIREBASE_SERVICE_ACCOUNT_JSON
-  if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
-    try {
-      saCred = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
-    } catch (e) {
-      console.error('Failed to parse FIREBASE_SERVICE_ACCOUNT_JSON:', e);
+  const rawSaEnv = (process.env.FIREBASE_SERVICE_ACCOUNT_JSON || '').trim();
+  if (rawSaEnv) {
+    if (rawSaEnv.startsWith('{')) {
+      try {
+        saCred = JSON.parse(rawSaEnv);
+      } catch {
+        // Will fallback to service-account.json below
+      }
+    } else {
+      // Check if it might be base64-encoded JSON
+      try {
+        const decoded = Buffer.from(rawSaEnv, 'base64').toString('utf8').trim();
+        if (decoded.startsWith('{')) {
+          saCred = JSON.parse(decoded);
+        }
+      } catch {
+        // Will fallback to service-account.json below
+      }
     }
   }
 
@@ -61,21 +77,15 @@ function initFirebaseAdmin() {
     if (fs.existsSync(saPath)) {
       try {
         saCred = JSON.parse(fs.readFileSync(saPath, 'utf8'));
-      } catch (e) {
-        console.error('Failed to parse service-account.json file:', e);
+      } catch {
+        // Will report missing below if still not loaded
       }
     }
   }
 
-  // 3. Fallback to beyond-a32a4 credentials
   if (!saCred) {
-    saCred = {
-      type: 'service_account',
-      project_id: 'beyond-a32a4',
-      private_key_id: 'd968973cf813d44a0d823a1d97b7df6e5743cbf5',
-      private_key: '-----BEGIN PRIVATE KEY-----\nMIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQDiStswltI7g7+E\nWuaFmHcbdhEfPdwEv6icb6GVcmQ1m9HUBa7wj4Mmo5KaTNOq5CWkY4/G791o4Mst\nMPgzxDxemPAYQVUf1ohwcXFJpgVjFz+oNJrkBZs8J1llRDPA+OJl10OoPQqh+3iA\nm9T4SHo0qAz50vpoEoR449luxcfPQG74JIzvCeQWhIBCPkywLptaqhOMyeFIoyR0\nrTvCGB/f12ONRvy1gNfFxvhgvZARd+IF28wiUPMxGG60sfqkSYouetptPD/y6I/X\n3nVyHHmaOpbZVYcT0PhIPz6fpABk+14pFGf8SpXJU2aYcqrKl1P9nEfe+4vlsNJy\n8tW06V4zAgMBAAECggEAMrEkIuFWXQCpcWPPihPacqtjMIVx+RpaEhkrsEe8zQmH\n2qAfTUJI1eoEmE4niHutNwManSz0g18ABLKYlzgZcfN+rWBNSmGLlOzEvQPU5xq5\nJtwJ6pSa7sG90+KQWWUnijrLrC9oZ1rm5qCB99B8l7khlwE9GP008cPQ3HCvzuwr\nWT0bpgDW3ujKf/H2gAxITeezAvE4iNo/0rV19VWmHvuDkD/LFTmvb8oTCV9xBn5+\n2Zw5f9uf+GaaBvTC+tGhnkbn/ksnYgjPL1gLBl28qDkGNnyAUB2PFtg6IEvLRmYW\nGqrsin4Dp5BJPjcHkdtYM0DxnwYHo0FlPqy3Bj0+uQKBgQDySI8L8k20uBL1afCh\nyK0uTV1xCphV7j6hibGSShVa/Q2AC7SQmBSmTqTMCwD/TeLxGGRYjLPGo4JeeuI0\nYdIkJGAYZ2NqPR+phDN9Cz2/JnmqbssW70h/soYSK9vyU+XLNvQEb8Iq0CjOldd3\nWBtZmx9wXbzTWemXGLYhLUs2ZwKBgQDvGoml+GJ4pUxJ6Yp/0OkNCawbSXcclrrr\nfcjR7Wgte4M9Zo4Xj2XwZdOaUqjEWGJmt1JlF6kjn+cs2TYmskPYgDePWJFmJEPz\nzagaqM4uAt5nGPkeDbohJWuYPeal1uOW35/1P94wvUl6nocU83Qc3ZyCsH1B90wd\nRYWmyjCCVQKBgC5b6+MhTfUSc645wy1xtJFzhDmpCVUH7TwDmNKhEk0Ctp6Vnss8\nDld0HNxeDqbLRG1VeX3oDk4n4z4ozTewsADyZODGh6NAZtqMzT1T9VCqEAWohXux\n9XFZu4WmlsNbglDMBw0CRWjjw6sjyMKxPSp8IBvkE8ltHuEmfVMD06xpAoGAYFe6\nFQUjcGdyeOnAY8Yi0Z0PGyOb+goGITNawrO9YW4+MHRtVrLyKU5uV+VsmUjfxXGi\nopdJENCyjpCrUCZOTiNDv9+5HoYIV2mLjcps4X9IbBRU9LYlRIvWcc6nbDVNGRLc\nWi608cCjpePQnDGInMTy9nn0zqq9oaHMu6sGps0CgYBvgxt3LEbKUv0KIihKHvEN\nrfWOYgzx3McFZN86EMzfA+B+gBSsGVQvHvXIRpnHuUypDq4f9GyGVdm/kac5y45U\nTN8wHwoou/47UXYQRHvigtRm+cR+sI1qKLC9diGnuXVYA2hpxCnVrkvxTiW8m9MO\nViNEp0MBOpJ8XgNwA2Z/8A==\n-----END PRIVATE KEY-----\n',
-      client_email: 'firebase-adminsdk-fbsvc@beyond-a32a4.iam.gserviceaccount.com'
-    };
+    console.error('[Firebase Admin] No service account credentials found. FIREBASE_SERVICE_ACCOUNT_JSON or service-account.json required.');
+    return;
   }
 
   const existingApps = getApps();
@@ -128,7 +138,45 @@ async function ensureOrderCounterInitialized(): Promise<number> {
 
 initFirebaseAdmin();
 
+// -------------------------------------------------------------
+// Helper: requireAdmin Middleware
+// -------------------------------------------------------------
+async function requireAdmin(req: express.Request, res: express.Response, next: express.NextFunction) {
+  if (!adminAuth) {
+    return res.status(503).json({ success: false, error: 'Firebase Admin Auth غير متصل' });
+  }
+
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ success: false, error: 'غير مصرح: رمز المصادقة مفقود' });
+  }
+
+  const token = authHeader.split('Bearer ')[1]?.trim();
+  if (!token) {
+    return res.status(401).json({ success: false, error: 'غير مصرح: رمز المصادقة فارغ' });
+  }
+
+  try {
+    const decoded = await adminAuth.verifyIdToken(token);
+    const email = (decoded.email || '').toLowerCase();
+    const isAdminClaim = decoded.admin === true;
+    const isOwner = email === OWNER_EMAIL || email === 'eslsmgomaa47@gmail.com';
+
+    if (!isAdminClaim && !isOwner) {
+      return res.status(403).json({ success: false, error: 'غير مصرح: ليس لديك صلاحيات الأدمن' });
+    }
+
+    (req as any).adminUser = decoded;
+    return next();
+  } catch (err: any) {
+    console.warn('[requireAdmin] Token verification failed:', err?.message || err);
+    return res.status(401).json({ success: false, error: 'رمز المصادقة غير صالح أو منتهي الصلاحية' });
+  }
+}
+
+// -------------------------------------------------------------
 // In-memory subscriptions storage
+// -------------------------------------------------------------
 interface StoredSubscription {
   subscription: webpush.PushSubscription;
   userAgent?: string;
@@ -202,30 +250,149 @@ async function getStoreBrandLogo(): Promise<string> {
   return '/icon-192.png';
 }
 
+// -------------------------------------------------------------
+// In-Memory 30s Coupons Cache
+// -------------------------------------------------------------
+interface CachedCoupon {
+  id: string;
+  code: string;
+  active: boolean;
+  minOrderAmount: number;
+  discountPercent: number;
+}
+let cachedCoupons: CachedCoupon[] = [];
+let lastCouponsFetch = 0;
+const COUPONS_CACHE_TTL = 30000;
+
+async function getCachedCoupons(): Promise<CachedCoupon[]> {
+  const now = Date.now();
+  if (cachedCoupons.length > 0 && now - lastCouponsFetch < COUPONS_CACHE_TTL) {
+    return cachedCoupons;
+  }
+  if (!adminDb) return [];
+  try {
+    const snap = await adminDb.collection('coupons').get();
+    cachedCoupons = snap.docs.map((d) => {
+      const data = d.data();
+      return {
+        id: d.id,
+        code: String(data.code || '').trim().toUpperCase(),
+        active: data.active !== false,
+        minOrderAmount: Number(data.minOrderAmount) || 0,
+        discountPercent: Number(data.discountPercent) || 0
+      };
+    });
+    lastCouponsFetch = now;
+  } catch (err) {
+    console.warn('Failed to fetch coupons for cache:', err);
+  }
+  return cachedCoupons;
+}
+
+// -------------------------------------------------------------
+// Notification Secrets (private_settings/notifications)
+// -------------------------------------------------------------
+async function getNotificationSecrets(): Promise<{
+  telegramBotToken?: string;
+  telegramChatId?: string;
+  pushNotificationTopic?: string;
+}> {
+  if (!adminDb) return {};
+  try {
+    const docSnap = await adminDb.collection('private_settings').doc('notifications').get();
+    if (docSnap.exists) {
+      const data = docSnap.data() || {};
+      return {
+        telegramBotToken: data.telegramBotToken ? String(data.telegramBotToken).trim() : undefined,
+        telegramChatId: data.telegramChatId ? String(data.telegramChatId).trim() : undefined,
+        pushNotificationTopic: data.pushNotificationTopic ? String(data.pushNotificationTopic).trim() : undefined
+      };
+    }
+  } catch (err) {
+    console.warn('[Notification Secrets] Error fetching secrets:', err);
+  }
+  return {};
+}
+
+async function sendTelegramAlert(botToken: string, chatId: string, text: string) {
+  try {
+    await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text,
+        parse_mode: 'Markdown'
+      })
+    });
+  } catch (err) {
+    console.warn('[Telegram Alert] Error sending alert:', err);
+  }
+}
+
+async function sendNtfyAlert(topic: string, title: string, body: string) {
+  try {
+    await fetch(`https://ntfy.sh/${topic}`, {
+      method: 'POST',
+      headers: {
+        'Title': title,
+        'Priority': 'high',
+        'Tags': 'package,bell'
+      },
+      body
+    });
+  } catch (err) {
+    console.warn('[ntfy Alert] Error sending alert:', err);
+  }
+}
+
 async function startServer() {
   const app = express();
   const PORT = 3000;
 
+  app.set('trust proxy', 1);
   app.use(express.json({ limit: '5mb' }));
 
-  // Health check
-  app.get('/api/health', async (_req, res) => {
-    const subscribers = await getAllActiveSubscribers();
+  // Rate Limiters
+  const createOrderLimiter = rateLimit({
+    windowMs: 10 * 60 * 1000,
+    max: 5,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { success: false, error: 'تم تجاوز الحد المسموح به لإنشاء الطلبات، يرجى المحاولة لاحقاً.' }
+  });
+
+  const trackOrdersLimiter = rateLimit({
+    windowMs: 10 * 60 * 1000,
+    max: 20,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { success: false, error: 'تم تجاوز الحد المسموح لعمليات التتبع. يرجى المحاولة لاحقاً.' }
+  });
+
+  const cancelOrderLimiter = rateLimit({
+    windowMs: 10 * 60 * 1000,
+    max: 10,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { success: false, error: 'تم تجاوز الحد المسموح به لإلغاء الطلبات.' }
+  });
+
+  // Health check: returns only { status, service }
+  app.get('/api/health', (_req, res) => {
     res.json({
       status: 'ok',
-      service: 'beyond-store',
-      subscriptionsCount: subscribers.length,
-      firebaseAdmin: !!adminDb
+      service: 'beyond-store'
     });
   });
 
-  // Push VAPID key
+  // Push VAPID key (public)
   app.get('/api/push/vapid-public-key', (_req, res) => {
     res.json({ publicKey: VAPID_PUBLIC_KEY });
   });
 
-  // Register push subscription
-  app.post('/api/push/subscribe', async (req, res) => {
+  // Register push subscription (requireAdmin)
+  app.post('/api/push/subscribe', requireAdmin, async (req, res) => {
     const { subscription, userAgent } = req.body || {};
     if (!subscription || !subscription.endpoint || !subscription.keys) {
       return res.status(400).json({ error: 'Invalid push subscription payload' });
@@ -255,8 +422,8 @@ async function startServer() {
     return res.json({ success: true, activeCount: allSubs.length });
   });
 
-  // Unsubscribe
-  app.post('/api/push/unsubscribe', async (req, res) => {
+  // Unsubscribe (requireAdmin)
+  app.post('/api/push/unsubscribe', requireAdmin, async (req, res) => {
     const { endpoint } = req.body || {};
     if (endpoint) {
       pushSubscriptions.delete(endpoint);
@@ -273,8 +440,8 @@ async function startServer() {
     return res.json({ success: true, activeCount: allSubs.length });
   });
 
-  // Status
-  app.get('/api/push/status', async (_req, res) => {
+  // Push Status (requireAdmin)
+  app.get('/api/push/status', requireAdmin, async (_req, res) => {
     const subscribers = await getAllActiveSubscribers();
     res.json({
       configured: true,
@@ -283,11 +450,71 @@ async function startServer() {
     });
   });
 
+  // Send test push notification (requireAdmin)
+  app.post('/api/push/test', requireAdmin, async (req, res) => {
+    const { logoUrl, icon } = req.body || {};
+    const subscribers = await getAllActiveSubscribers();
+    const finalLogo = logoUrl || icon || (await getStoreBrandLogo()) || '/icon-192.png';
+
+    const payload = JSON.stringify({
+      title: 'Beyond | تجربة الإشعارات',
+      body: 'نظام إشعارات المتجر متصل ويعمل بنجاح لاستقبال طلبات العملاء.',
+      icon: finalLogo,
+      badge: finalLogo,
+      logoUrl: finalLogo,
+      url: '/?view=admin',
+      tag: 'test-push-' + Date.now(),
+      timestamp: Date.now()
+    });
+
+    const sendPromises = subscribers.map((sub) =>
+      webpush.sendNotification({ endpoint: sub.endpoint, keys: sub.keys }, payload, {
+        TTL: 60,
+        urgency: 'high',
+        headers: { Urgency: 'high', Topic: 'order-alert' }
+      }).then(() => true).catch((err) => {
+        if (err?.statusCode === 404 || err?.statusCode === 410) {
+          pushSubscriptions.delete(sub.endpoint);
+          if (adminDb && sub.docId) {
+            adminDb.collection('push_subscriptions').doc(sub.docId).delete().catch(() => {});
+          }
+        }
+        return false;
+      })
+    );
+
+    const results = await Promise.all(sendPromises);
+    const sentCount = results.filter(Boolean).length;
+
+    // Send Telegram & ntfy tests if configured in private_settings/notifications
+    const secrets = await getNotificationSecrets();
+    if (secrets.telegramBotToken && secrets.telegramChatId) {
+      sendTelegramAlert(
+        secrets.telegramBotToken,
+        secrets.telegramChatId,
+        '🔔 *Beyond | تجربة إشعارات تيليجرام*\nتم اختبار الاتصال بنجاح من لوحة تحكم المتجر.'
+      ).catch(() => {});
+    }
+    if (secrets.pushNotificationTopic) {
+      sendNtfyAlert(
+        secrets.pushNotificationTopic,
+        'Beyond | تجربة الإشعارات',
+        'تم اختبار إشعارات ntfy بنجاح من لوحة تحكم المتجر.'
+      ).catch(() => {});
+    }
+
+    return res.json({
+      success: true,
+      sentCount,
+      totalSubscribers: subscribers.length
+    });
+  });
+
   // -------------------------------------------------------------
   // SECURE SERVER-SIDE ORDER CREATION (Admin SDK)
-  // Atomic numerical numbering, single-read product grouping, and case-insensitive coupon validation
+  // Re-validates items, sizes, inventory, shipping costs, and coupons
   // -------------------------------------------------------------
-  app.post('/api/orders/create', async (req, res) => {
+  app.post('/api/orders/create', createOrderLimiter, async (req, res) => {
     try {
       if (!adminDb) {
         return res.status(503).json({ success: false, error: 'قاعدة بيانات السيرفر غير متصلة حالياً' });
@@ -298,82 +525,222 @@ async function startServer() {
         return res.status(400).json({ success: false, error: 'بيانات الطلب غير مكتملة أو السلة فارغة' });
       }
 
-      if (!orderData.customerName || !orderData.phone || !orderData.governorate || !orderData.address) {
-        return res.status(400).json({ success: false, error: 'يرجى إدخال جميع البيانات الأساسية (الاسم، الهاتف، المحافظة، العنوان)' });
+      if (orderData.items.length > 30) {
+        return res.status(400).json({ success: false, error: 'الحد الأقصى لعدد أصناف الطلب هو 30 صنفاً' });
       }
 
-      const sanitizedItems = orderData.items.map((it: any) => ({
-        productId: String(it.productId || ''),
-        productName: String(it.productName || 'هودي'),
-        subtitle: String(it.subtitle || ''),
-        image: String(it.image && it.image.startsWith('http') ? it.image : ''),
-        size: String(it.size || 'L'),
-        colorName: String(it.colorName || ''),
-        colorHex: String(it.colorHex || '#171717'),
-        price: Number(it.price) || 0,
-        quantity: Number(it.quantity) || 1
-      }));
+      // 1. Strict Inputs Validation
+      const customerName = String(orderData.customerName || '').trim();
+      if (!customerName || customerName.length > 100) {
+        return res.status(400).json({ success: false, error: 'يرجى كتابة الاسم بشكل صحيح (أقل من 100 حرف)' });
+      }
 
-      // 1. Group ordered quantities by productId to avoid duplicate reads in Firestore transaction
-      const productDeltas = new Map<string, Record<string, number>>();
-      for (const it of sanitizedItems) {
-        if (!it.productId) continue;
-        if (!productDeltas.has(it.productId)) {
-          productDeltas.set(it.productId, {});
+      const cleanPhone = String(orderData.phone || '').replace(/\s+/g, '');
+      const phoneRegex = /^01[0125][0-9]{8}$/;
+      if (!phoneRegex.test(cleanPhone)) {
+        return res.status(400).json({ success: false, error: 'يرجى إدخال رقم هاتف مصري صحيح (مثال: 01012345678)' });
+      }
+
+      let cleanAltPhone = '';
+      if (orderData.alternatePhone && String(orderData.alternatePhone).trim()) {
+        cleanAltPhone = String(orderData.alternatePhone).replace(/\s+/g, '');
+        if (!phoneRegex.test(cleanAltPhone)) {
+          return res.status(400).json({ success: false, error: 'رقم الهاتف الاحتياطي غير صالح' });
         }
-        const sizeMap = productDeltas.get(it.productId)!;
-        sizeMap[it.size] = (sizeMap[it.size] || 0) + (it.quantity || 1);
       }
 
-      // 2. Case-insensitive coupon lookup
-      let matchedCouponId: string | null = null;
-      let appliedDiscount = Number(orderData.discount) || 0;
-      if (orderData.couponCode) {
-        const cleanCouponCode = String(orderData.couponCode).trim().toUpperCase();
-        try {
-          const couponsSnap = await adminDb.collection('coupons').get();
-          for (const cDoc of couponsSnap.docs) {
-            const cData = cDoc.data();
-            if (cData && String(cData.code || '').trim().toUpperCase() === cleanCouponCode) {
-              if (cData.active !== false) {
-                matchedCouponId = cDoc.id;
-                if (cData.discountPercent && Number(cData.discountPercent) > 0) {
-                  const subtotal = Number(orderData.subtotal) || 0;
-                  if (subtotal >= (Number(cData.minOrderAmount) || 0)) {
-                    appliedDiscount = Math.round((subtotal * Number(cData.discountPercent)) / 100);
-                  }
-                }
-              }
-              break;
+      const governorate = String(orderData.governorate || '').trim();
+      if (!governorate) {
+        return res.status(400).json({ success: false, error: 'يرجى اختيار المحافظة' });
+      }
+
+      const center = String(orderData.center || '').trim();
+      if (center.length > 100) {
+        return res.status(400).json({ success: false, error: 'اسم المركز أو الحي طويل جداً' });
+      }
+
+      const address = String(orderData.address || '').trim();
+      if (!address || address.length > 300) {
+        return res.status(400).json({ success: false, error: 'يرجى إدخال العنوان بالتفصيل (أقل من 300 حرف)' });
+      }
+
+      const notes = String(orderData.notes || '').trim();
+      if (notes.length > 500) {
+        return res.status(400).json({ success: false, error: 'الملاحظات يجب ألا تتجاوز 500 حرف' });
+      }
+
+      // 2. Validate Items format & bounds
+      for (const it of orderData.items) {
+        const qty = Number(it.quantity);
+        if (!Number.isInteger(qty) || qty < 1 || qty > 50) {
+          return res.status(400).json({ success: false, error: 'الكمية لكل منتج يجب أن تكون عدداً صحيحاً بين 1 و 50' });
+        }
+        if (!it.productId || !it.size) {
+          return res.status(400).json({ success: false, error: 'بيانات المنتج أو المقاس غير صالحة' });
+        }
+      }
+
+      // 3. Determine Shipping Cost from settings/shipping (list) or fallback to governorates collection
+      let shippingCost: number | null = null;
+      try {
+        const shippingDoc = await adminDb.collection('settings').doc('shipping').get();
+        if (shippingDoc.exists) {
+          const list = shippingDoc.data()?.list;
+          if (Array.isArray(list)) {
+            const foundGov = list.find((g: any) => g.name === governorate);
+            if (foundGov && typeof foundGov.cost === 'number') {
+              shippingCost = foundGov.cost;
             }
           }
-        } catch (cErr) {
-          console.warn('Coupon lookup warning:', cErr);
+        }
+      } catch (shipErr) {
+        console.warn('Error reading settings/shipping:', shipErr);
+      }
+
+      if (shippingCost === null) {
+        try {
+          const govDoc = await adminDb.collection('governorates').doc(governorate).get();
+          if (govDoc.exists && typeof govDoc.data()?.cost === 'number') {
+            shippingCost = govDoc.data()?.cost;
+          }
+        } catch (govErr) {
+          console.warn('Error reading governorates fallback:', govErr);
         }
       }
 
-      const counterRef = adminDb.collection('counters').doc('orders');
+      if (shippingCost === null) {
+        return res.status(400).json({ success: false, error: 'المحافظة المحددة غير مدعومة أو غير معروفة' });
+      }
+
+      // 4. Verify Coupon if provided (using in-memory cache)
+      let matchedCoupon: CachedCoupon | null = null;
+      if (orderData.couponCode) {
+        const cleanCode = String(orderData.couponCode).trim().toUpperCase();
+        const coupons = await getCachedCoupons();
+        const found = coupons.find((c) => c.code === cleanCode);
+        if (!found || !found.active) {
+          return res.status(400).json({ success: false, error: 'كود الخصم غير صالح أو منتهي الصلاحية' });
+        }
+        matchedCoupon = found;
+      }
+
+      // Group ordered items by product ID
+      const productDeltas = new Map<string, Record<string, number>>();
+      for (const it of orderData.items) {
+        const pId = String(it.productId).trim();
+        const sz = String(it.size).trim();
+        const qty = Number(it.quantity);
+        if (!productDeltas.has(pId)) {
+          productDeltas.set(pId, {});
+        }
+        const sizeMap = productDeltas.get(pId)!;
+        sizeMap[sz] = (sizeMap[sz] || 0) + qty;
+      }
+
       const uniqueProductIds = Array.from(productDeltas.keys());
       const productDocRefs = uniqueProductIds.map((pId) => adminDb.collection('products').doc(pId));
-      const couponRef = matchedCouponId ? adminDb.collection('coupons').doc(matchedCouponId) : null;
+      const counterRef = adminDb.collection('counters').doc('orders');
+      const couponRef = matchedCoupon ? adminDb.collection('coupons').doc(matchedCoupon.id) : null;
 
       const uniqueId = 'ord-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7);
       const orderRef = adminDb.collection('orders').doc(uniqueId);
       const dateStr = new Date().toISOString().replace('T', ' ').substring(0, 16);
 
       let createdOrder: any = null;
-
-      // 3. Atomic transaction ensuring purely numerical order numbering & safe stock updates
       let transactionSuccess = false;
       let lastTxError: any = null;
 
       for (let attempt = 1; attempt <= 4; attempt++) {
         try {
           await adminDb.runTransaction(async (t) => {
-            // --- ALL READS FIRST ---
+            // --- READS ---
             const counterSnap = await t.get(counterRef);
             const productSnaps = await Promise.all(productDocRefs.map((ref) => t.get(ref)));
             const couponSnap = couponRef ? await t.get(couponRef) : null;
+
+            // Reconstruct and validate items from Firestore products
+            const recomputedItems: any[] = [];
+            let calculatedSubtotal = 0;
+
+            const productDataMap = new Map<string, any>();
+            for (let i = 0; i < productSnaps.length; i++) {
+              const pSnap = productSnaps[i];
+              const pId = uniqueProductIds[i];
+              if (!pSnap.exists) {
+                const err: any = new Error(`المنتج غير موجود: ${pId}`);
+                err.status = 400;
+                throw err;
+              }
+              const pData = pSnap.data() || {};
+              productDataMap.set(pId, pData);
+
+              // Validate stock for all sizes of this product
+              const requestedSizes = productDeltas.get(pId) || {};
+              const curSizesStock = pData.sizesStock || {};
+
+              for (const [sz, reqQty] of Object.entries(requestedSizes)) {
+                if (!(sz in curSizesStock)) {
+                  const err: any = new Error(`المقاس (${sz}) غير متوفر للمنتج "${pData.name}"`);
+                  err.status = 400;
+                  throw err;
+                }
+                const available = Number(curSizesStock[sz]) || 0;
+                if (reqQty > available) {
+                  const err: any = new Error(`نفد مخزون المنتج "${pData.name}" لمقاس (${sz}) أو الكمية المطلوبة غير متوفرة حالياً.`);
+                  err.status = 409;
+                  throw err;
+                }
+              }
+            }
+
+            for (const it of orderData.items) {
+              const pId = String(it.productId).trim();
+              const pData = productDataMap.get(pId);
+              const itemPrice = Number(pData.price) || 0;
+              const itemQty = Number(it.quantity);
+
+              // First image starting with http, else ''
+              let itemImage = '';
+              const images = Array.isArray(pData.images) ? pData.images : (pData.image ? [pData.image] : []);
+              for (const img of images) {
+                if (typeof img === 'string' && img.startsWith('http')) {
+                  itemImage = img;
+                  break;
+                }
+              }
+
+              recomputedItems.push({
+                productId: pId,
+                productName: String(pData.name || 'هودي'),
+                subtitle: String(pData.subtitle || ''),
+                image: itemImage,
+                size: String(it.size).trim(),
+                colorName: String(it.colorName || ''),
+                colorHex: String(it.colorHex || '#171717'),
+                price: itemPrice,
+                quantity: itemQty
+              });
+
+              calculatedSubtotal += itemPrice * itemQty;
+            }
+
+            // Coupon recalculation
+            let finalDiscount = 0;
+            if (matchedCoupon && couponSnap && couponSnap.exists) {
+              const liveCouponData = couponSnap.data() || {};
+              if (liveCouponData.active !== false) {
+                const minOrder = Number(liveCouponData.minOrderAmount) || 0;
+                if (calculatedSubtotal < minOrder) {
+                  const err: any = new Error(`الحد الأدنى لتطبيق هذا الكوبون هو ${minOrder} ج.م`);
+                  err.status = 400;
+                  throw err;
+                }
+                const percent = Number(liveCouponData.discountPercent) || 0;
+                finalDiscount = Math.round((calculatedSubtotal * percent) / 100);
+              }
+            }
+
+            const finalTotal = Math.max(0, calculatedSubtotal - finalDiscount + shippingCost!);
 
             let currentNum = 0;
             if (counterSnap.exists && typeof counterSnap.data()?.currentNumber === 'number') {
@@ -386,52 +753,51 @@ async function startServer() {
             const newOrder = {
               id: uniqueId,
               orderNumber: nextOrderNum,
-              customerName: String(orderData.customerName).trim(),
-              phone: String(orderData.phone).trim(),
-              alternatePhone: orderData.alternatePhone ? String(orderData.alternatePhone).trim() : '',
-              governorate: String(orderData.governorate).trim(),
-              center: orderData.center ? String(orderData.center).trim() : '',
-              address: String(orderData.address).trim(),
-              notes: orderData.notes ? String(orderData.notes).trim() : '',
-              items: sanitizedItems,
-              subtotal: Number(orderData.subtotal) || 0,
-              shippingCost: Number(orderData.shippingCost) || 0,
-              discount: appliedDiscount,
-              couponCode: orderData.couponCode ? String(orderData.couponCode).trim() : '',
-              total: Number(orderData.total) || 0,
+              customerName,
+              phone: cleanPhone,
+              alternatePhone: cleanAltPhone,
+              governorate,
+              center,
+              address,
+              notes,
+              items: recomputedItems,
+              subtotal: calculatedSubtotal,
+              shippingCost: shippingCost!,
+              discount: finalDiscount,
+              couponCode: matchedCoupon ? matchedCoupon.code : '',
+              total: finalTotal,
               status: 'pending',
               createdAt: dateStr
             };
 
             createdOrder = newOrder;
 
-            // --- ALL WRITES AFTER READS ---
-            // Atomic numeric counter increment
+            // --- WRITES ---
+            // 1. Counter
             t.set(counterRef, {
               currentNumber: nextOrderNumInt,
               updatedAt: new Date().toISOString()
             }, { merge: true });
 
-            // Save order document
+            // 2. Order
             t.set(orderRef, newOrder);
 
-            // Deduct sizesStock for each product document
+            // 3. Stock deduction
             for (let i = 0; i < productSnaps.length; i++) {
-              const pSnap = productSnaps[i];
               const pId = uniqueProductIds[i];
+              const pData = productDataMap.get(pId);
               const orderedSizes = productDeltas.get(pId) || {};
-              if (pSnap && pSnap.exists) {
-                const pData = pSnap.data() || {};
-                const curSizesStock = { ...(pData.sizesStock || {}) };
-                for (const [sz, qty] of Object.entries(orderedSizes)) {
-                  const currentQty = Number(curSizesStock[sz]) || 0;
-                  curSizesStock[sz] = Math.max(0, currentQty - qty);
-                }
-                t.update(productDocRefs[i], { sizesStock: curSizesStock });
+              const curSizesStock = { ...(pData.sizesStock || {}) };
+
+              for (const [sz, qty] of Object.entries(orderedSizes)) {
+                const cur = Number(curSizesStock[sz]) || 0;
+                curSizesStock[sz] = Math.max(0, cur - qty);
               }
+
+              t.update(productDocRefs[i], { sizesStock: curSizesStock });
             }
 
-            // Increment coupon timesUsed if matched
+            // 4. Coupon timesUsed
             if (couponRef && couponSnap && couponSnap.exists) {
               const curTimes = Number(couponSnap.data()?.timesUsed) || 0;
               t.update(couponRef, { timesUsed: curTimes + 1 });
@@ -442,6 +808,11 @@ async function startServer() {
           break;
         } catch (err: any) {
           lastTxError = err;
+          if (err.status) {
+            // Application validation error (400, 409) - do not retry
+            return res.status(err.status).json({ success: false, error: err.message });
+          }
+
           const isContention = err?.code === 10 ||
             String(err?.message || '').includes('contention') ||
             String(err?.message || '').includes('ABORTED');
@@ -459,11 +830,11 @@ async function startServer() {
         throw lastTxError || new Error('Transaction failed');
       }
 
-      // 4. Save in-app admin alert
+      // Unique alertId
+      const alertId = 'alert-' + Date.now() + '-' + Math.random().toString(36).substring(2, 9);
       try {
-        const alertId = 'alert-' + Date.now();
-        const totalItems = sanitizedItems.reduce((sum: number, it: any) => sum + (it.quantity || 1), 0);
-        const summary = sanitizedItems.map((it: any) => `${it.productName} (${it.size})`).join(', ');
+        const totalItems = createdOrder.items.reduce((sum: number, it: any) => sum + (it.quantity || 1), 0);
+        const summary = createdOrder.items.map((it: any) => `${it.productName} (${it.size})`).join(', ');
 
         await adminDb.collection('admin_alerts').doc(alertId).set({
           id: alertId,
@@ -479,7 +850,7 @@ async function startServer() {
         console.warn('Could not post admin_alert:', alertErr);
       }
 
-      // 5. Trigger Web Push Notifications to all subscribed admin devices
+      // Web Push Notifications to subscribed admin devices
       try {
         const subscribers = await getAllActiveSubscribers();
         const brandLogo = await getStoreBrandLogo();
@@ -500,10 +871,32 @@ async function startServer() {
             TTL: 60,
             urgency: 'high',
             headers: { Urgency: 'high', Topic: 'order-alert' }
-          }).catch(() => {});
+          }).catch((err) => {
+            if (err?.statusCode === 404 || err?.statusCode === 410) {
+              pushSubscriptions.delete(sub.endpoint);
+              if (adminDb && sub.docId) {
+                adminDb.collection('push_subscriptions').doc(sub.docId).delete().catch(() => {});
+              }
+            }
+          });
         });
       } catch (pushErr) {
         console.warn('Push alert error:', pushErr);
+      }
+
+      // Trigger Telegram & ntfy from server reading private_settings/notifications
+      try {
+        const secrets = await getNotificationSecrets();
+        if (secrets.telegramBotToken && secrets.telegramChatId) {
+          const msg = `🛍️ *أوردر جديد - Beyond*\nرقم الأوردر: #${createdOrder.orderNumber}\nاسم العميل: ${createdOrder.customerName}\nالمحافظة: ${createdOrder.governorate}\nسعر الأوردر: ${createdOrder.total} ج.م`;
+          sendTelegramAlert(secrets.telegramBotToken, secrets.telegramChatId, msg).catch(() => {});
+        }
+        if (secrets.pushNotificationTopic) {
+          const body = `اسم العميل: ${createdOrder.customerName}\nسعر الأوردر: ${createdOrder.total} ج.م`;
+          sendNtfyAlert(secrets.pushNotificationTopic, 'أوردر جديد', body).catch(() => {});
+        }
+      } catch (externalErr) {
+        console.warn('External alerts error:', externalErr);
       }
 
       console.log(`[Order Created] Order #${createdOrder.orderNumber} successfully saved`);
@@ -521,10 +914,112 @@ async function startServer() {
   });
 
   // -------------------------------------------------------------
-  // ADMIN USERS MANAGEMENT (Firebase Admin Auth)
-  // Allows the owner to list and create new admin accounts safely
+  // ORDERS TRACKING & CANCELLATION FOR CUSTOMERS
   // -------------------------------------------------------------
-  app.get('/api/admin/users', async (req, res) => {
+  app.post('/api/orders/track', trackOrdersLimiter, async (req, res) => {
+    if (!adminDb) {
+      return res.status(503).json({ success: false, error: 'قاعدة البيانات غير متصلة' });
+    }
+    const rawQuery = String(req.body?.query || '').trim().replace(/^#/, '');
+    if (!rawQuery) {
+      return res.json({ success: true, orders: [] });
+    }
+
+    const cleanPhone = rawQuery.replace(/\s+/g, '');
+    const isPhone = /^01[0125][0-9]{8}$/.test(cleanPhone);
+
+    try {
+      if (isPhone) {
+        // Query up to 10 latest orders for this phone number
+        const snap = await adminDb.collection('orders')
+          .where('phone', '==', cleanPhone)
+          .limit(10)
+          .get();
+
+        const orders = snap.docs.map((d) => d.data());
+        orders.sort((a: any, b: any) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+        return res.json({ success: true, orders });
+      }
+
+      // Query single order by orderNumber
+      const snap = await adminDb.collection('orders')
+        .where('orderNumber', '==', rawQuery)
+        .limit(1)
+        .get();
+
+      if (snap.empty) {
+        return res.json({ success: true, orders: [] });
+      }
+
+      const orderData = snap.docs[0].data();
+      // Strip customer PII
+      const {
+        customerName,
+        phone,
+        alternatePhone,
+        address,
+        notes,
+        ...sanitizedOrder
+      } = orderData;
+
+      return res.json({
+        success: true,
+        orders: [sanitizedOrder]
+      });
+    } catch (err: any) {
+      console.error('Order tracking error:', err);
+      return res.status(500).json({ success: false, error: 'حدث خطأ أثناء البحث عن الطلب' });
+    }
+  });
+
+  app.post('/api/orders/cancel', cancelOrderLimiter, async (req, res) => {
+    if (!adminDb) {
+      return res.status(503).json({ success: false, error: 'قاعدة البيانات غير متصلة' });
+    }
+    const { orderId, phone } = req.body || {};
+    if (!orderId) {
+      return res.status(400).json({ success: false, error: 'معرف الطلب غير محدد' });
+    }
+
+    const cleanInputPhone = String(phone || '').replace(/\s+/g, '');
+
+    try {
+      const orderRef = adminDb.collection('orders').doc(orderId);
+      const snap = await orderRef.get();
+      if (!snap.exists) {
+        return res.status(404).json({ success: false, error: 'الطلب غير موجود' });
+      }
+
+      const order = snap.data() || {};
+      const orderPhone = String(order.phone || '').replace(/\s+/g, '');
+
+      if (orderPhone !== cleanInputPhone) {
+        return res.status(403).json({ success: false, error: 'رقم الهاتف غير مطابق لبيانات هذا الطلب' });
+      }
+
+      if (order.status !== 'pending') {
+        return res.status(400).json({
+          success: false,
+          error: `لا يمكن إلغاء الطلب لأن حالته الحالية: ${order.status}`
+        });
+      }
+
+      await orderRef.update({
+        status: 'cancelled',
+        cancelledAt: new Date().toISOString()
+      });
+
+      return res.json({ success: true, message: 'تم إلغاء الطلب بنجاح' });
+    } catch (err: any) {
+      console.error('Cancel order error:', err);
+      return res.status(500).json({ success: false, error: 'حدث خطأ أثناء إلغاء الطلب' });
+    }
+  });
+
+  // -------------------------------------------------------------
+  // ADMIN USERS MANAGEMENT (Firebase Admin Auth - requireAdmin)
+  // -------------------------------------------------------------
+  app.get('/api/admin/users', requireAdmin, async (req, res) => {
     try {
       if (!adminAuth) {
         return res.status(503).json({ success: false, error: 'Firebase Admin Auth غير متصل' });
@@ -544,7 +1039,7 @@ async function startServer() {
     }
   });
 
-  app.post('/api/admin/create-user', async (req, res) => {
+  app.post('/api/admin/create-user', requireAdmin, async (req, res) => {
     try {
       if (!adminAuth) {
         return res.status(503).json({ success: false, error: 'Firebase Admin Auth غير متصل' });
@@ -563,6 +1058,9 @@ async function startServer() {
         password: String(password).trim(),
         displayName: displayName ? String(displayName).trim() : 'مشرف المتجر'
       });
+
+      // Set admin custom user claim
+      await adminAuth.setCustomUserClaims(userRecord.uid, { admin: true });
 
       console.log(`[Admin Created] Successfully created admin: ${userRecord.email}`);
       return res.status(201).json({
@@ -584,17 +1082,19 @@ async function startServer() {
     }
   });
 
-  app.post('/api/admin/delete-user', async (req, res) => {
+  app.post('/api/admin/delete-user', requireAdmin, async (req, res) => {
     try {
       if (!adminAuth) {
         return res.status(503).json({ success: false, error: 'Firebase Admin Auth غير متصل' });
       }
-      const { uid, email } = req.body || {};
+      const { uid } = req.body || {};
       if (!uid) {
         return res.status(400).json({ success: false, error: 'معرف المستخدم غير محدد' });
       }
-      // Protect original owner email
-      if (email && email.toLowerCase() === 'vdbbdv1234567889@gmail.com') {
+
+      // Protect owner email by verifying actual user from Auth, not body
+      const targetUser = await adminAuth.getUser(uid);
+      if (targetUser.email && targetUser.email.toLowerCase() === OWNER_EMAIL) {
         return res.status(403).json({ success: false, error: 'لا يمكن حذف حساب المالك الأساسي للمتجر' });
       }
 
@@ -605,41 +1105,6 @@ async function startServer() {
       console.error('Error deleting admin user:', err);
       return res.status(500).json({ success: false, error: err.message });
     }
-  });
-
-  // Send test push notification
-  app.post('/api/push/test', async (req, res) => {
-    const { logoUrl, icon } = req.body || {};
-    const subscribers = await getAllActiveSubscribers();
-    const finalLogo = logoUrl || icon || (await getStoreBrandLogo()) || '/icon-192.png';
-
-    const payload = JSON.stringify({
-      title: 'Beyond | تجربة الإشعارات',
-      body: 'نظام إشعارات المتجر متصل ويعمل بنجاح لاستقبال طلبات العملاء.',
-      icon: finalLogo,
-      badge: finalLogo,
-      logoUrl: finalLogo,
-      url: '/?view=admin',
-      tag: 'test-push-' + Date.now(),
-      timestamp: Date.now()
-    });
-
-    const sendPromises = subscribers.map((sub) =>
-      webpush.sendNotification({ endpoint: sub.endpoint, keys: sub.keys }, payload, {
-        TTL: 60,
-        urgency: 'high',
-        headers: { Urgency: 'high', Topic: 'order-alert' }
-      }).then(() => true).catch(() => false)
-    );
-
-    const results = await Promise.all(sendPromises);
-    const sentCount = results.filter(Boolean).length;
-
-    return res.json({
-      success: true,
-      sentCount,
-      totalSubscribers: subscribers.length
-    });
   });
 
   // Vite middleware for development vs static build in production

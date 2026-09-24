@@ -1,63 +1,67 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Products: catalog items can be read by visitors and managed by the store
+    function isAdmin() {
+      return request.auth != null && (
+        request.auth.token.admin == true ||
+        request.auth.token.email == 'vdbbdv1234567889@gmail.com' ||
+        request.auth.token.email == 'eslsmgomaa47@gmail.com'
+      );
+    }
+
     match /products/{productId} {
-      allow read, write: if true;
+      allow read: if true;
+      allow write: if isAdmin();
     }
 
-    // Orders: customers create orders, store management updates and tracks orders
-    match /orders/{orderId} {
-      allow read, write: if true;
-    }
-
-    // Store settings & shipping configurations
-    match /settings/{settingId} {
-      allow read, write: if true;
-    }
-
-    // Shipping governorates & costs
     match /governorates/{govId} {
-      allow read, write: if true;
+      allow read: if true;
+      allow write: if isAdmin();
     }
 
-    // Push subscriptions for order notifications
-    match /push_subscriptions/{subId} {
-      allow read, write: if true;
-    }
-
-    // Promotional coupons
-    match /coupons/{couponId} {
-      allow read, write: if true;
-    }
-
-    // Customer review images
     match /reviewImages/{reviewId} {
-      allow read, write: if true;
+      allow read: if true;
+      allow write: if isAdmin();
     }
 
-    // Realtime admin alerts
+    match /settings/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /coupons/{couponId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /orders/{orderId} {
+      allow read, update, delete: if isAdmin();
+      allow create: if false;
+    }
+
+    match /push_subscriptions/{subId} {
+      allow read, write: if isAdmin();
+    }
+
+    match /private_settings/{docId} {
+      allow read, write: if isAdmin();
+    }
+
     match /admin_alerts/{alertId} {
-      allow read, write: if true;
+      allow read: if isAdmin();
+      allow write: if false;
     }
 
-    // Harmless connectivity test
-    match /test/{docId} {
-      allow read, write: if true;
-    }
-
-    // Store analytics
     match /analytics_daily/{dateId} {
-      allow read, write: if true;
+      allow read, write: if false;
     }
 
     match /analytics_sessions/{sessionId} {
-      allow read, write: if true;
+      allow read, write: if false;
     }
 
-    // Fallback catch-all for any store collection
-    match /{document=**} {
-      allow read, write: if true;
+    match /counters/{counterId} {
+      allow read, write: if false;
     }
   }
 }

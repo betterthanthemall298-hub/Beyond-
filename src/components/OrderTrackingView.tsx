@@ -90,15 +90,50 @@ export const OrderTrackingView: React.FC = () => {
     } catch {}
   }, [orders]);
 
+  const [cancellingOrder, setCancellingOrder] = useState<{ id: string; orderNumber: string } | null>(null);
+  const [cancelPhoneInput, setCancelPhoneInput] = useState('');
+  const [cancelPhoneError, setCancelPhoneError] = useState('');
+  const [isSubmittingCancel, setIsSubmittingCancel] = useState(false);
+
   const handleCancelOrderPrompt = (orderId: string, orderNumber: string) => {
-    openDeleteModal({
-      title: 'إلغاء وحذف الطلب',
-      description: 'هل تريد حقاً إلغاء هذا الطلب وحذفه؟ إذا تم الشحن بالفعل قد يستغرق التحديث وقتاً أطول.',
-      itemLabel: `رقم الطلب: ${orderNumber}`,
-      onConfirm: () => {
-        cancelOrder(orderId);
-      }
-    });
+    const target = matchedOrders.find((o) => o.id === orderId) || orders.find((o) => o.id === orderId);
+    const existingPhone = target?.phone || (/^01[0125][0-9]{8}$/.test(searchInput.trim()) ? searchInput.trim() : '');
+
+    if (existingPhone) {
+      openDeleteModal({
+        title: 'إلغاء وحذف الطلب',
+        description: 'هل تريد حقاً إلغاء هذا الطلب وحذفه؟ لا يمكن التراجع عن هذه الخطوة.',
+        itemLabel: `رقم الطلب: #${orderNumber}`,
+        onConfirm: () => {
+          cancelOrder(orderId, existingPhone);
+        }
+      });
+    } else {
+      setCancellingOrder({ id: orderId, orderNumber });
+      setCancelPhoneInput('');
+      setCancelPhoneError('');
+    }
+  };
+
+  const handleConfirmCancelWithPhone = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!cancellingOrder) return;
+    const cleanPhone = cancelPhoneInput.replace(/\s+/g, '');
+    if (!/^01[0125][0-9]{8}$/.test(cleanPhone)) {
+      setCancelPhoneError('يرجى إدخال رقم هاتف مصري صحيح (مثال: 01012345678)');
+      return;
+    }
+
+    setIsSubmittingCancel(true);
+    setCancelPhoneError('');
+    try {
+      await cancelOrder(cancellingOrder.id, cleanPhone);
+      setCancellingOrder(null);
+    } catch (err: any) {
+      setCancelPhoneError(err?.message || 'تعذر إلغاء الطلب، يرجى التأكد من رقم الهاتف');
+    } finally {
+      setIsSubmittingCancel(false);
+    }
   };
 
   const handleDeletePermanentlyPrompt = (orderId: string, orderNumber: string) => {
@@ -423,16 +458,18 @@ export const OrderTrackingView: React.FC = () => {
                   {/* Customer & Address Details */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs bg-stone-950/60 p-4 rounded-xl border border-stone-800">
                     <div className="space-y-1">
-                      <div className="flex items-center gap-1.5 text-stone-300">
-                        <Phone className="w-3.5 h-3.5 text-amber-500" />
-                        <span>الهاتف: {order.phone}</span>
-                      </div>
+                      {order.phone ? (
+                        <div className="flex items-center gap-1.5 text-stone-300">
+                          <Phone className="w-3.5 h-3.5 text-amber-500" />
+                          <span>الهاتف: {order.phone}</span>
+                        </div>
+                      ) : null}
                       <div className="flex items-start gap-1.5 text-stone-300">
                         <MapPin className="w-3.5 h-3.5 text-amber-500 mt-0.5 shrink-0" />
                         <span>
-                          العنوان: {order.governorate}
+                          العنوان: {order.governorate || 'مصر'}
                           {order.center ? ` - المركز: ${order.center}` : ''}
-                          {' '} - {order.address}
+                          {order.address ? ` - ${order.address}` : ''}
                         </span>
                       </div>
                     </div>
@@ -477,6 +514,72 @@ export const OrderTrackingView: React.FC = () => {
               );
             })
           )}
+        </div>
+      )}
+
+      {/* Cancel Order with Phone Verification Modal */}
+      {cancellingOrder && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
+          <div className="w-full max-w-md bg-stone-900 border border-stone-800 rounded-2xl p-5 shadow-2xl relative space-y-4">
+            <div className="flex items-center justify-between border-b border-stone-800 pb-3">
+              <div className="flex items-center gap-2 text-rose-400">
+                <Trash2 className="w-5 h-5" />
+                <h3 className="font-bold text-sm text-stone-100">تأكيد إلغاء الطلب #{cancellingOrder.orderNumber}</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setCancellingOrder(null)}
+                className="text-stone-400 hover:text-stone-200 p-1"
+              >
+                <XCircle className="w-5 h-5" />
+              </button>
+            </div>
+
+            <p className="text-xs text-stone-400 leading-relaxed">
+              لحماية بيانات العملاء، يرجى كتابة رقم الهاتف المصري المسجل في هذا الطلب لتأكيد هويتك وإلغاء الطلب.
+            </p>
+
+            <form onSubmit={handleConfirmCancelWithPhone} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-stone-300 mb-1">
+                  رقم الهاتف المسجل
+                </label>
+                <input
+                  type="tel"
+                  required
+                  autoFocus
+                  dir="ltr"
+                  value={cancelPhoneInput}
+                  onChange={(e) => setCancelPhoneInput(e.target.value)}
+                  placeholder="01012345678"
+                  className="w-full bg-stone-950 border border-stone-800 rounded-xl px-3.5 py-2.5 text-sm text-stone-100 placeholder-stone-600 focus:outline-none focus:border-amber-500 font-mono text-center tracking-wider"
+                />
+              </div>
+
+              {cancelPhoneError && (
+                <p className="text-xs text-rose-400 bg-rose-950/40 p-2.5 rounded-xl border border-rose-900/40">
+                  {cancelPhoneError}
+                </p>
+              )}
+
+              <div className="flex gap-2.5 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setCancellingOrder(null)}
+                  className="flex-1 py-2.5 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-300 font-bold text-xs transition-colors"
+                >
+                  تراجع
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingCancel}
+                  className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs transition-colors shadow-lg shadow-rose-950/50 disabled:opacity-50"
+                >
+                  {isSubmittingCancel ? 'جاري الإلغاء...' : 'تأكيد الإلغاء'}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>

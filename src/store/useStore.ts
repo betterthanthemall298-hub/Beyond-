@@ -10,7 +10,8 @@ import {
   orderBy,
   limit,
   getDocs,
-  where
+  where,
+  deleteField
 } from 'firebase/firestore';
 import { db, testFirebaseConnection, sanitizeForFirestore, auth } from '../lib/firebase';
 import { signInWithEmailAndPassword, updatePassword, signOut, onAuthStateChanged } from 'firebase/auth';
@@ -142,7 +143,7 @@ export interface StoreState {
   // Orders (synced in real-time with Firebase Firestore across all devices)
   orders: Order[];
   createOrder: (orderData: Omit<Order, 'id' | 'orderNumber' | 'createdAt' | 'status'>) => Promise<Order>;
-  cancelOrder: (orderId: string) => Promise<void>;
+  cancelOrder: (orderId: string, phone?: string) => Promise<void>;
   deleteOrder: (orderId: string) => Promise<void>;
   updateOrderStatus: (orderId: string, status: OrderStatus) => Promise<void>;
   searchRemoteOrders: (queryText: string) => Promise<Order[]>;
@@ -213,7 +214,7 @@ function loadLocalDeviceData() {
     return {
       cart: parsed.cart || [],
       wishlist: parsed.wishlist || [],
-      isAdminLoggedIn: Boolean(parsed.isAdminLoggedIn),
+      isAdminLoggedIn: false,
       adminCredentials: savedCreds,
       activeView: (parsed.activeView === 'admin' ? 'admin' : 'home') as ActiveView,
       settings: parsedSettings,
@@ -244,7 +245,6 @@ function saveLocalDeviceData(s: StoreState) {
     const dataToSave = {
       cart: s.cart,
       wishlist: s.wishlist,
-      isAdminLoggedIn: s.isAdminLoggedIn,
       activeView: s.activeView === 'admin' ? 'admin' : 'home',
       settings: s.settings,
       products: s.products,
@@ -262,7 +262,6 @@ const localDeviceData = loadLocalDeviceData();
 const listeners = new Set<() => void>();
 let lastSavedCart = localDeviceData.cart;
 let lastSavedWishlist = localDeviceData.wishlist;
-let lastSavedIsAdmin = localDeviceData.isAdminLoggedIn;
 let lastSavedActiveView = localDeviceData.activeView;
 let lastSavedSettings = localDeviceData.settings;
 let lastSavedProducts = localDeviceData.products;
@@ -274,7 +273,6 @@ function notify() {
   if (
     state.cart !== lastSavedCart ||
     state.wishlist !== lastSavedWishlist ||
-    state.isAdminLoggedIn !== lastSavedIsAdmin ||
     state.activeView !== lastSavedActiveView ||
     state.settings !== lastSavedSettings ||
     state.products !== lastSavedProducts ||
@@ -284,7 +282,6 @@ function notify() {
   ) {
     lastSavedCart = state.cart;
     lastSavedWishlist = state.wishlist;
-    lastSavedIsAdmin = state.isAdminLoggedIn;
     lastSavedActiveView = state.activeView;
     lastSavedSettings = state.settings;
     lastSavedProducts = state.products;
@@ -320,16 +317,22 @@ let state: StoreState = {
       trackInitiateCheckout().catch(() => {});
     }
   },
-  isAdminLoggedIn: localDeviceData.isAdminLoggedIn,
+  isAdminLoggedIn: false,
   setIsAdminLoggedIn: (logged) => {
     update(() => ({ isAdminLoggedIn: logged }));
     if (logged) {
       syncOrdersIfAdmin();
+      syncAlertsIfAdmin();
     } else {
       if (unsubscribeOrders) {
         unsubscribeOrders();
         unsubscribeOrders = null;
       }
+      if (unsubscribeAlerts) {
+        unsubscribeAlerts();
+        unsubscribeAlerts = null;
+      }
+      update(() => ({ orders: [] }));
     }
   },
   shareModalProduct: null,
@@ -485,6 +488,10 @@ let state: StoreState = {
     if (unsubscribeOrders) {
       unsubscribeOrders();
       unsubscribeOrders = null;
+    }
+    if (unsubscribeAlerts) {
+      unsubscribeAlerts();
+      unsubscribeAlerts = null;
     }
     update(() => ({ isAdminLoggedIn: false, orders: [] }));
     state.addToast({
@@ -867,52 +874,19 @@ let state: StoreState = {
     }
 
     let createdOrderFromServer: Order | null = null;
-    try {
-      // Create order securely through server endpoint with Firebase Admin SDK
-      const response = await fetch('/api/orders/create', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newOrder)
-      });
-      const data = await response.json();
-      if (data.success && data.order) {
-        createdOrderFromServer = data.order;
-      } else {
-        console.warn('Server order create response notice:', data.error);
-      }
-    } catch (err) {
-      console.error('Failed to create order via server endpoint, falling back to direct write:', err);
-      try {
-        await setDoc(doc(db, 'orders', newOrder.id), sanitizeForFirestore(newOrder));
-      } catch (fbErr) {
-        console.warn('Fallback direct write:', fbErr);
-      }
+    // Create order securely through server endpoint with Firebase Admin SDK
+    const response = await fetch('/api/orders/create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newOrder)
+    });
+    const data = await response.json();
+    if (!response.ok || !data.success || !data.order) {
+      throw new Error(data.error || 'فشل تسجيل الطلب');
     }
+    createdOrderFromServer = data.order;
 
     const finalOrder = createdOrderFromServer || newOrder;
-
-    // Remote push notification to admin mobile device (works even if admin closed the website)
-    try {
-      const orderItemsList = newOrder.items || [];
-      const totalItems = orderItemsList.reduce((sum, it) => sum + (it.quantity || 1), 0);
-      const summary = orderItemsList.map((it) => `${it.productName} (${it.size})`).join(', ');
-      const logo = state.settings.notificationLogoUrl || state.settings.brandLogo || '/beyond-logo.jpg';
-      dispatchRemotePushNotification({
-        orderNumber: newOrder.orderNumber,
-        customerName: newOrder.customerName,
-        total: newOrder.total,
-        governorate: newOrder.governorate,
-        itemsCount: totalItems,
-        phone: newOrder.phone,
-        address: newOrder.address,
-        pushTopic: state.settings.pushNotificationTopic,
-        telegramBotToken: state.settings.telegramBotToken,
-        telegramChatId: state.settings.telegramChatId,
-        logoUrl: logo
-      }).catch(() => {});
-    } catch {
-      // Non-blocking notification dispatch
-    }
 
     update((prev) => {
       const allOrders = [finalOrder, ...prev.orders.filter((o) => o.id !== finalOrder.id)];
@@ -941,30 +915,42 @@ let state: StoreState = {
   searchRemoteOrders: async (queryText: string) => {
     const q = queryText.trim().replace(/^#/, '');
     if (!q) return [];
-    const results: Order[] = [];
     try {
-      // Search by exact orderNumber first
-      const qByNumber = query(collection(db, 'orders'), where('orderNumber', '==', q), limit(1));
-      const snapNumber = await getDocs(qByNumber);
-      snapNumber.forEach((d) => results.push(d.data() as Order));
-
-      // If nothing found and query looks like a phone number (at least 6 digits), search by phone
-      if (results.length === 0 && q.length >= 6) {
-        const qByPhone = query(collection(db, 'orders'), where('phone', '==', q), limit(10));
-        const snapPhone = await getDocs(qByPhone);
-        snapPhone.forEach((d) => results.push(d.data() as Order));
+      const res = await fetch('/api/orders/track', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: q })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        return Array.isArray(data.orders) ? data.orders : [];
       }
     } catch (err) {
-      console.error('Failed to search remote orders:', err);
+      console.error('Failed to search remote orders via endpoint:', err);
     }
-    return results;
+    return [];
   },
-  cancelOrder: async (orderId) => {
+  cancelOrder: async (orderId, phone) => {
     const order = state.orders.find((o) => o.id === orderId);
+    const phoneToUse = phone || order?.phone || '';
     try {
-      await updateDoc(doc(db, 'orders', orderId), { status: 'cancelled' });
-    } catch (err) {
-      console.error('Failed to cancel order in Firestore:', err);
+      const res = await fetch('/api/orders/cancel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderId, phone: phoneToUse })
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'تعذر إلغاء الطلب');
+      }
+    } catch (err: any) {
+      console.error('Failed to cancel order:', err);
+      state.addToast({
+        type: 'error',
+        title: 'تعذر إلغاء الطلب',
+        description: err?.message || 'تأكد من مطابقة رقم الهاتف وحالة الطلب'
+      });
+      throw err;
     }
     update((prev) => ({
       orders: prev.orders.map((o) =>
@@ -1100,8 +1086,33 @@ let state: StoreState = {
   // Store Settings
   settings: localDeviceData.settings || INITIAL_SETTINGS,
   updateSettings: async (updates) => {
+    const {
+      telegramBotToken,
+      telegramChatId,
+      pushNotificationTopic,
+      ...publicSettings
+    } = updates;
+
     try {
-      await setDoc(doc(db, 'settings', 'general'), sanitizeForFirestore(updates), { merge: true });
+      if (
+        telegramBotToken !== undefined ||
+        telegramChatId !== undefined ||
+        pushNotificationTopic !== undefined
+      ) {
+        const privatePayload: Record<string, any> = {};
+        if (telegramBotToken !== undefined) privatePayload.telegramBotToken = telegramBotToken;
+        if (telegramChatId !== undefined) privatePayload.telegramChatId = telegramChatId;
+        if (pushNotificationTopic !== undefined) privatePayload.pushNotificationTopic = pushNotificationTopic;
+
+        await setDoc(doc(db, 'private_settings', 'notifications'), sanitizeForFirestore(privatePayload), { merge: true });
+      }
+
+      const generalPayload: Record<string, any> = { ...sanitizeForFirestore(publicSettings) };
+      generalPayload.telegramBotToken = deleteField();
+      generalPayload.telegramChatId = deleteField();
+      generalPayload.pushNotificationTopic = deleteField();
+
+      await setDoc(doc(db, 'settings', 'general'), generalPayload, { merge: true });
     } catch (err) {
       console.error('Failed to update settings in Firestore:', err);
     }
@@ -1215,13 +1226,68 @@ function syncOrdersIfAdmin() {
   }
 }
 
+let unsubscribeAlerts: (() => void) | null = null;
+let isFirstAlertSnapshot = true;
+
+function syncAlertsIfAdmin() {
+  if (!state.isAdminLoggedIn) {
+    if (unsubscribeAlerts) {
+      unsubscribeAlerts();
+      unsubscribeAlerts = null;
+    }
+    isFirstAlertSnapshot = true;
+    return;
+  }
+  if (unsubscribeAlerts) return;
+  isFirstAlertSnapshot = true;
+
+  try {
+    const alertsQuery = query(collection(db, 'admin_alerts'), limit(25));
+    unsubscribeAlerts = onSnapshot(alertsQuery, (snapshot) => {
+      if (!isFirstAlertSnapshot && !snapshot.empty) {
+        snapshot.docChanges().forEach((change) => {
+          if (change.type === 'added') {
+            const alertData = change.doc.data();
+            if (!alertData || alertData.type === 'test' || alertData.orderNumber === '101') return;
+            const createdAt = alertData.createdAt ? new Date(alertData.createdAt).getTime() : Date.now();
+            if (Date.now() - createdAt < 60000) {
+              const finalLogo = alertData.logoUrl || state.settings.notificationLogoUrl || state.settings.brandLogo || '/beyond-logo.jpg';
+              playOrderNotificationSound();
+              triggerPhoneVibration();
+              dispatchShopifyOrderAlert({
+                orderNumber: alertData.orderNumber || '101',
+                customerName: alertData.customerName || 'عميل جديد',
+                total: alertData.total || 0,
+                governorate: alertData.governorate,
+                itemsCount: alertData.itemsCount,
+                itemsSummary: alertData.itemsSummary,
+                logoUrl: finalLogo
+              });
+
+              const title = alertData.title || 'أوردر جديد';
+              const body = alertData.body || `اسم العميل: ${alertData.customerName}\nسعر الأوردر: ${alertData.total} ج.م`;
+              sendDesktopNotification(title, body, finalLogo).catch(() => {});
+            }
+          }
+        });
+      }
+      isFirstAlertSnapshot = false;
+    }, (error) => {
+      console.warn('Admin alerts onSnapshot error:', error);
+    });
+  } catch (err) {
+    console.error('Error setting up admin alerts listener:', err);
+  }
+}
+
 function setupFirebaseSync() {
   if (isSubscribed) return;
   isSubscribed = true;
 
-  // 1. Orders Listener (Sync only if logged in as Admin to keep customer page lightning fast)
+  // 1. Orders & Alerts Listeners (Sync only if logged in as Admin to keep customer page lightning fast)
   if (state.isAdminLoggedIn) {
     syncOrdersIfAdmin();
+    syncAlertsIfAdmin();
   }
 
   // 2. Products Listener (Any change made by admin appears to everyone)
@@ -1343,47 +1409,6 @@ function setupFirebaseSync() {
   } catch (err) {
     console.error('Error setting up shipping listener:', err);
   }
-
-  // 8. Real-time Admin Notification & Test Broadcast Listener (Direct cross-device sync <100ms)
-  let isFirstAlertSnapshot = true;
-  try {
-    const alertsQuery = query(collection(db, 'admin_alerts'), limit(25));
-    onSnapshot(alertsQuery, (snapshot) => {
-      if (!isFirstAlertSnapshot && !snapshot.empty) {
-        snapshot.docChanges().forEach((change) => {
-          if (change.type === 'added') {
-            const alertData = change.doc.data();
-            if (!alertData || alertData.type === 'test' || alertData.orderNumber === '101') return;
-            const createdAt = alertData.createdAt ? new Date(alertData.createdAt).getTime() : Date.now();
-            // Trigger only for recent alerts (within last 60 seconds)
-            if (Date.now() - createdAt < 60000) {
-              const finalLogo = alertData.logoUrl || state.settings.notificationLogoUrl || state.settings.brandLogo || '/beyond-logo.jpg';
-              playOrderNotificationSound();
-              triggerPhoneVibration();
-              dispatchShopifyOrderAlert({
-                orderNumber: alertData.orderNumber || '101',
-                customerName: alertData.customerName || 'عميل جديد',
-                total: alertData.total || 0,
-                governorate: alertData.governorate,
-                itemsCount: alertData.itemsCount,
-                itemsSummary: alertData.itemsSummary,
-                logoUrl: finalLogo
-              });
-
-              const title = alertData.title || 'أوردر جديد';
-              const body = alertData.body || `اسم العميل: ${alertData.customerName}\nسعر الأوردر: ${alertData.total} ج.م`;
-              sendDesktopNotification(title, body, finalLogo).catch(() => {});
-            }
-          }
-        });
-      }
-      isFirstAlertSnapshot = false;
-    }, (error) => {
-      console.warn('Admin alerts onSnapshot error:', error);
-    });
-  } catch (err) {
-    console.error('Error setting up admin alerts listener:', err);
-  }
 }
 
 // Start listeners immediately
@@ -1401,6 +1426,20 @@ try {
         }
       }));
       syncOrdersIfAdmin();
+      syncAlertsIfAdmin();
+    } else {
+      if (unsubscribeOrders) {
+        unsubscribeOrders();
+        unsubscribeOrders = null;
+      }
+      if (unsubscribeAlerts) {
+        unsubscribeAlerts();
+        unsubscribeAlerts = null;
+      }
+      update(() => ({
+        isAdminLoggedIn: false,
+        orders: []
+      }));
     }
   });
 } catch (authListenErr) {

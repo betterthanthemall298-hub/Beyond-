@@ -43,8 +43,12 @@ import {
   RotateCcw,
   MapPin,
   RefreshCw,
-  Sparkles
+  Sparkles,
+  Users,
+  UserPlus,
+  Shield
 } from 'lucide-react';
+import { authFetch } from '../lib/authFetch';
 import { AdminCustomerAnalytics } from './AdminCustomerAnalytics';
 import { HoodieCategory, HoodieSize, OrderStatus, Product, ProductColor, OrderItem, GovernorateShipping } from '../types';
 import { INITIAL_GOVERNORATES } from '../data/initialData';
@@ -118,6 +122,24 @@ export const AdminDashboard: React.FC = () => {
   const [securitySuccess, setSecuritySuccess] = useState('');
   const [securityError, setSecurityError] = useState('');
   const [isUpdatingCreds, setIsUpdatingCreds] = useState(false);
+
+  // Admin Team Management States
+  interface AdminAccount {
+    uid: string;
+    email: string;
+    displayName: string;
+    creationTime?: string;
+    lastSignInTime?: string;
+  }
+  const [adminUsers, setAdminUsers] = useState<AdminAccount[]>([]);
+  const [isLoadingAdminUsers, setIsLoadingAdminUsers] = useState(false);
+  const [showAddAdminModal, setShowAddAdminModal] = useState(false);
+  const [newAdminEmail, setNewAdminEmail] = useState('');
+  const [newAdminPassword, setNewAdminPassword] = useState('');
+  const [newAdminDisplayName, setNewAdminDisplayName] = useState('');
+  const [addAdminError, setAddAdminError] = useState('');
+  const [isSubmittingAdmin, setIsSubmittingAdmin] = useState(false);
+  const [adminTeamSuccess, setAdminTeamSuccess] = useState('');
 
   // Order Search State
   const [orderSearchQuery, setOrderSearchQuery] = useState('');
@@ -272,16 +294,111 @@ export const AdminDashboard: React.FC = () => {
     setInstagramUrl(settings.instagramUrl || '');
     setTiktokUrl(settings.tiktokUrl || '');
     setFacebookUrl(settings.facebookUrl || '');
-    if (settings.pushNotificationTopic) {
-      setPushTopicState(settings.pushNotificationTopic);
-    }
-    if (settings.telegramBotToken) setTelegramBotToken(settings.telegramBotToken);
-    if (settings.telegramChatId) setTelegramChatId(settings.telegramChatId);
   }, [settings]);
+
+  // Load private notification settings securely from private_settings/notifications
+  useEffect(() => {
+    if (!isAdminLoggedIn) return;
+    const fetchPrivateSettings = async () => {
+      try {
+        const { getDoc, doc } = await import('firebase/firestore');
+        const { db } = await import('../lib/firebase');
+        const snap = await getDoc(doc(db, 'private_settings', 'notifications'));
+        if (snap.exists()) {
+          const data = snap.data();
+          if (data?.telegramBotToken) setTelegramBotToken(data.telegramBotToken);
+          if (data?.telegramChatId) setTelegramChatId(data.telegramChatId);
+          if (data?.pushNotificationTopic) setPushTopicState(data.pushNotificationTopic);
+        }
+      } catch (err) {
+        console.warn('Failed to load private notification settings:', err);
+      }
+    };
+    fetchPrivateSettings();
+  }, [isAdminLoggedIn]);
 
   useEffect(() => {
     setNewUsername(adminCredentials.username || 'admin');
   }, [adminCredentials.username]);
+
+  const fetchAdminUsers = async () => {
+    setIsLoadingAdminUsers(true);
+    try {
+      const res = await authFetch('/api/admin/users');
+      const data = await res.json();
+      if (data.success && Array.isArray(data.users)) {
+        setAdminUsers(data.users);
+      }
+    } catch (err) {
+      console.warn('Failed to load admin users:', err);
+    } finally {
+      setIsLoadingAdminUsers(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isAdminLoggedIn && activeTab === 'security') {
+      fetchAdminUsers();
+    }
+  }, [isAdminLoggedIn, activeTab]);
+
+  const handleCreateAdminUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAddAdminError('');
+    setAdminTeamSuccess('');
+    setIsSubmittingAdmin(true);
+    try {
+      const res = await authFetch('/api/admin/create-user', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: newAdminEmail.trim(),
+          password: newAdminPassword.trim(),
+          displayName: newAdminDisplayName.trim()
+        })
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'فشل إنشاء حساب المشرف');
+      }
+      setAdminTeamSuccess(`تم إنشاء حساب المشرف (${data.user?.email}) بنجاح ومنحه صلاحية الأدمن.`);
+      setShowAddAdminModal(false);
+      setNewAdminEmail('');
+      setNewAdminPassword('');
+      setNewAdminDisplayName('');
+      fetchAdminUsers();
+    } catch (err: any) {
+      setAddAdminError(err.message || 'حدث خطأ أثناء إضافة المشرف');
+    } finally {
+      setIsSubmittingAdmin(false);
+    }
+  };
+
+  const handleDeleteAdminPrompt = (uid: string, email: string) => {
+    openDeleteModal({
+      title: 'حذف حساب المشرف',
+      description: 'سيتم إلغاء صلاحيات هذا المشرف وحذف حسابه نهائياً من Firebase Auth.',
+      itemLabel: `البريد الإلكتروني: ${email}`,
+      onConfirm: async () => {
+        try {
+          const res = await authFetch('/api/admin/delete-user', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ uid })
+          });
+          const data = await res.json();
+          if (!res.ok || !data.success) {
+            setAddAdminError(data.error || 'فشل حذف المشرف');
+            return;
+          }
+          setAdminTeamSuccess(`تم حذف حساب المشرف (${email}) بنجاح`);
+          fetchAdminUsers();
+        } catch (err: any) {
+          console.error('Delete admin error:', err);
+        }
+      }
+    });
+  };
 
   // Stats calculation
   const totalRevenue = (orders || [])
@@ -664,9 +781,34 @@ export const AdminDashboard: React.FC = () => {
     }
   };
 
-  const handleSaveSettings = (e: React.FormEvent) => {
+  const handleSaveSettings = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanLogo = brandLogo.trim() || '/beyond-logo.jpg';
+    const cleanTopic = pushTopic.trim();
+    const cleanToken = telegramBotToken.trim();
+    const cleanChatId = telegramChatId.trim();
+
+    try {
+      const { doc, setDoc, deleteField } = await import('firebase/firestore');
+      const { db } = await import('../lib/firebase');
+
+      // Save notification secrets in private_settings/notifications
+      await setDoc(doc(db, 'private_settings', 'notifications'), {
+        telegramBotToken: cleanToken,
+        telegramChatId: cleanChatId,
+        pushNotificationTopic: cleanTopic
+      }, { merge: true });
+
+      // Remove secrets from public settings/general
+      await setDoc(doc(db, 'settings', 'general'), {
+        telegramBotToken: deleteField(),
+        telegramChatId: deleteField(),
+        pushNotificationTopic: deleteField()
+      }, { merge: true });
+    } catch (saveErr) {
+      console.warn('Failed saving private settings directly:', saveErr);
+    }
+
     updateSettings({
       storeName,
       brandLogo: cleanLogo,
@@ -677,11 +819,13 @@ export const AdminDashboard: React.FC = () => {
       instagramUrl,
       tiktokUrl,
       facebookUrl,
-      pushNotificationTopic: pushTopic.trim() || DEFAULT_PUSH_TOPIC,
-      telegramBotToken: telegramBotToken.trim(),
-      telegramChatId: telegramChatId.trim()
+      pushNotificationTopic: cleanTopic,
+      telegramBotToken: cleanToken,
+      telegramChatId: cleanChatId
     });
-    setPushTopic(pushTopic.trim() || DEFAULT_PUSH_TOPIC);
+    if (cleanTopic) {
+      setPushTopic(cleanTopic);
+    }
   };
 
   // If not logged in, show secure login box
@@ -3122,87 +3266,298 @@ export const AdminDashboard: React.FC = () => {
 
       {/* TAB CONTENT: SECURITY & CREDENTIALS */}
       {activeTab === 'security' && (
-        <div className="bg-stone-900 border border-stone-800 rounded-2xl p-6 space-y-6 max-w-2xl animate-in fade-in shadow-xl">
-          <div>
-            <h3 className="text-base font-bold text-stone-100 flex items-center gap-2">
-              <Lock className="w-5 h-5 text-amber-400" />
-              <span>إدارة كلمة سر حساب لوحة الإدارة (Firebase Auth)</span>
-            </h3>
-            <p className="text-xs text-stone-400 mt-1">
-              يتم تأمين لوحة الإدارة حصرياً عبر Firebase Authentication. يمكنك هنا تحديث كلمة المرور لحسابك، وسيتم تطبيق التحديث فورياً على جميع الأجهزة.
-            </p>
-          </div>
-
-          <div className="bg-stone-950/80 border border-stone-800/90 rounded-xl p-4 space-y-2 text-xs">
-            <div className="flex items-center justify-between">
-              <span className="text-stone-400">حساب الأدمن المعتمد:</span>
-              <span className="font-mono font-bold text-amber-400 px-2 py-0.5 rounded bg-stone-900 border border-stone-800">
-                {adminCredentials.username}
-              </span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-stone-400">نظام المصادقة:</span>
-              <span className="text-emerald-400 font-semibold flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                Firebase Authentication (مشفر ومحمي 100%)
-              </span>
-            </div>
-          </div>
-
-          <form onSubmit={handleChangeCredentials} className="space-y-4">
-            <div>
-              <label className="block text-xs font-semibold text-stone-300 mb-1">
-                كلمة المرور الجديدة
-              </label>
-              <input
-                id="security-new-password"
-                type="password"
-                required
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                placeholder="أدخل كلمة مرور جديدة (6 أحرف على الأقل)"
-                className="w-full bg-stone-950 border border-stone-800 rounded-xl px-3.5 py-2.5 text-xs text-stone-100 placeholder-stone-600 focus:outline-none focus:border-amber-500"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-stone-300 mb-1">
-                تأكيد كلمة المرور الجديدة
-              </label>
-              <input
-                id="security-confirm-password"
-                type="password"
-                required
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                placeholder="أعد كتابة كلمة المرور للتأكيد"
-                className="w-full bg-stone-950 border border-stone-800 rounded-xl px-3.5 py-2.5 text-xs text-stone-100 placeholder-stone-600 focus:outline-none focus:border-amber-500"
-              />
-            </div>
-
-            {securityError && (
-              <p className="text-xs text-rose-400 bg-rose-950/40 p-3 rounded-xl border border-rose-900/40">
-                {securityError}
-              </p>
-            )}
-
-            {securitySuccess && (
-              <p className="text-xs text-emerald-400 bg-emerald-950/40 p-3 rounded-xl border border-emerald-900/40">
-                {securitySuccess}
-              </p>
-            )}
-
-            <div className="pt-2">
+        <div className="space-y-6 max-w-4xl animate-in fade-in">
+          {/* Section 1: Admin Team Management */}
+          <div className="bg-stone-900 border border-stone-800 rounded-2xl p-6 shadow-xl space-y-5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-stone-800 pb-4">
+              <div>
+                <h3 className="text-base font-bold text-stone-100 flex items-center gap-2">
+                  <Users className="w-5 h-5 text-amber-400" />
+                  <span>فريق إدارة المتجر والمشرفين (Firebase Admin Auth)</span>
+                </h3>
+                <p className="text-xs text-stone-400 mt-1">
+                  المشرفون المصرح لهم بالدخول للوحة التحكم، إدارة الطلبات، وتعديل المنتجات والمخزون.
+                </p>
+              </div>
               <button
-                id="save-security-credentials-btn"
-                type="submit"
-                disabled={isUpdatingCreds}
-                className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-black font-bold text-xs transition-colors shadow-md shadow-amber-950/40 disabled:opacity-50"
+                type="button"
+                onClick={() => {
+                  setAddAdminError('');
+                  setShowAddAdminModal(true);
+                }}
+                className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-black font-bold text-xs flex items-center justify-center gap-2 transition-colors shadow-lg shadow-amber-950/40 shrink-0"
               >
-                {isUpdatingCreds ? 'جاري تحديث كلمة المرور في Firebase...' : 'تحديث كلمة المرور في Firebase'}
+                <UserPlus className="w-4 h-4" />
+                <span>إضافة مشرف جديد</span>
               </button>
             </div>
-          </form>
+
+            {adminTeamSuccess && (
+              <p className="text-xs text-emerald-400 bg-emerald-950/40 p-3 rounded-xl border border-emerald-900/40 flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 shrink-0" />
+                <span>{adminTeamSuccess}</span>
+              </p>
+            )}
+
+            {isLoadingAdminUsers ? (
+              <div className="py-8 text-center text-xs text-stone-400 flex items-center justify-center gap-2">
+                <RefreshCw className="w-4 h-4 animate-spin text-amber-400" />
+                <span>جاري تحميل قائمة المشرفين من Firebase...</span>
+              </div>
+            ) : adminUsers.length === 0 ? (
+              <div className="py-6 text-center text-xs text-stone-500 bg-stone-950/40 rounded-xl border border-stone-800/60">
+                لا توجد حسابات إضافية معروضة حالياً، أو جاري جلب البيانات من السيرفر.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {adminUsers.map((u) => {
+                  const isOwner = (u.email || '').toLowerCase() === 'vdbbdv1234567889@gmail.com';
+                  return (
+                    <div
+                      key={u.uid}
+                      className="bg-stone-950/80 border border-stone-800/80 hover:border-stone-700 rounded-xl p-4 flex flex-col justify-between gap-3 transition-colors"
+                    >
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-bold text-xs text-stone-100 truncate">
+                            {u.displayName || 'مشرف معتمد'}
+                          </span>
+                          {isOwner ? (
+                            <span className="px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-400 text-[10px] font-bold shrink-0">
+                              المالك الأساسي
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[10px] font-bold shrink-0">
+                              مشرف
+                            </span>
+                          )}
+                        </div>
+                        <p className="font-mono text-xs text-stone-300 truncate" dir="ltr">
+                          {u.email}
+                        </p>
+                        {u.creationTime && (
+                          <p className="text-[10px] text-stone-500">
+                            تاريخ الإنشاء: {new Date(u.creationTime).toLocaleDateString('ar-EG')}
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="flex items-center justify-between pt-2 border-t border-stone-900 text-[11px]">
+                        <span className="text-stone-500 font-mono text-[10px]">
+                          UID: {u.uid.slice(0, 10)}...
+                        </span>
+                        {!isOwner && (
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteAdminPrompt(u.uid, u.email)}
+                            className="text-rose-400 hover:text-rose-300 px-2 py-1 rounded-lg hover:bg-rose-950/40 transition-colors flex items-center gap-1 font-semibold"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>حذف الحساب</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Section 2: Change Password */}
+          <div className="bg-stone-900 border border-stone-800 rounded-2xl p-6 shadow-xl space-y-6">
+            <div>
+              <h3 className="text-base font-bold text-stone-100 flex items-center gap-2">
+                <Lock className="w-5 h-5 text-amber-400" />
+                <span>إدارة كلمة سر حساب لوحة الإدارة (Firebase Auth)</span>
+              </h3>
+              <p className="text-xs text-stone-400 mt-1">
+                يتم تأمين لوحة الإدارة حصرياً عبر Firebase Authentication. يمكنك هنا تحديث كلمة المرور لحسابك، وسيتم تطبيق التحديث فورياً على جميع الأجهزة.
+              </p>
+            </div>
+
+            <div className="bg-stone-950/80 border border-stone-800/90 rounded-xl p-4 space-y-2 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-stone-400">حساب الأدمن المعتمد:</span>
+                <span className="font-mono font-bold text-amber-400 px-2 py-0.5 rounded bg-stone-900 border border-stone-800">
+                  {adminCredentials.username}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-stone-400">نظام المصادقة:</span>
+                <span className="text-emerald-400 font-semibold flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                  Firebase Authentication (مشفر ومحمي 100%)
+                </span>
+              </div>
+            </div>
+
+            <form onSubmit={handleChangeCredentials} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-stone-300 mb-1">
+                  كلمة المرور الجديدة
+                </label>
+                <input
+                  id="security-new-password"
+                  type="password"
+                  required
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="أدخل كلمة مرور جديدة (6 أحرف على الأقل)"
+                  className="w-full bg-stone-950 border border-stone-800 rounded-xl px-3.5 py-2.5 text-xs text-stone-100 placeholder-stone-600 focus:outline-none focus:border-amber-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-stone-300 mb-1">
+                  تأكيد كلمة المرور الجديدة
+                </label>
+                <input
+                  id="security-confirm-password"
+                  type="password"
+                  required
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="أعد كتابة كلمة المرور للتأكيد"
+                  className="w-full bg-stone-950 border border-stone-800 rounded-xl px-3.5 py-2.5 text-xs text-stone-100 placeholder-stone-600 focus:outline-none focus:border-amber-500"
+                />
+              </div>
+
+              {securityError && (
+                <p className="text-xs text-rose-400 bg-rose-950/40 p-3 rounded-xl border border-rose-900/40">
+                  {securityError}
+                </p>
+              )}
+
+              {securitySuccess && (
+                <p className="text-xs text-emerald-400 bg-emerald-950/40 p-3 rounded-xl border border-emerald-900/40">
+                  {securitySuccess}
+                </p>
+              )}
+
+              <div className="pt-2">
+                <button
+                  id="save-security-credentials-btn"
+                  type="submit"
+                  disabled={isUpdatingCreds}
+                  className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-black font-bold text-xs transition-colors shadow-md shadow-amber-950/40 disabled:opacity-50"
+                >
+                  {isUpdatingCreds ? 'جاري تحديث كلمة المرور في Firebase...' : 'تحديث كلمة المرور في Firebase'}
+                </button>
+              </div>
+            </form>
+          </div>
+
+          {/* Section 3: Firestore Security Rules Guide */}
+          <div className="bg-stone-900 border border-stone-800 rounded-2xl p-6 shadow-xl space-y-4">
+            <div className="flex items-center gap-2 text-stone-100 font-bold text-sm">
+              <Shield className="w-5 h-5 text-emerald-400" />
+              <span>حماية قاعدة بيانات المتجر (Firestore Security Rules)</span>
+            </div>
+            <p className="text-xs text-stone-400 leading-relaxed">
+              قاعدة بيانات المتجر محمية بنظام <span className="text-amber-400 font-bold">Deny-By-Default</span>.
+              جميع الطلبات يتم إنشاؤها عبر السيرفر الآمن فقط بواسطة Firebase Admin SDK، ولا يمكن للعملاء العاديين كتابة أو تعديل أي بيانات مباشرة.
+            </p>
+            <div className="bg-stone-950 p-4 rounded-xl border border-stone-800 font-mono text-[11px] text-stone-300 space-y-1 overflow-x-auto" dir="ltr">
+              <p className="text-emerald-400 font-bold">// Status: Strict production rules ready in firestore.rules</p>
+              <p>match /orders/&#123;orderId&#125; &#123; allow read, update, delete: if isAdmin(); allow create: if false; &#125;</p>
+              <p>match /private_settings/&#123;docId&#125; &#123; allow read, write: if isAdmin(); &#125;</p>
+              <p>match /settings/&#123;id&#125; &#123; allow read: if true; allow write: if isAdmin(); &#125;</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add New Admin Modal */}
+      {showAddAdminModal && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
+          <div className="w-full max-w-md bg-stone-900 border border-stone-800 rounded-2xl p-5 shadow-2xl relative space-y-4">
+            <div className="flex items-center justify-between border-b border-stone-800 pb-3">
+              <div className="flex items-center gap-2 text-amber-400">
+                <UserPlus className="w-5 h-5" />
+                <h3 className="font-bold text-sm text-stone-100">إضافة مشرف جديد للمتجر</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAddAdminModal(false)}
+                className="text-stone-400 hover:text-stone-200 p-1"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <p className="text-xs text-stone-400 leading-relaxed">
+              سيتم إنشاء الحساب في Firebase Auth ومنحه صلاحية المشرف (Admin Claim) فوراً للوصول للوحة التحكم.
+            </p>
+
+            <form onSubmit={handleCreateAdminUser} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-stone-300 mb-1">
+                  الاسم الكامل / الصفة
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={newAdminDisplayName}
+                  onChange={(e) => setNewAdminDisplayName(e.target.value)}
+                  placeholder="مثال: مشرف الطلبات - أحمد"
+                  className="w-full bg-stone-950 border border-stone-800 rounded-xl px-3.5 py-2.5 text-xs text-stone-100 placeholder-stone-600 focus:outline-none focus:border-amber-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-stone-300 mb-1">
+                  البريد الإلكتروني لحساب المشرف
+                </label>
+                <input
+                  type="email"
+                  required
+                  dir="ltr"
+                  value={newAdminEmail}
+                  onChange={(e) => setNewAdminEmail(e.target.value)}
+                  placeholder="admin@example.com"
+                  className="w-full bg-stone-950 border border-stone-800 rounded-xl px-3.5 py-2.5 text-xs text-stone-100 placeholder-stone-600 focus:outline-none focus:border-amber-500 font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-stone-300 mb-1">
+                  كلمة المرور
+                </label>
+                <input
+                  type="password"
+                  required
+                  value={newAdminPassword}
+                  onChange={(e) => setNewAdminPassword(e.target.value)}
+                  placeholder="6 أحرف على الأقل"
+                  className="w-full bg-stone-950 border border-stone-800 rounded-xl px-3.5 py-2.5 text-xs text-stone-100 placeholder-stone-600 focus:outline-none focus:border-amber-500 font-mono"
+                />
+              </div>
+
+              {addAdminError && (
+                <p className="text-xs text-rose-400 bg-rose-950/40 p-2.5 rounded-xl border border-rose-900/40">
+                  {addAdminError}
+                </p>
+              )}
+
+              <div className="flex gap-2.5 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setShowAddAdminModal(false)}
+                  className="flex-1 py-2.5 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-300 font-bold text-xs transition-colors"
+                >
+                  إلغاء
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingAdmin}
+                  className="flex-1 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-black font-bold text-xs transition-colors shadow-lg shadow-amber-950/40 disabled:opacity-50"
+                >
+                  {isSubmittingAdmin ? 'جاري الإنشاء...' : 'إنشاء وتفعيل الحساب'}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
 

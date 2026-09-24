@@ -3,6 +3,8 @@
  * Supports Service Worker background notifications, vibration, and audio chimes
  */
 
+import { authFetch } from './authFetch';
+
 const SOUND_ENABLED_KEY = 'beyond_sound_notifications_enabled';
 
 export function isSoundNotificationEnabled(): boolean {
@@ -300,7 +302,7 @@ export async function subscribeToWebPush(): Promise<{
 
     // 5. Send subscription to Node.js backend server
     try {
-      await fetch('/api/push/subscribe', {
+      await authFetch('/api/push/subscribe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -450,9 +452,9 @@ export function dispatchShopifyOrderAlert(data: Omit<ShopifyOrderAlertData, 'id'
 }
 
 /**
- * Dispatches remote background push notification to phone lock screen with zero latency
+ * Dispatches remote background push notification (kept for backward compatibility, actions handled server-side)
  */
-export async function dispatchRemotePushNotification(order: {
+export async function dispatchRemotePushNotification(_order: {
   orderNumber: string;
   customerName: string;
   total: number;
@@ -465,81 +467,7 @@ export async function dispatchRemotePushNotification(order: {
   telegramChatId?: string;
   logoUrl?: string;
 }) {
-  const topic = (order.pushTopic && order.pushTopic.trim()) || getPushTopic();
-  const title = 'أوردر جديد';
-  const body = `اسم العميل: ${order.customerName}\nسعر الأوردر: ${order.total} ج.م`;
-  const logo = order.logoUrl || '/beyond-logo.jpg';
-
-  // Broadcast instantly to Firestore admin_alerts collection for instant WebSocket push to all open devices
-  try {
-    const { doc, setDoc } = await import('firebase/firestore');
-    const { db } = await import('./firebase');
-    const alertId = 'alert-' + Date.now();
-    setDoc(doc(db, 'admin_alerts', alertId), {
-      id: alertId,
-      orderNumber: order.orderNumber,
-      customerName: order.customerName,
-      total: order.total,
-      governorate: order.governorate || '',
-      itemsCount: order.itemsCount || 1,
-      title,
-      body,
-      logoUrl: logo,
-      createdAt: new Date().toISOString()
-    }).catch(() => {});
-  } catch {
-    // ignore
-  }
-
-  // 1. Dispatch Web Push and external services in parallel (Non-blocking high-speed execution)
-  const tasks: Promise<any>[] = [];
-
-  // Backend Web Push API
-  tasks.push(
-    fetch('/api/push/send-order-alert', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        orderNumber: order.orderNumber,
-        customerName: order.customerName,
-        total: order.total,
-        logoUrl: logo
-      })
-    }).catch((err) => console.warn('WebPush API warning:', err))
-  );
-
-  // ntfy.sh direct push
-  const origin = typeof window !== 'undefined' ? window.location.origin : '';
-  tasks.push(
-    fetch(`https://ntfy.sh/${topic}`, {
-      method: 'POST',
-      headers: {
-        'Title': title,
-        'Priority': 'high',
-        'Tags': 'package,bell',
-        'Click': origin ? `${origin}/?view=admin` : '/?view=admin'
-      },
-      body: body
-    }).catch((err) => console.warn('ntfy warning:', err))
-  );
-
-  // Telegram if configured
-  if (order.telegramBotToken && order.telegramChatId) {
-    const msg = `🛍️ *أوردر جديد - Beyond*\nاسم العميل: ${order.customerName}\nسعر الأوردر: ${order.total} ج.م`;
-    tasks.push(
-      fetch(`https://api.telegram.org/bot${order.telegramBotToken}/sendMessage`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          chat_id: order.telegramChatId,
-          text: msg,
-          parse_mode: 'Markdown'
-        })
-      }).catch((err) => console.warn('Telegram warning:', err))
-    );
-  }
-
-  await Promise.allSettled(tasks);
+  // Remote dispatch is now exclusively handled server-side for security
 }
 
 /**
@@ -577,7 +505,7 @@ export function triggerNewOrderNotification(
 /**
  * Test phone notification directly for the store manager with instantaneous delivery
  */
-export async function testPhoneNotification(topicOverride?: string, customLogoUrl?: string): Promise<{
+export async function testPhoneNotification(_topicOverride?: string, customLogoUrl?: string): Promise<{
   success: boolean;
   sentCount: number;
   totalSubscribers: number;
@@ -596,9 +524,9 @@ export async function testPhoneNotification(topicOverride?: string, customLogoUr
 
   const result = { success: true, sentCount: 0, totalSubscribers: 0, error: '' };
 
-  // 2. High-urgency Web Push to background & locked devices via backend
+  // 2. High-urgency Web Push & remote channels via backend
   try {
-    const res = await fetch('/api/push/test', {
+    const res = await authFetch('/api/push/test', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -619,15 +547,7 @@ export async function testPhoneNotification(topicOverride?: string, customLogoUr
     result.error = e?.message || 'Failed to reach push server';
   }
 
-  // 4. Also trigger ntfy as backup in background without blocking
-  dispatchRemotePushNotification({
-    orderNumber: '101',
-    customerName: 'أحمد محمد',
-    total: 890,
-    pushTopic: topicOverride,
-    logoUrl: logo
-  }).catch(() => {});
-
   return result;
 }
+
 
