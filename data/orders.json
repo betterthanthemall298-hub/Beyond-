@@ -1,1 +1,33 @@
-[]
+[
+  {
+    "id": "ord-1790358826257-3ra3k",
+    "orderNumber": "26",
+    "customerName": "أحمد محمود",
+    "phone": "01012345678",
+    "alternatePhone": "",
+    "governorate": "القاهرة",
+    "center": "مدينة نصر",
+    "address": "شارع عباس العقاد عمارة 12",
+    "notes": "",
+    "items": [
+      {
+        "productId": "test-prod",
+        "productName": "هودي تجريبي",
+        "subtitle": "",
+        "image": "",
+        "size": "L",
+        "colorName": "أسود",
+        "colorHex": "#000",
+        "price": 500,
+        "quantity": 1
+      }
+    ],
+    "subtotal": 500,
+    "shippingCost": 45,
+    "discount": 0,
+    "couponCode": "",
+    "total": 545,
+    "status": "pending",
+    "createdAt": "2026-09-25 17:53"
+  }
+]

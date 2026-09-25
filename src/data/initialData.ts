@@ -13,15 +13,15 @@ export const INITIAL_GOVERNORATES: GovernorateShipping[] = [
   { name: 'الإسكندرية', cost: 50 },
   { name: 'القليوبية', cost: 50 },
   { name: 'الشرقية', cost: 55 },
-  { name: 'الدقهلية (المنصورة)', cost: 55 },
-  { name: 'الغربية (طنطا)', cost: 55 },
+  { name: 'الدقهلية', cost: 55 },
+  { name: 'الغربية', cost: 55 },
   { name: 'المنوفية', cost: 55 },
   { name: 'دمياط', cost: 60 },
   { name: 'بورسعيد', cost: 60 },
   { name: 'الإسماعيلية', cost: 60 },
   { name: 'السويس', cost: 60 },
   { name: 'كفر الشيخ', cost: 60 },
-  { name: 'البحيرة (دمنهور)', cost: 60 },
+  { name: 'البحيرة', cost: 60 },
   { name: 'الفيوم', cost: 65 },
   { name: 'بني سويف', cost: 65 },
   { name: 'المنيا', cost: 70 },
@@ -30,11 +30,11 @@ export const INITIAL_GOVERNORATES: GovernorateShipping[] = [
   { name: 'قنا', cost: 80 },
   { name: 'الأقصر', cost: 80 },
   { name: 'أسوان', cost: 85 },
-  { name: 'البحر الأحمر (الغردقة)', cost: 85 },
-  { name: 'مرسى مطروح', cost: 85 },
+  { name: 'البحر الأحمر', cost: 85 },
+  { name: 'مطروح', cost: 85 },
   { name: 'الوادي الجديد', cost: 95 },
   { name: 'شمال سيناء', cost: 95 },
-  { name: 'جنوب سيناء (شرم الشيخ)', cost: 95 }
+  { name: 'جنوب سيناء', cost: 95 }
 ];
 
 // Start completely clean with zero products by default as requested

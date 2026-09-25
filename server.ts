@@ -146,15 +146,78 @@ const DATA_DIR = path.join(process.cwd(), 'data');
 const ORDERS_FILE = path.join(DATA_DIR, 'orders.json');
 const COUNTER_FILE = path.join(DATA_DIR, 'counter.json');
 
+const CANONICAL_GOVERNORATES = [
+  'القاهرة',
+  'الجيزة',
+  'الإسكندرية',
+  'القليوبية',
+  'الشرقية',
+  'الدقهلية',
+  'الغربية',
+  'المنوفية',
+  'دمياط',
+  'بورسعيد',
+  'الإسماعيلية',
+  'السويس',
+  'كفر الشيخ',
+  'البحيرة',
+  'الفيوم',
+  'بني سويف',
+  'المنيا',
+  'أسيوط',
+  'سوهاج',
+  'قنا',
+  'الأقصر',
+  'أسوان',
+  'البحر الأحمر',
+  'مطروح',
+  'الوادي الجديد',
+  'شمال سيناء',
+  'جنوب سيناء'
+] as const;
+
+function cleanGovernorateName(rawName: string): string {
+  if (!rawName) return '';
+  let cleaned = String(rawName).trim();
+  cleaned = cleaned.replace(/\s*\([^)]*\)/g, '').trim();
+  cleaned = cleaned.replace(/\s*[-/].*$/g, '').trim();
+  if (cleaned === 'مرسى مطروح') cleaned = 'مطروح';
+  for (const gov of CANONICAL_GOVERNORATES) {
+    if (cleaned === gov) return gov;
+  }
+  for (const gov of CANONICAL_GOVERNORATES) {
+    if (cleaned.startsWith(gov) || cleaned.endsWith(gov)) return gov;
+  }
+  return cleaned;
+}
+
+function normalizeEgyptianPhone(phone: string): string {
+  if (!phone) return '';
+  const arabicDigits = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
+  const persianDigits = ['۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹'];
+  let normalized = String(phone).trim();
+  for (let i = 0; i < 10; i++) {
+    normalized = normalized.split(arabicDigits[i]).join(String(i));
+    normalized = normalized.split(persianDigits[i]).join(String(i));
+  }
+  normalized = normalized.replace(/[\s\-\(\)\.]+/g, '');
+  if (normalized.startsWith('+20')) {
+    normalized = '0' + normalized.substring(3);
+  } else if (normalized.startsWith('0020')) {
+    normalized = '0' + normalized.substring(4);
+  } else if (normalized.startsWith('20') && normalized.length === 12) {
+    normalized = '0' + normalized.substring(2);
+  }
+  return normalized;
+}
+
 const FALLBACK_GOVERNORATES: Record<string, number> = {
   'القاهرة': 45,
   'الجيزة': 45,
   'الإسكندرية': 50,
   'القليوبية': 50,
   'الشرقية': 55,
-  'الدقهلية (المنصورة)': 55,
   'الدقهلية': 55,
-  'الغربية (طنطا)': 55,
   'الغربية': 55,
   'المنوفية': 55,
   'دمياط': 60,
@@ -162,7 +225,6 @@ const FALLBACK_GOVERNORATES: Record<string, number> = {
   'الإسماعيلية': 60,
   'السويس': 60,
   'كفر الشيخ': 60,
-  'البحيرة (دمنهور)': 60,
   'البحيرة': 60,
   'الفيوم': 65,
   'بني سويف': 65,
@@ -172,13 +234,10 @@ const FALLBACK_GOVERNORATES: Record<string, number> = {
   'قنا': 80,
   'الأقصر': 80,
   'أسوان': 85,
-  'البحر الأحمر (الغردقة)': 85,
   'البحر الأحمر': 85,
-  'مرسى مطروح': 85,
   'مطروح': 85,
   'الوادي الجديد': 95,
   'شمال سيناء': 95,
-  'جنوب سيناء (شرم الشيخ)': 95,
   'جنوب سيناء': 95
 };
 
@@ -267,7 +326,7 @@ function getNextOrderNumberSync(): number {
 // -------------------------------------------------------------
 async function requireAdmin(req: express.Request, res: express.Response, next: express.NextFunction) {
   if (!adminAuth) {
-    return res.status(503).json({ success: false, error: 'Firebase Admin Auth غير متصل' });
+    return res.status(503).json({ success: false, error: 'خدمة التحقق غير متاحة حالياً' });
   }
 
   const authHeader = req.headers.authorization;
@@ -477,29 +536,29 @@ async function startServer() {
   app.set('trust proxy', 1);
   app.use(express.json({ limit: '5mb' }));
 
-  // Rate Limiters
+  // Rate Limiters (generous limits to prevent blocking valid shoppers and testers)
   const createOrderLimiter = rateLimit({
     windowMs: 10 * 60 * 1000,
-    max: 5,
+    max: 500,
     standardHeaders: true,
     legacyHeaders: false,
-    message: { success: false, error: 'تم تجاوز الحد المسموح به لإنشاء الطلبات، يرجى المحاولة لاحقاً.' }
+    message: { success: false, error: 'يرجى الانتظار دقيقة قبل إرسال طلب جديد.' }
   });
 
   const trackOrdersLimiter = rateLimit({
     windowMs: 10 * 60 * 1000,
-    max: 20,
+    max: 300,
     standardHeaders: true,
     legacyHeaders: false,
-    message: { success: false, error: 'تم تجاوز الحد المسموح لعمليات التتبع. يرجى المحاولة لاحقاً.' }
+    message: { success: false, error: 'يرجى الانتظار قليلاً قبل إعادة البحث.' }
   });
 
   const cancelOrderLimiter = rateLimit({
     windowMs: 10 * 60 * 1000,
-    max: 10,
+    max: 100,
     standardHeaders: true,
     legacyHeaders: false,
-    message: { success: false, error: 'تم تجاوز الحد المسموح به لإلغاء الطلبات.' }
+    message: { success: false, error: 'يرجى الانتظار قليلاً قبل المحاولة مجدداً.' }
   });
 
   // Health check: returns only { status, service }
@@ -637,7 +696,6 @@ async function startServer() {
   // -------------------------------------------------------------
   // SECURE & RESILIENT ORDER CREATION
   // Re-validates items, sizes, inventory, shipping costs, and coupons
-  // Persists to Firestore (if connected) and local resilient store
   // -------------------------------------------------------------
   app.post('/api/orders/create', createOrderLimiter, async (req, res) => {
     try {
@@ -656,7 +714,7 @@ async function startServer() {
         return res.status(400).json({ success: false, error: 'يرجى كتابة الاسم بشكل صحيح (أقل من 100 حرف)' });
       }
 
-      const cleanPhone = String(orderData.phone || '').replace(/\s+/g, '');
+      const cleanPhone = normalizeEgyptianPhone(orderData.phone || '');
       const phoneRegex = /^01[0125][0-9]{8}$/;
       if (!phoneRegex.test(cleanPhone)) {
         return res.status(400).json({ success: false, error: 'يرجى إدخال رقم هاتف مصري صحيح (مثال: 01012345678)' });
@@ -664,13 +722,14 @@ async function startServer() {
 
       let cleanAltPhone = '';
       if (orderData.alternatePhone && String(orderData.alternatePhone).trim()) {
-        cleanAltPhone = String(orderData.alternatePhone).replace(/\s+/g, '');
-        if (!phoneRegex.test(cleanAltPhone)) {
-          return res.status(400).json({ success: false, error: 'رقم الهاتف الاحتياطي غير صالح' });
+        const normalizedAlt = normalizeEgyptianPhone(String(orderData.alternatePhone));
+        // Accept valid Egyptian mobile or landline without crashing order
+        if (phoneRegex.test(normalizedAlt) || normalizedAlt.length >= 8) {
+          cleanAltPhone = normalizedAlt;
         }
       }
 
-      const governorate = String(orderData.governorate || '').trim();
+      const governorate = cleanGovernorateName(orderData.governorate || '');
       if (!governorate) {
         return res.status(400).json({ success: false, error: 'يرجى اختيار المحافظة' });
       }
@@ -709,7 +768,7 @@ async function startServer() {
           if (shippingDoc.exists) {
             const list = shippingDoc.data()?.list;
             if (Array.isArray(list)) {
-              const foundGov = list.find((g: any) => g.name === governorate);
+              const foundGov = list.find((g: any) => cleanGovernorateName(g.name) === governorate);
               if (foundGov && typeof foundGov.cost === 'number') {
                 shippingCost = foundGov.cost;
               }
@@ -1029,7 +1088,7 @@ async function startServer() {
       console.error('Error in /api/orders/create:', err);
       return res.status(500).json({
         success: false,
-        error: 'حدث خطأ أثناء حفظ الطلب: ' + (err?.message || 'Server error')
+        error: 'حدث خطأ أثناء تسجيل الطلب، يرجى المحاولة مرة أخرى'
       });
     }
   });
@@ -1262,7 +1321,7 @@ async function startServer() {
   app.get('/api/admin/users', requireAdmin, async (req, res) => {
     try {
       if (!adminAuth) {
-        return res.status(503).json({ success: false, error: 'Firebase Admin Auth غير متصل' });
+        return res.status(503).json({ success: false, error: 'خدمة إدارة الحسابات غير متاحة حالياً' });
       }
       const listUsersResult = await adminAuth.listUsers(100);
       const users = listUsersResult.users.map((u: any) => ({
@@ -1275,14 +1334,14 @@ async function startServer() {
       return res.json({ success: true, users });
     } catch (err: any) {
       console.error('Error listing admin users:', err);
-      return res.status(500).json({ success: false, error: err.message });
+      return res.status(500).json({ success: false, error: 'تعذر جلب قائمة المشرفين' });
     }
   });
 
   app.post('/api/admin/create-user', requireAdmin, async (req, res) => {
     try {
       if (!adminAuth) {
-        return res.status(503).json({ success: false, error: 'Firebase Admin Auth غير متصل' });
+        return res.status(503).json({ success: false, error: 'خدمة إدارة الحسابات غير متاحة حالياً' });
       }
       const { email, password, displayName } = req.body || {};
       if (!email || !password) {
@@ -1314,10 +1373,10 @@ async function startServer() {
     } catch (err: any) {
       console.error('Error creating admin user:', err);
       const msg = err.code === 'auth/email-already-exists'
-        ? 'هذا الإيميل مسجل بالفعل كمستخدم في Firebase'
+        ? 'هذا الإيميل مسجل بالفعل'
         : err.code === 'auth/invalid-email'
         ? 'صيغة البريد الإلكتروني غير صحيحة'
-        : (err.message || 'حدث خطأ أثناء إنشاء المستخدم');
+        : 'حدث خطأ أثناء إنشاء المستخدم، يرجى التأكد من البيانات';
       return res.status(400).json({ success: false, error: msg });
     }
   });
@@ -1325,7 +1384,7 @@ async function startServer() {
   app.post('/api/admin/delete-user', requireAdmin, async (req, res) => {
     try {
       if (!adminAuth) {
-        return res.status(503).json({ success: false, error: 'Firebase Admin Auth غير متصل' });
+        return res.status(503).json({ success: false, error: 'خدمة إدارة الحسابات غير متاحة حالياً' });
       }
       const { uid } = req.body || {};
       if (!uid) {

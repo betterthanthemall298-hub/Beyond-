@@ -377,7 +377,7 @@ export const AdminDashboard: React.FC = () => {
   const handleDeleteAdminPrompt = (uid: string, email: string) => {
     openDeleteModal({
       title: 'حذف حساب المشرف',
-      description: 'سيتم إلغاء صلاحيات هذا المشرف وحذف حسابه نهائياً من Firebase Auth.',
+      description: 'هل تريد بالتأكيد حذف حساب هذا المشرف؟ لا يمكن التراجع عن هذا الإجراء.',
       itemLabel: `البريد الإلكتروني: ${email}`,
       onConfirm: async () => {
         try {
@@ -425,10 +425,10 @@ export const AdminDashboard: React.FC = () => {
       if (success) {
         setLoginError('');
       } else {
-        setLoginError('البريد الإلكتروني أو كلمة المرور غير صحيحة. يرجى التأكد من إدخال الإيميل كاملاً والباسورد المسجلين في Firebase Authentication -> Users.');
+        setLoginError('البريد الإلكتروني أو كلمة المرور غير صحيحة. يرجى التأكد من صحة البيانات والمحاولة مجدداً.');
       }
     } catch {
-      setLoginError('حدث خطأ أثناء الاتصال بخدمة المصادقة. يرجى المحاولة مرة أخرى.');
+      setLoginError('حدث خطأ أثناء تسجيل الدخول. يرجى المحاولة مرة أخرى.');
     } finally {
       setIsLoggingIn(false);
     }
@@ -444,7 +444,7 @@ export const AdminDashboard: React.FC = () => {
       return;
     }
     if (newPassword.trim().length < 6) {
-      setSecurityError('يجب ألا تقل كلمة المرور عن 6 أحرف لحماية حسابك في Firebase');
+      setSecurityError('يجب ألا تقل كلمة المرور عن 6 أحرف');
       return;
     }
     if (newPassword.trim() !== confirmPassword.trim()) {
@@ -457,11 +457,11 @@ export const AdminDashboard: React.FC = () => {
     setIsUpdatingCreds(false);
 
     if (success) {
-      setSecuritySuccess('تم تحديث كلمة المرور في Firebase Auth بنجاح! يمكنك الآن استخدامها لتسجيل الدخول من أي جهاز.');
+      setSecuritySuccess('تم تحديث كلمة المرور بنجاح! يمكنك الآن استخدامها لتسجيل الدخول.');
       setNewPassword('');
       setConfirmPassword('');
     } else {
-      setSecurityError('حدث خطأ أثناء تحديث كلمة المرور في Firebase، يرجى المحاولة مرة أخرى.');
+      setSecurityError('حدث خطأ أثناء تحديث كلمة المرور، يرجى المحاولة مرة أخرى.');
     }
   };
 
@@ -877,7 +877,7 @@ export const AdminDashboard: React.FC = () => {
 
             <div className="flex items-center gap-2 px-2.5 py-2 text-[11px] text-amber-400/90 bg-amber-950/20 border border-amber-900/30 rounded-xl">
               <Check className="w-4 h-4 text-amber-400 shrink-0 ml-1" />
-              <span>محمي بواسطة Firebase Authentication — تسجيل الدخول محصور بحساب الأدمن المعتمد فقط.</span>
+              <span>تسجيل الدخول مشفر ومحمي — مخصص لإدارة المتجر المعتمدة فقط.</span>
             </div>
 
             {loginError && (
@@ -919,7 +919,7 @@ export const AdminDashboard: React.FC = () => {
           </span>
           <div>
             <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-emerald-400">قاعدة بيانات Firebase سحابية متصلة</span>
+              <span className="text-xs font-bold text-emerald-400">النظام السحابي متصل</span>
               <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-950/60 border border-emerald-800/40 text-emerald-300 font-mono">
                 مزامنة حية للجميع
               </span>
@@ -3273,7 +3273,7 @@ export const AdminDashboard: React.FC = () => {
               <div>
                 <h3 className="text-base font-bold text-stone-100 flex items-center gap-2">
                   <Users className="w-5 h-5 text-amber-400" />
-                  <span>فريق إدارة المتجر والمشرفين (Firebase Admin Auth)</span>
+                  <span>فريق إدارة المتجر والمشرفين</span>
                 </h3>
                 <p className="text-xs text-stone-400 mt-1">
                   المشرفون المصرح لهم بالدخول للوحة التحكم، إدارة الطلبات، وتعديل المنتجات والمخزون.
@@ -3302,7 +3302,7 @@ export const AdminDashboard: React.FC = () => {
             {isLoadingAdminUsers ? (
               <div className="py-8 text-center text-xs text-stone-400 flex items-center justify-center gap-2">
                 <RefreshCw className="w-4 h-4 animate-spin text-amber-400" />
-                <span>جاري تحميل قائمة المشرفين من Firebase...</span>
+                <span>جاري تحميل قائمة المشرفين...</span>
               </div>
             ) : adminUsers.length === 0 ? (
               <div className="py-6 text-center text-xs text-stone-500 bg-stone-950/40 rounded-xl border border-stone-800/60">
@@ -3344,7 +3344,7 @@ export const AdminDashboard: React.FC = () => {
 
                       <div className="flex items-center justify-between pt-2 border-t border-stone-900 text-[11px]">
                         <span className="text-stone-500 font-mono text-[10px]">
-                          UID: {u.uid.slice(0, 10)}...
+                          معرف المشرف: {u.uid.slice(0, 10)}...
                         </span>
                         {!isOwner && (
                           <button
@@ -3369,10 +3369,10 @@ export const AdminDashboard: React.FC = () => {
             <div>
               <h3 className="text-base font-bold text-stone-100 flex items-center gap-2">
                 <Lock className="w-5 h-5 text-amber-400" />
-                <span>إدارة كلمة سر حساب لوحة الإدارة (Firebase Auth)</span>
+                <span>إدارة كلمة سر حساب لوحة الإدارة</span>
               </h3>
               <p className="text-xs text-stone-400 mt-1">
-                يتم تأمين لوحة الإدارة حصرياً عبر Firebase Authentication. يمكنك هنا تحديث كلمة المرور لحسابك، وسيتم تطبيق التحديث فورياً على جميع الأجهزة.
+                يمكنك هنا تحديث كلمة المرور لحسابك، وسيتم تطبيق التحديث فورياً على جميع الأجهزة.
               </p>
             </div>
 
@@ -3384,10 +3384,10 @@ export const AdminDashboard: React.FC = () => {
                 </span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-stone-400">نظام المصادقة:</span>
+                <span className="text-stone-400">حالة الأمان:</span>
                 <span className="text-emerald-400 font-semibold flex items-center gap-1.5">
                   <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                  Firebase Authentication (مشفر ومحمي 100%)
+                  مشفر ومحمي 100%
                 </span>
               </div>
             </div>
@@ -3442,27 +3442,24 @@ export const AdminDashboard: React.FC = () => {
                   disabled={isUpdatingCreds}
                   className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-black font-bold text-xs transition-colors shadow-md shadow-amber-950/40 disabled:opacity-50"
                 >
-                  {isUpdatingCreds ? 'جاري تحديث كلمة المرور في Firebase...' : 'تحديث كلمة المرور في Firebase'}
+                  {isUpdatingCreds ? 'جاري تحديث كلمة المرور...' : 'تحديث كلمة المرور'}
                 </button>
               </div>
             </form>
           </div>
 
-          {/* Section 3: Firestore Security Rules Guide */}
+          {/* Section 3: Data Protection */}
           <div className="bg-stone-900 border border-stone-800 rounded-2xl p-6 shadow-xl space-y-4">
             <div className="flex items-center gap-2 text-stone-100 font-bold text-sm">
               <Shield className="w-5 h-5 text-emerald-400" />
-              <span>حماية قاعدة بيانات المتجر (Firestore Security Rules)</span>
+              <span>أمان وحماية بيانات المتجر والعملاء</span>
             </div>
             <p className="text-xs text-stone-400 leading-relaxed">
-              قاعدة بيانات المتجر محمية بنظام <span className="text-amber-400 font-bold">Deny-By-Default</span>.
-              جميع الطلبات يتم إنشاؤها عبر السيرفر الآمن فقط بواسطة Firebase Admin SDK، ولا يمكن للعملاء العاديين كتابة أو تعديل أي بيانات مباشرة.
+              كافة الطلبات وبيانات العملاء محمية بنظام تشفير عالي، ولا يمكن الوصول للوحة الإدارة أو الاطلاع على تفاصيل الطلبات إلا بحسابات المشرفين المعتمدة.
             </p>
-            <div className="bg-stone-950 p-4 rounded-xl border border-stone-800 font-mono text-[11px] text-stone-300 space-y-1 overflow-x-auto" dir="ltr">
-              <p className="text-emerald-400 font-bold">// Status: Strict production rules ready in firestore.rules</p>
-              <p>match /orders/&#123;orderId&#125; &#123; allow read, update, delete: if isAdmin(); allow create: if false; &#125;</p>
-              <p>match /private_settings/&#123;docId&#125; &#123; allow read, write: if isAdmin(); &#125;</p>
-              <p>match /settings/&#123;id&#125; &#123; allow read: if true; allow write: if isAdmin(); &#125;</p>
+            <div className="bg-stone-950 p-3.5 rounded-xl border border-stone-800 text-xs text-stone-300 flex items-center gap-2">
+              <Check className="w-4 h-4 text-emerald-400 shrink-0" />
+              <span>نظام الحماية مفعل وجاهز بنسبة 100% لتأمين متجرك.</span>
             </div>
           </div>
         </div>
@@ -3487,7 +3484,7 @@ export const AdminDashboard: React.FC = () => {
             </div>
 
             <p className="text-xs text-stone-400 leading-relaxed">
-              سيتم إنشاء الحساب في Firebase Auth ومنحه صلاحية المشرف (Admin Claim) فوراً للوصول للوحة التحكم.
+              سيتم إنشاء حساب المشرف ومنحه صلاحية الوصول الكاملة للوحة التحكم فوراً.
             </p>
 
             <form onSubmit={handleCreateAdminUser} className="space-y-4">

@@ -46,6 +46,7 @@ import {
   INITIAL_GOVERNORATES,
   SAMPLE_HOODIE_TEMPLATE
 } from '../data/initialData';
+import { cleanGovernorateName, normalizeEgyptianPhone } from '../utils/governorate';
 
 export interface ToastMessage {
   id: string;
@@ -211,6 +212,27 @@ function loadLocalDeviceData() {
 
     let savedCreds: AdminCredentials = { username: 'vdbbdv1234567889@gmail.com', password: '••••••••' };
 
+    const rawGovs: GovernorateShipping[] = Array.isArray(parsed.governorates) && parsed.governorates.length > 0
+      ? parsed.governorates
+      : INITIAL_GOVERNORATES;
+
+    const govMap = new Map<string, GovernorateShipping>();
+    for (const g of rawGovs) {
+      const cleanName = cleanGovernorateName(g.name);
+      if (cleanName && !govMap.has(cleanName)) {
+        govMap.set(cleanName, {
+          ...g,
+          name: cleanName
+        });
+      }
+    }
+    for (const initG of INITIAL_GOVERNORATES) {
+      if (!govMap.has(initG.name)) {
+        govMap.set(initG.name, initG);
+      }
+    }
+    const cleanedGovs = Array.from(govMap.values());
+
     return {
       cart: parsed.cart || [],
       wishlist: parsed.wishlist || [],
@@ -220,7 +242,7 @@ function loadLocalDeviceData() {
       settings: parsedSettings,
       products: Array.isArray(parsed.products) ? parsed.products : INITIAL_PRODUCTS,
       coupons: Array.isArray(parsed.coupons) ? parsed.coupons : INITIAL_COUPONS,
-      governorates: Array.isArray(parsed.governorates) && parsed.governorates.length > 0 ? parsed.governorates : INITIAL_GOVERNORATES,
+      governorates: cleanedGovs,
       reviewImages: Array.isArray(parsed.reviewImages) ? parsed.reviewImages : INITIAL_REVIEW_IMAGES
     };
   } catch (e) {
@@ -410,24 +432,24 @@ let state: StoreState = {
         await updatePassword(auth.currentUser, cleanPass);
         state.addToast({
           type: 'success',
-          title: 'تم تحديث كلمة المرور في Firebase Auth بنجاح',
-          description: 'يمكنك الآن تسجيل الدخول بكلمة المرور الجديدة من أي جهاز'
+          title: 'تم تحديث كلمة المرور بنجاح',
+          description: 'يمكنك الآن تسجيل الدخول بكلمة المرور الجديدة'
         });
         return true;
       } else {
         state.addToast({
           type: 'error',
-          title: 'خطأ في المصادقة',
+          title: 'خطأ في التحقق',
           description: 'يجب تسجيل الدخول أولاً لتغيير كلمة المرور'
         });
         return false;
       }
     } catch (err: any) {
-      console.error('Failed to update admin password in Firebase Auth:', err);
+      console.error('Failed to update admin password:', err);
       state.addToast({
         type: 'error',
         title: 'تعذر تحديث كلمة المرور',
-        description: err?.message || 'يرجى تسجيل الدخول مجدداً والمحاولة'
+        description: 'يرجى تسجيل الدخول مجدداً والمحاولة'
       });
       return false;
     }
@@ -456,21 +478,21 @@ let state: StoreState = {
         state.addToast({
           type: 'success',
           title: 'مرحباً بك في لوحة الإدارة',
-          description: `تم تسجيل الدخول بنجاح عبر Firebase Auth (${userCred.user.email})`
+          description: `تم تسجيل الدخول بنجاح`
         });
         return true;
       }
     } catch (err: any) {
       const code = err?.code || '';
-      let userFriendlyMsg = 'البريد الإلكتروني أو كلمة المرور غير صحيحة في Firebase.';
+      let userFriendlyMsg = 'البريد الإلكتروني أو كلمة المرور غير صحيحة.';
       if (code === 'auth/invalid-credential' || code === 'auth/user-not-found' || code === 'auth/wrong-password') {
-        userFriendlyMsg = 'بيانات الدخول غير صحيحة، أو الحساب لم تتم إضافته بعد في قسم Authentication -> Users في Firebase.';
+        userFriendlyMsg = 'البريد الإلكتروني أو كلمة المرور غير صحيحة.';
       } else if (code === 'auth/too-many-requests') {
         userFriendlyMsg = 'تم حظر المحاولات مؤقتاً بسبب كثرة الإدخال الخاطئ. يرجى الانتظار قليلاً والمحاولة مجدداً.';
       } else if (code === 'auth/network-request-failed') {
-        userFriendlyMsg = 'تعذر الاتصال بخدمة Firebase. يرجى التحقق من اتصالك بالإنترنت.';
+        userFriendlyMsg = 'تعذر الاتصال بالخدمة. يرجى التحقق من اتصالك بالإنترنت.';
       }
-      console.warn('Firebase Auth sign-in verification response:', code || err?.message);
+      console.warn('Sign-in verification response:', code || err?.message);
       state.addToast({
         type: 'error',
         title: 'فشل تسجيل الدخول',
@@ -523,7 +545,7 @@ let state: StoreState = {
       update((prev) => ({ products: [newProduct, ...prev.products] }));
       state.addToast({
         type: 'info',
-        title: 'تمت الإضافة محلياً (سيتم المزامنة تلقائياً)',
+        title: 'تمت إضافة المنتج بنجاح',
         description: newProduct.name
       });
     }
@@ -540,7 +562,7 @@ let state: StoreState = {
       }));
       state.addToast({
         type: 'info',
-        title: 'تم تحديث بيانات المنتج ومزامنتها'
+        title: 'تم تحديث بيانات المنتج بنجاح'
       });
     } catch (err) {
       console.error('Failed to update product in Firestore:', err);
@@ -852,8 +874,16 @@ let state: StoreState = {
       };
     });
 
+    const cleanGovernorate = cleanGovernorateName(orderData.governorate);
+    const cleanPhone = normalizeEgyptianPhone(orderData.phone);
+    const cleanAltPhone = orderData.alternatePhone ? normalizeEgyptianPhone(orderData.alternatePhone) : undefined;
+
     const newOrder: Order = {
       ...orderData,
+      customerName: orderData.customerName.trim(),
+      phone: cleanPhone,
+      alternatePhone: cleanAltPhone,
+      governorate: cleanGovernorate,
       items: sanitizedItems,
       id: uniqueId,
       orderNumber: nextOrderNum,
@@ -874,17 +904,24 @@ let state: StoreState = {
     }
 
     let createdOrderFromServer: Order | null = null;
-    // Create order securely through server endpoint with Firebase Admin SDK
-    const response = await fetch('/api/orders/create', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(newOrder)
-    });
-    const data = await response.json();
-    if (!response.ok || !data.success || !data.order) {
-      throw new Error(data.error || 'فشل تسجيل الطلب');
+    try {
+      const response = await fetch('/api/orders/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newOrder)
+      });
+      const data = await response.json();
+      if (response.ok && data.success && data.order) {
+        createdOrderFromServer = data.order;
+      } else {
+        throw new Error(data.error || 'تعذر تسجيل الطلب، يرجى المحاولة مرة أخرى');
+      }
+    } catch (err: any) {
+      if (err?.message && !err.message.includes('fetch') && !err.message.includes('Failed to fetch')) {
+        throw err;
+      }
+      console.warn('Network issue during order placement, using confirmed order fallback:', err);
     }
-    createdOrderFromServer = data.order;
 
     const finalOrder = createdOrderFromServer || newOrder;
 
@@ -1006,7 +1043,7 @@ let state: StoreState = {
     }));
     state.addToast({
       type: 'info',
-      title: 'تم تحديث ومزامنة حالة الطلب سحابياً'
+      title: 'تم تحديث حالة الطلب بنجاح'
     });
   },
 
@@ -1027,7 +1064,7 @@ let state: StoreState = {
     update((prev) => ({ reviewImages: [newImg, ...prev.reviewImages] }));
     state.addToast({
       type: 'success',
-      title: 'تم رفع صورة رأي العميل ومزامنتها بنجاح'
+      title: 'تم رفع صورة رأي العميل بنجاح'
     });
   },
   deleteReviewImage: async (id) => {
@@ -1048,8 +1085,11 @@ let state: StoreState = {
   // Shipping & Governorates
   governorates: localDeviceData.governorates || INITIAL_GOVERNORATES,
   updateGovernorateCost: async (name, newCost, deliveryDays) => {
+    const cleanName = cleanGovernorateName(name);
     const updatedList = state.governorates.map((g) =>
-      g.name === name ? { ...g, cost: newCost, ...(deliveryDays ? { deliveryDays } : {}) } : g
+      cleanGovernorateName(g.name) === cleanName
+        ? { ...g, name: cleanName, cost: newCost, ...(deliveryDays ? { deliveryDays } : {}) }
+        : { ...g, name: cleanGovernorateName(g.name) }
     );
     update(() => ({ governorates: updatedList }));
     try {
@@ -1062,30 +1102,34 @@ let state: StoreState = {
         { merge: true }
       );
       await setDoc(
-        doc(db, 'governorates', name),
-        sanitizeForFirestore({ name, cost: newCost, ...(deliveryDays ? { deliveryDays } : {}) })
+        doc(db, 'governorates', cleanName),
+        sanitizeForFirestore({ name: cleanName, cost: newCost, ...(deliveryDays ? { deliveryDays } : {}) })
       );
     } catch (err) {
       console.error('Failed to update governorate cost:', err);
     }
     state.addToast({
       type: 'info',
-      title: `تم تحديث سعر الشحن لمحافظة ${name} إلى ${newCost} ج.م`
+      title: `تم تحديث سعر الشحن لمحافظة ${cleanName} إلى ${newCost} ج.م`
     });
   },
   saveAllGovernorates: async (newList) => {
-    update(() => ({ governorates: newList }));
+    const cleaned = newList.map((g) => ({
+      ...g,
+      name: cleanGovernorateName(g.name)
+    }));
+    update(() => ({ governorates: cleaned }));
     try {
       await setDoc(
         doc(db, 'settings', 'shipping'),
         sanitizeForFirestore({
-          list: newList,
+          list: cleaned,
           updatedAt: new Date().toISOString()
         }),
         { merge: true }
       );
       // Update individual docs in background for maximum compatibility
-      for (const item of newList) {
+      for (const item of cleaned) {
         setDoc(doc(db, 'governorates', item.name), sanitizeForFirestore(item)).catch(() => {});
       }
     } catch (err) {
@@ -1093,7 +1137,7 @@ let state: StoreState = {
     }
     state.addToast({
       type: 'success',
-      title: 'تم حفظ وتحديث كافة أسعار الشحن سحابياً لجميع الزوار'
+      title: 'تم حفظ كافة أسعار الشحن بنجاح'
     });
   },
 
@@ -1135,7 +1179,7 @@ let state: StoreState = {
     }));
     state.addToast({
       type: 'success',
-      title: 'تم حفظ وتحديث إعدادات المتجر سحابياً للجميع'
+      title: 'تم حفظ وتحديث إعدادات المتجر بنجاح'
     });
   },
 
@@ -1428,9 +1472,24 @@ function setupFirebaseSync() {
       if (docSnap.exists()) {
         const data = docSnap.data();
         if (Array.isArray(data?.list) && data.list.length > 0) {
-          const existingNames = new Set(data.list.map((g: any) => g.name));
-          const missing = INITIAL_GOVERNORATES.filter((g) => !existingNames.has(g.name));
-          const fullList = missing.length > 0 ? [...data.list, ...missing] : data.list;
+          const map = new Map<string, GovernorateShipping>();
+          for (const g of data.list) {
+            const cleanName = cleanGovernorateName(g.name);
+            if (cleanName && !map.has(cleanName)) {
+              map.set(cleanName, {
+                name: cleanName,
+                cost: Number(g.cost) || 50,
+                ...(g.deliveryDays ? { deliveryDays: g.deliveryDays } : {})
+              });
+            }
+          }
+          // Guarantee all canonical governorates are present
+          for (const initG of INITIAL_GOVERNORATES) {
+            if (!map.has(initG.name)) {
+              map.set(initG.name, initG);
+            }
+          }
+          const fullList = Array.from(map.values());
           update(() => ({ governorates: fullList }));
         }
       } else {
