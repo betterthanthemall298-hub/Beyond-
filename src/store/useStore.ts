@@ -968,8 +968,15 @@ let state: StoreState = {
     try {
       await deleteDoc(doc(db, 'orders', orderId));
     } catch (err) {
-      console.error('Failed to delete order from Firestore:', err);
+      console.warn('Failed to delete order from Firestore, deleting via server API:', err);
     }
+    try {
+      await fetch('/api/admin/orders/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderId })
+      });
+    } catch {}
     update((prev) => ({
       orders: prev.orders.filter((o) => o.id !== orderId)
     }));
@@ -983,8 +990,15 @@ let state: StoreState = {
     try {
       await updateDoc(doc(db, 'orders', orderId), { status });
     } catch (err) {
-      console.error('Failed to update order status in Firestore:', err);
+      console.warn('Failed to update order status in Firestore, updating via server API:', err);
     }
+    try {
+      await fetch('/api/admin/orders/status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderId, status })
+      });
+    } catch {}
     update((prev) => ({
       orders: prev.orders.map((o) =>
         o.id === orderId ? { ...o, status } : o
@@ -1159,6 +1173,29 @@ function syncOrdersIfAdmin() {
   }
   if (unsubscribeOrders) return; // already listening
   isFirstOrdersSnapshot = true;
+
+  // Fetch from server orders API as well to guarantee no orders are missed
+  fetch('/api/admin/orders')
+    .then((res) => res.json())
+    .then((data) => {
+      if (data && data.success && Array.isArray(data.orders)) {
+        update((prev) => {
+          const orderMap = new Map<string, Order>();
+          for (const o of [...data.orders, ...prev.orders]) {
+            orderMap.set(o.id, o);
+          }
+          const merged = Array.from(orderMap.values());
+          merged.sort((a, b) => {
+            const numA = parseInt(String(a.orderNumber || '').replace(/\D/g, ''), 10) || 0;
+            const numB = parseInt(String(b.orderNumber || '').replace(/\D/g, ''), 10) || 0;
+            if (numB !== numA) return numB - numA;
+            return (b.createdAt || '').localeCompare(a.createdAt || '');
+          });
+          return { orders: merged };
+        });
+      }
+    })
+    .catch((e) => console.warn('Could not sync admin orders from server:', e));
 
   try {
     const ordersCol = collection(db, 'orders');
