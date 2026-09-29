@@ -1,0 +1,8 @@
+{
+  "name": "Beyond",
+  "description": "متجر هوديز أوفر سايز فاخرة - Beyond Store",
+  "prompt": "متجر هوديز أوفر سايز فاخرة",
+  "capabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

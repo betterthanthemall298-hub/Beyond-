@@ -199,7 +199,7 @@ function getProjectId(): string {
       if (cfg.projectId) return cfg.projectId;
     }
   } catch {}
-  return 'beyond-a32a4';
+  return 'beyond-5313b';
 }
 
 let realDeps: Deps | null = null;
