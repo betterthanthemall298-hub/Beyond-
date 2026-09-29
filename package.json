@@ -5,10 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
-    "build": "vite build",
+    "build": "vite build && npm run build:api",
     "preview": "vite preview",
     "lint": "tsc --noEmit",
-    "test": "tsx tests/api.test.ts"
+    "test": "tsx tests/api.test.ts",
+    "build:api": "esbuild api-src/index.ts --bundle --platform=node --target=node20 --format=cjs --outfile=api/index.cjs"
   },
   "dependencies": {
     "dotenv": "^17.2.3",
@@ -34,7 +35,8 @@
     "tailwindcss": "^4.1.14",
     "tsx": "^4.21.0",
     "typescript": "~5.8.2",
-    "vite": "^6.2.3"
+    "vite": "^6.2.3",
+    "esbuild": "^0.24.2"
   },
   "engines": {
     "node": ">=20"

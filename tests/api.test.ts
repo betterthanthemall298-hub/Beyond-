@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import http from 'node:http';
-import { createApp, normalizeGovName, cairoDateTimeString } from '../api/index';
+import { createApp, normalizeGovName, cairoDateTimeString } from '../api-src/index';
 import { FakeDb, FakeAuth, increment } from './fake';
 
 const db = new FakeDb();

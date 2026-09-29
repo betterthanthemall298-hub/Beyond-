@@ -1,8 +1,8 @@
-// Local development server only (npm run dev). On Vercel the API runs from api/index.ts.
+// Local development server only (npm run dev). On Vercel the API runs from the bundled api/index.cjs.
 import 'dotenv/config';
 import express from 'express';
 import { createServer as createViteServer } from 'vite';
-import app from './api/index';
+import app from './api-src/index';
 
 async function start() {
   const PORT = Number(process.env.PORT) || 3000;
