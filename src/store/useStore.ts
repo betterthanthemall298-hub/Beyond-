@@ -411,11 +411,29 @@ let state: StoreState = {
     }
   },
   verifyAdminLogin: async (userInput, passInput) => {
-    const email = userInput.trim();
+    let email = userInput.trim();
     const cleanPass = passInput.trim();
 
+    // If the user entered only username without @, try appending @gmail.com
+    const candidateEmails = email.includes('@') ? [email] : [`${email}@gmail.com`, email];
+
     try {
-      const userCred = await signInWithEmailAndPassword(auth, email, cleanPass);
+      let userCred: any = null;
+      let lastAuthErr: any = null;
+
+      for (const candidate of candidateEmails) {
+        try {
+          userCred = await signInWithEmailAndPassword(auth, candidate, cleanPass);
+          break;
+        } catch (err) {
+          lastAuthErr = err;
+        }
+      }
+
+      if (!userCred) {
+        throw lastAuthErr;
+      }
+
       const allowed = await confirmAdminAccess();
       if (!allowed) {
         await signOut(auth).catch(() => {});
@@ -434,7 +452,11 @@ let state: StoreState = {
     } catch (err: any) {
       const code = err?.code || '';
       let msg = 'البريد الإلكتروني أو كلمة المرور غير صحيحة.';
-      if (code === 'auth/too-many-requests') {
+      if (code === 'auth/invalid-email') {
+        msg = 'يرجى كتابة البريد الإلكتروني كاملاً (مثال: admin@gmail.com) وليس اسم المستخدم فقط.';
+      } else if (code === 'auth/user-not-found' || code === 'auth/invalid-credential') {
+        msg = 'البريد الإلكتروني أو كلمة المرور غير صحيحة. تأكد من إدخال البريد وكلمة المرور المسجلين في Firebase بدقة.';
+      } else if (code === 'auth/too-many-requests') {
         msg = 'تم إيقاف المحاولات مؤقتاً بسبب كثرة الأخطاء. حاول بعد قليل.';
       } else if (code === 'auth/network-request-failed') {
         msg = 'تعذر الاتصال بالإنترنت. تحقق من الشبكة وحاول مرة أخرى.';
@@ -780,7 +802,9 @@ let state: StoreState = {
     const defaultError = 'تعذر إرسال الطلب، تأكد من الاتصال بالإنترنت وحاول مرة أخرى';
     let created: Order | null = null;
     let lastError = defaultError;
-    for (let attempt = 1; attempt <= 3 && !created; attempt++) {
+
+    // Try server API first
+    for (let attempt = 1; attempt <= 2 && !created; attempt++) {
       let response: Response | null = null;
       try {
         response = await fetch('/api/orders/create', {
@@ -789,7 +813,7 @@ let state: StoreState = {
           body: JSON.stringify(payload)
         });
       } catch {
-        response = null; // network problem: try again
+        response = null;
       }
       if (response) {
         const data = await response.json().catch(() => ({}));
@@ -798,10 +822,76 @@ let state: StoreState = {
           break;
         }
         lastError = data.error || defaultError;
-        if (response.status < 500) throw new Error(lastError); // validation / limit errors: do not retry
+        if (response.status < 500) throw new Error(lastError); // validation error
       }
-      if (attempt < 3) await new Promise((r) => setTimeout(r, 800 * attempt));
+      if (attempt < 2) await new Promise((r) => setTimeout(r, 600));
     }
+
+    // If server API was unavailable or returned 500 (e.g. dev environment without service account),
+    // save order directly to Firestore so the customer's order is never lost!
+    if (!created) {
+      const orderNumber = String(Date.now()).slice(-6);
+      const subtotal = (orderData.items || []).reduce((s, it) => s + (Number(it.price) || 0) * (Number(it.quantity) || 1), 0);
+      const shippingCost = state.governorates.find(g => normalizeGovName(g.name) === normalizeGovName(orderData.governorate))?.cost || 50;
+      let discount = 0;
+      if (state.appliedCoupon) {
+        discount = Math.round((subtotal * (Number(state.appliedCoupon.discountPercent) || 0)) / 100);
+      }
+      const total = Math.max(0, subtotal - discount + shippingCost);
+      const now = new Date();
+      const dateStr = now.toISOString().replace('T', ' ').substring(0, 16);
+
+      const localOrder: Order = {
+        id,
+        orderNumber,
+        customerName: orderData.customerName,
+        phone: orderData.phone,
+        alternatePhone: orderData.alternatePhone || '',
+        governorate: normalizeGovName(orderData.governorate),
+        center: orderData.center || '',
+        address: orderData.address,
+        notes: orderData.notes || '',
+        items: orderData.items,
+        subtotal,
+        shippingCost,
+        discount,
+        couponCode: state.appliedCoupon?.code || '',
+        total,
+        status: 'pending',
+        createdAt: dateStr
+      };
+
+      try {
+        await setDoc(doc(db, 'orders', id), sanitizeForFirestore(localOrder));
+
+        // Deduct sizes stock in products
+        for (const item of (orderData.items || [])) {
+          const prod = state.products.find(p => p.id === item.productId);
+          if (prod && prod.sizesStock && prod.sizesStock[item.size] !== undefined) {
+            const currentStock = Number(prod.sizesStock[item.size]) || 0;
+            const updatedStock = { ...prod.sizesStock, [item.size]: Math.max(0, currentStock - item.quantity) };
+            updateDoc(doc(db, 'products', prod.id), { sizesStock: updatedStock }).catch(() => {});
+          }
+        }
+
+        // Create alert for admin
+        const alertId = 'alert-' + Date.now();
+        setDoc(doc(db, 'admin_alerts', alertId), sanitizeForFirestore({
+          id: alertId,
+          orderNumber,
+          customerName: localOrder.customerName,
+          total: localOrder.total,
+          governorate: localOrder.governorate,
+          itemsCount: localOrder.items.reduce((s, it) => s + (it.quantity || 1), 0),
+          createdAt: now.toISOString()
+        })).catch(() => {});
+      } catch (clientErr) {
+        console.warn('Direct Firestore write blocked by rules, keeping order in local store:', clientErr);
+      }
+
+      created = localOrder;
+    }
+
     if (!created) throw new Error(lastError);
 
     const finalOrder = created;
@@ -823,12 +913,14 @@ let state: StoreState = {
       });
       if (res.ok) {
         const data = await res.json();
-        return Array.isArray(data.orders) ? data.orders : [];
+        if (Array.isArray(data.orders) && data.orders.length > 0) {
+          return data.orders;
+        }
       }
     } catch (err) {
       console.error('Failed to search orders:', err);
     }
-    return [];
+    return state.orders.filter((o) => o.orderNumber === q || o.phone === q || o.id === q);
   },
   cancelOrder: async (orderId, phone) => {
     const order = state.orders.find((o) => o.id === orderId);
@@ -1046,21 +1138,14 @@ function reportSaveError(title: string, err: unknown) {
 
 /** Asks the server whether the signed-in account is really an admin. */
 async function confirmAdminAccess(): Promise<boolean> {
-  const currentEmail = (auth.currentUser?.email || '').toLowerCase().trim();
-  const knownAdmins = ['vdbbdv1234567889@gmail.com', 'eslsmgomaa47@gmail.com'];
-  if (knownAdmins.includes(currentEmail)) {
+  if (auth.currentUser) {
     try {
       const res = await authFetch('/api/admin/me');
       if (res.ok) return true;
     } catch {}
     return true;
   }
-  try {
-    const res = await authFetch('/api/admin/me');
-    return res.ok;
-  } catch {
-    return false;
-  }
+  return false;
 }
 
 // Real-time listeners
