@@ -799,36 +799,38 @@ let state: StoreState = {
     };
 
     // The same id is sent on every attempt, so a retry can never create a duplicate order
-    const defaultError = 'تعذر إرسال الطلب، تأكد من الاتصال بالإنترنت وحاول مرة أخرى';
     let created: Order | null = null;
-    let lastError = defaultError;
 
     // Try server API first
-    for (let attempt = 1; attempt <= 2 && !created; attempt++) {
-      let response: Response | null = null;
-      try {
-        response = await fetch('/api/orders/create', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
-      } catch {
-        response = null;
-      }
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 4000);
+      const response = await fetch('/api/orders/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        signal: controller.signal
+      });
+      clearTimeout(timer);
+
       if (response) {
         const data = await response.json().catch(() => ({}));
         if (response.ok && data.success && data.order) {
           created = data.order as Order;
-          break;
+        } else if (response.status === 400 && data.error) {
+          // Explicit field validation error from server
+          throw new Error(data.error);
         }
-        lastError = data.error || defaultError;
-        if (response.status < 500) throw new Error(lastError); // validation error
       }
-      if (attempt < 2) await new Promise((r) => setTimeout(r, 600));
+    } catch (err: any) {
+      if (err?.message && !err.message.includes('fetch') && !err.message.includes('abort') && !err.message.includes('network') && !err.message.includes('Failed')) {
+        throw err;
+      }
+      // Otherwise proceed to direct Firestore creation fallback
     }
 
-    // If server API was unavailable or returned 500 (e.g. dev environment without service account),
-    // save order directly to Firestore so the customer's order is never lost!
+    // If server API was unavailable, returned 404/500, or timed out,
+    // save order directly to Firestore so the customer's order is ALWAYS processed!
     if (!created) {
       const orderNumber = String(Date.now()).slice(-6);
       const subtotal = (orderData.items || []).reduce((s, it) => s + (Number(it.price) || 0) * (Number(it.quantity) || 1), 0);
@@ -892,7 +894,7 @@ let state: StoreState = {
       created = localOrder;
     }
 
-    if (!created) throw new Error(lastError);
+    if (!created) throw new Error('تعذر إرسال الطلب، يرجى المحاولة مرة أخرى');
 
     const finalOrder = created;
     update((prev) => {
