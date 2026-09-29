@@ -1054,21 +1054,22 @@ export function createApp(getDeps: () => Deps) {
         let patch: Record<string, any> = { date };
         if (type === 'visit') {
           const dev = req.body?.isMobile ? 'mobile' : 'desktop';
-          patch = {
-            ...patch,
-            visits: inc(1),
-            uniqueVisitors: inc(1),
-            hourlyVisits: { [hour]: inc(1) },
-            deviceTypes: { [dev]: inc(1) }
-          };
+          patch.visits = inc(1);
+          patch[`hourlyVisits.${hour}`] = inc(1);
+          patch[`deviceTypes.${dev}`] = inc(1);
+          if (req.body?.isUniqueToday !== false) {
+            patch.uniqueVisitors = inc(1);
+          }
         } else if (type === 'cart_add') {
           const productId = str(req.body?.productId, 60);
-          patch = { ...patch, cartAdditions: inc(1), hourlyCartAdds: { [hour]: inc(1) } };
+          patch.cartAdditions = inc(1);
+          patch[`hourlyCartAdds.${hour}`] = inc(1);
           if (/^[A-Za-z0-9_-]+$/.test(productId)) {
-            patch.topProducts = { [productId]: { name: str(req.body?.productName, 100), count: inc(1) } };
+            patch[`topProducts.${productId}.name`] = str(req.body?.productName, 100);
+            patch[`topProducts.${productId}.count`] = inc(1);
           }
         } else {
-          patch = { ...patch, checkoutStarts: inc(1) };
+          patch.checkoutStarts = inc(1);
         }
         await ref.set(patch, { merge: true });
       } catch (err: any) {

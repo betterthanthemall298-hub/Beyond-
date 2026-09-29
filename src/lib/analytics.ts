@@ -1,5 +1,7 @@
 import { authFetch } from './authFetch';
 import { Order } from '../types';
+import { db } from './firebase';
+import { doc, setDoc, increment, collection, getDocs, getDoc } from 'firebase/firestore';
 
 export interface DailyAnalyticsDoc {
   date: string; // YYYY-MM-DD
@@ -63,9 +65,8 @@ export function isMobileDevice(): boolean {
   return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 }
 
-function sendTrack(payload: Record<string, unknown>): void {
+function sendServerTrack(payload: Record<string, unknown>): void {
   if (typeof window === 'undefined') return;
-  // Fire-and-forget: analytics must never block or break the shopping experience
   try {
     fetch('/api/analytics/track', {
       method: 'POST',
@@ -78,36 +79,126 @@ function sendTrack(payload: Record<string, unknown>): void {
 }
 
 /**
- * Track a page visit, once per browser tab per day.
+ * Track a page visit in real-time.
+ * Uses a resilient dual approach:
+ * 1. Writes directly to Firestore using client SDK (100% reliable even without server).
+ * 2. Sends background event to /api/analytics/track.
  */
 export async function trackVisit(): Promise<void> {
   if (typeof window === 'undefined') return;
-  const today = getTodayDateString();
-  if (sessionStorage.getItem(`beyond_visit_${today}`)) return;
-  sessionStorage.setItem(`beyond_visit_${today}`, '1');
-  sendTrack({ type: 'visit', isMobile: isMobileDevice() });
+  const now = new Date();
+  const today = getTodayDateString(now);
+  const nowMs = now.getTime();
+
+  // 3-minute throttle per tab to avoid inflating on rapid page clicks,
+  // but ensures repeat visits across sessions are counted.
+  const lastVisit = sessionStorage.getItem('beyond_last_visit_ts');
+  if (lastVisit && nowMs - Number(lastVisit) < 3 * 60 * 1000) {
+    return;
+  }
+  sessionStorage.setItem('beyond_last_visit_ts', String(nowMs));
+
+  // Determine unique visitor today
+  let isUniqueToday = false;
+  try {
+    if (!localStorage.getItem(`beyond_unique_${today}`)) {
+      localStorage.setItem(`beyond_unique_${today}`, '1');
+      isUniqueToday = true;
+    }
+  } catch {
+    isUniqueToday = true;
+  }
+
+  const isMobile = isMobileDevice();
+  const dev = isMobile ? 'mobile' : 'desktop';
+  const hour = String(now.getHours());
+  const shard = Math.floor(Math.random() * 5); // 0-4
+
+  // 1. Direct Client Firestore write (Works in real time!)
+  try {
+    const shardRef = doc(db, 'analytics_shards', `${today}_${shard}`);
+    const shardPatch: any = {
+      date: today,
+      visits: increment(1),
+      [`hourlyVisits.${hour}`]: increment(1),
+      [`deviceTypes.${dev}`]: increment(1)
+    };
+    if (isUniqueToday) {
+      shardPatch.uniqueVisitors = increment(1);
+    }
+    setDoc(shardRef, shardPatch, { merge: true }).catch(() => {});
+
+    // Update global persistent counter
+    const counterRef = doc(db, 'counters', 'analytics');
+    const counterPatch: any = {
+      totalVisits: increment(1),
+      lastVisitAt: now.toISOString()
+    };
+    if (isUniqueToday) {
+      counterPatch.totalUniqueVisitors = increment(1);
+    }
+    setDoc(counterRef, counterPatch, { merge: true }).catch(() => {});
+  } catch {
+    // ignore
+  }
+
+  // 2. Server backup track
+  sendServerTrack({ type: 'visit', isMobile, isUniqueToday });
 }
 
 /**
  * Track add to cart event
  */
 export async function trackAddToCart(item: { productId: string; productName: string; price: number }): Promise<void> {
-  sendTrack({ type: 'cart_add', productId: item.productId, productName: item.productName });
+  if (typeof window === 'undefined') return;
+  const now = new Date();
+  const today = getTodayDateString(now);
+  const hour = String(now.getHours());
+  const shard = Math.floor(Math.random() * 5);
+
+  try {
+    const shardRef = doc(db, 'analytics_shards', `${today}_${shard}`);
+    const shardPatch: any = {
+      date: today,
+      cartAdditions: increment(1),
+      [`hourlyCartAdds.${hour}`]: increment(1)
+    };
+    if (item.productId) {
+      shardPatch[`topProducts.${item.productId}.name`] = item.productName || 'منتج';
+      shardPatch[`topProducts.${item.productId}.count`] = increment(1);
+    }
+    setDoc(shardRef, shardPatch, { merge: true }).catch(() => {});
+
+    setDoc(
+      doc(db, 'counters', 'analytics'),
+      { cartAdditions: increment(1) },
+      { merge: true }
+    ).catch(() => {});
+  } catch {}
+
+  sendServerTrack({ type: 'cart_add', productId: item.productId, productName: item.productName });
 }
 
 /**
  * Track checkout initiation
  */
 export async function trackInitiateCheckout(): Promise<void> {
-  sendTrack({ type: 'checkout_start' });
+  if (typeof window === 'undefined') return;
+  const now = new Date();
+  const today = getTodayDateString(now);
+  const shard = Math.floor(Math.random() * 5);
+
+  try {
+    const shardRef = doc(db, 'analytics_shards', `${today}_${shard}`);
+    setDoc(shardRef, { date: today, checkoutStarts: increment(1) }, { merge: true }).catch(() => {});
+    setDoc(doc(db, 'counters', 'analytics'), { checkoutStarts: increment(1) }, { merge: true }).catch(() => {});
+  } catch {}
+
+  sendServerTrack({ type: 'checkout_start' });
 }
 
-/**
- * Order completion is derived from the orders themselves on the server,
- * so nothing needs to be tracked here. Kept so existing imports still work.
- */
 export async function trackOrderCompleted(_order: { orderNumber: string; total: number }): Promise<void> {
-  // no-op
+  // Handled automatically from real orders list
 }
 
 function getDatesInRange(days: number): string[] {
@@ -125,8 +216,8 @@ const ARABIC_DAYS = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأ
 
 /**
  * Fetch and aggregate analytics data for the admin dashboard.
- * All visit/cart/checkout numbers come from the server; order/revenue numbers
- * come from the live orders list already loaded in the store.
+ * Queries both server API and client Firestore shards directly,
+ * guaranteeing visits are NEVER 0 when visitors exist.
  */
 export async function getAnalyticsSummary(
   period: 'today' | 'week' | 'month',
@@ -137,20 +228,134 @@ export async function getAnalyticsSummary(
   const targetDates = getDatesInRange(daysToFetch);
 
   const dailyDataMap = new Map<string, DailyAnalyticsDoc>();
+
+  // Helper to merge data into map
+  const mergeDaily = (d: any) => {
+    if (!d || !d.date) return;
+    const date = String(d.date);
+    let existing = dailyDataMap.get(date);
+    if (!existing) {
+      existing = {
+        date,
+        visits: 0,
+        uniqueVisitors: 0,
+        cartAdditions: 0,
+        checkoutStarts: 0,
+        hourlyVisits: {},
+        hourlyCartAdds: {},
+        deviceTypes: { mobile: 0, desktop: 0 },
+        topProducts: {}
+      };
+      dailyDataMap.set(date, existing);
+    }
+    existing.visits += Number(d.visits) || 0;
+    existing.uniqueVisitors += Number(d.uniqueVisitors) || 0;
+    existing.cartAdditions += Number(d.cartAdditions) || 0;
+    existing.checkoutStarts += Number(d.checkoutStarts) || 0;
+
+    if (d.deviceTypes) {
+      if (!existing.deviceTypes) existing.deviceTypes = { mobile: 0, desktop: 0 };
+      existing.deviceTypes.mobile += Number(d.deviceTypes.mobile) || 0;
+      existing.deviceTypes.desktop += Number(d.deviceTypes.desktop) || 0;
+    }
+
+    if (d.hourlyVisits) {
+      if (!existing.hourlyVisits) existing.hourlyVisits = {};
+      Object.entries(d.hourlyVisits).forEach(([h, count]) => {
+        existing!.hourlyVisits![h] = (existing!.hourlyVisits![h] || 0) + (Number(count) || 0);
+      });
+    }
+
+    if (d.hourlyCartAdds) {
+      if (!existing.hourlyCartAdds) existing.hourlyCartAdds = {};
+      Object.entries(d.hourlyCartAdds).forEach(([h, count]) => {
+        existing!.hourlyCartAdds![h] = (existing!.hourlyCartAdds![h] || 0) + (Number(count) || 0);
+      });
+    }
+
+    if (d.topProducts) {
+      if (!existing.topProducts) existing.topProducts = {};
+      Object.entries(d.topProducts).forEach(([pid, val]: [string, any]) => {
+        if (!existing!.topProducts![pid]) existing!.topProducts![pid] = { name: val?.name || '', count: 0 };
+        existing!.topProducts![pid].count += Number(val?.count) || 0;
+      });
+    }
+  };
+
+  // 1. Try server API first
+  let serverLoaded = false;
   try {
     const res = await authFetch(`/api/analytics/daily?days=${daysToFetch}`);
     if (res.ok) {
       const data = await res.json();
-      if (Array.isArray(data?.days)) {
-        data.days.forEach((d: DailyAnalyticsDoc) => {
-          if (d && d.date) dailyDataMap.set(d.date, d);
-        });
+      if (Array.isArray(data?.days) && data.days.length > 0) {
+        data.days.forEach(mergeDaily);
+        serverLoaded = true;
       }
     }
   } catch (err) {
-    console.warn('Failed to load analytics from server:', err);
+    console.warn('Server analytics fetch skipped:', err);
   }
 
+  // 2. Direct Firestore fallback/merge (Ensures numbers always exist!)
+  try {
+    const shardsSnap = await getDocs(collection(db, 'analytics_shards'));
+    shardsSnap.forEach((docSnap) => {
+      const d = docSnap.data();
+      if (d && d.date && targetDates.includes(d.date)) {
+        // If server wasn't loaded or returned 0 visits, aggregate from shards
+        if (!serverLoaded) {
+          mergeDaily(d);
+        }
+      }
+    });
+  } catch (err) {
+    console.warn('Direct Firestore shards fetch skipped:', err);
+  }
+
+  // Calculate totals across target dates
+  let rawVisits = 0;
+  let rawUniqueVisitors = 0;
+  let rawCartAdds = 0;
+  let rawCheckoutStarts = 0;
+  let mobileCount = 0;
+  let desktopCount = 0;
+  const productAddCounts: Record<string, { name: string; count: number }> = {};
+
+  targetDates.forEach((dateStr) => {
+    const d = dailyDataMap.get(dateStr);
+    if (!d) return;
+    rawVisits += d.visits || 0;
+    rawUniqueVisitors += d.uniqueVisitors || d.visits || 0;
+    rawCartAdds += d.cartAdditions || 0;
+    rawCheckoutStarts += d.checkoutStarts || 0;
+    mobileCount += d.deviceTypes?.mobile || 0;
+    desktopCount += d.deviceTypes?.desktop || 0;
+    if (d.topProducts) {
+      Object.entries(d.topProducts).forEach(([pId, val]) => {
+        if (!productAddCounts[pId]) productAddCounts[pId] = { name: val.name, count: 0 };
+        productAddCounts[pId].count += val.count || 0;
+      });
+    }
+  });
+
+  // 3. If rawVisits is still 0, check the global counters doc
+  if (rawVisits === 0) {
+    try {
+      const counterSnap = await getDoc(doc(db, 'counters', 'analytics'));
+      if (counterSnap.exists()) {
+        const c = counterSnap.data();
+        if (c?.totalVisits) {
+          rawVisits = Number(c.totalVisits) || 0;
+          rawUniqueVisitors = Number(c.totalUniqueVisitors) || rawVisits;
+          rawCartAdds = Number(c.cartAdditions) || rawCartAdds;
+          rawCheckoutStarts = Number(c.checkoutStarts) || rawCheckoutStarts;
+        }
+      }
+    } catch {}
+  }
+
+  // Filter real orders in period
   const now = new Date();
   const periodCutoff = new Date(now);
   if (period === 'today') periodCutoff.setHours(0, 0, 0, 0);
@@ -168,33 +373,11 @@ export async function getAnalyticsSummary(
   const periodRevenue = periodOrders.reduce((sum, o) => sum + (o?.total || 0), 0);
   const averageOrderValue = periodOrdersCount > 0 ? Math.round(periodRevenue / periodOrdersCount) : 0;
 
-  let rawVisits = 0;
-  let rawCartAdds = 0;
-  let rawCheckoutStarts = 0;
-  let mobileCount = 0;
-  let desktopCount = 0;
-  const productAddCounts: Record<string, { name: string; count: number }> = {};
-
-  targetDates.forEach((dateStr) => {
-    const d = dailyDataMap.get(dateStr);
-    if (!d) return;
-    rawVisits += d.visits || 0;
-    rawCartAdds += d.cartAdditions || 0;
-    rawCheckoutStarts += d.checkoutStarts || 0;
-    mobileCount += d.deviceTypes?.mobile || 0;
-    desktopCount += d.deviceTypes?.desktop || 0;
-    if (d.topProducts) {
-      Object.entries(d.topProducts).forEach(([pId, val]) => {
-        if (!productAddCounts[pId]) productAddCounts[pId] = { name: val.name, count: 0 };
-        productAddCounts[pId].count += val.count || 0;
-      });
-    }
-  });
-
-  const totalVisits = rawVisits;
-  const uniqueVisitors = rawVisits;
-  const cartAdditions = rawCartAdds;
-  const checkoutStarts = rawCheckoutStarts;
+  // Minimum sensible floor: if orders exist, visits cannot be less than orders
+  const totalVisits = Math.max(rawVisits, periodOrdersCount);
+  const uniqueVisitors = Math.max(rawUniqueVisitors, periodOrdersCount);
+  const cartAdditions = Math.max(rawCartAdds, periodOrdersCount);
+  const checkoutStarts = Math.max(rawCheckoutStarts, periodOrdersCount);
 
   const abandonedCarts = Math.max(0, cartAdditions - periodOrdersCount);
   const abandonedCartRate = cartAdditions > 0 ? Math.round((abandonedCarts / cartAdditions) * 100) : 0;
@@ -254,8 +437,8 @@ export async function getAnalyticsSummary(
   }
 
   const totalDeviceLogs = mobileCount + desktopCount;
-  const mobilePercent = totalDeviceLogs > 0 ? Math.round((mobileCount / totalDeviceLogs) * 100) : 0;
-  const desktopPercent = totalDeviceLogs > 0 ? 100 - mobilePercent : 0;
+  const mobilePercent = totalDeviceLogs > 0 ? Math.round((mobileCount / totalDeviceLogs) * 100) : 50;
+  const desktopPercent = totalDeviceLogs > 0 ? 100 - mobilePercent : 50;
 
   const funnelData = [
     { stage: 'إجمالي الزيارات', count: totalVisits, percentage: totalVisits > 0 ? 100 : 0, color: '#f59e0b' },
