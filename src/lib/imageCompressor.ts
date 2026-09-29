@@ -7,9 +7,12 @@
 import { storage } from "./firebase";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
-let isStorageAvailable: boolean | null = null;
+let isStorageAvailable: boolean | null =
+  typeof window !== 'undefined' && localStorage.getItem('firebase_storage_disabled') === 'true'
+    ? false
+    : null;
 
-export async function compressImageFile(file: File, maxDimension = 850, quality = 0.74): Promise<string> {
+export async function compressImageFile(file: File, maxDimension = 680, quality = 0.65): Promise<string> {
   return new Promise((resolve, reject) => {
     // If SVG or small gif, read as data url directly if small enough
     if (file.type === "image/svg+xml" || (file.type === "image/gif" && file.size < 150 * 1024)) {
@@ -81,7 +84,7 @@ function dataUrlToBlob(dataUrl: string): Blob {
  * Times out after 1.5 seconds if Storage is disabled (e.g. Spark free tier),
  * instantly saving the compressed WebP inline without blocking or freezing the admin.
  */
-export async function uploadImageFile(file: File, maxDimension = 850, quality = 0.74): Promise<string> {
+export async function uploadImageFile(file: File, maxDimension = 680, quality = 0.65): Promise<string> {
   const compressed = await compressImageFile(file, maxDimension, quality);
 
   // If Storage was already confirmed unavailable, return compressed image immediately
@@ -92,33 +95,35 @@ export async function uploadImageFile(file: File, maxDimension = 850, quality = 
   try {
     const blob = dataUrlToBlob(compressed);
     const ext = blob.type === "image/webp" ? "webp" : blob.type === "image/png" ? "png" : "jpg";
-    const path = `uploads/\${Date.now()}-\${Math.random().toString(36).slice(2, 8)}.\${ext}`;
+    const path = `uploads/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
     const fileRef = ref(storage, path);
 
-    // Timeout after 1500ms to avoid locking the UI if Storage requires Blaze
+    // Timeout after 600ms to avoid freezing the admin if Storage requires Blaze
     const uploadPromise = uploadBytes(fileRef, blob, { contentType: blob.type }).then(() => getDownloadURL(fileRef));
     const timeoutPromise = new Promise<string>((_, reject) =>
-      setTimeout(() => reject(new Error("Storage timeout - fallback to compressed inline")), 1500)
+      setTimeout(() => reject(new Error("Storage timeout - fallback to compressed inline")), 600)
     );
 
     const downloadUrl = await Promise.race([uploadPromise, timeoutPromise]);
     isStorageAvailable = true;
+    if (typeof window !== 'undefined') localStorage.removeItem('firebase_storage_disabled');
     return downloadUrl;
   } catch (err) {
     isStorageAvailable = false;
+    if (typeof window !== 'undefined') localStorage.setItem('firebase_storage_disabled', 'true');
     return compressed;
   }
 }
 
 /**
- * Compress an existing base64 string if it exceeds ~100KB
+ * Compress an existing base64 string if it exceeds ~80KB
  */
-export async function compressDataUrl(dataUrl: string, maxDimension = 850, quality = 0.74): Promise<string> {
+export async function compressDataUrl(dataUrl: string, maxDimension = 680, quality = 0.65): Promise<string> {
   if (!dataUrl.startsWith("data:image")) {
     return dataUrl;
   }
-  // If small already (< 80KB), return as is
-  if (dataUrl.length < 110000) {
+  // If small already (< 50KB), return as is
+  if (dataUrl.length < 65000) {
     return dataUrl;
   }
   return new Promise((resolve) => {

@@ -265,6 +265,20 @@ export function createApp(getDeps: () => Deps) {
   const app = express();
   app.set('trust proxy', true);
   app.disable('x-powered-by');
+
+  // Support Vercel serverless rewrites and custom proxy paths
+  app.use((req, _res, next) => {
+    const matchedPath = req.headers['x-matched-path'] as string | undefined;
+    if (matchedPath && matchedPath.startsWith('/api')) {
+      const queryIdx = req.url.indexOf('?');
+      const query = queryIdx !== -1 ? req.url.slice(queryIdx) : '';
+      req.url = matchedPath + query;
+    } else if (req.url && !req.url.startsWith('/api')) {
+      req.url = '/api' + (req.url.startsWith('/') ? req.url : '/' + req.url);
+    }
+    next();
+  });
+
   app.use(express.json({ limit: '100kb' }));
 
   app.use('/api', (_req, res, next) => {
