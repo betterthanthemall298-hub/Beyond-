@@ -15,7 +15,7 @@ import {
 } from 'firebase/firestore';
 import { db, sanitizeForFirestore, auth } from '../lib/firebase';
 import { authFetch } from '../lib/authFetch';
-import { signInWithEmailAndPassword, updatePassword, signOut, onAuthStateChanged } from 'firebase/auth';
+import { signInWithEmailAndPassword, updatePassword, signOut, onAuthStateChanged, signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
 import {
   triggerNewOrderNotification,
   playOrderNotificationSound,
@@ -173,6 +173,7 @@ export interface StoreState {
   adminCredentials: AdminCredentials;
   updateAdminCredentials: (newUsername: string, newPassword: string) => Promise<boolean>;
   verifyAdminLogin: (usernameInput: string, passwordInput: string) => Promise<boolean>;
+  loginWithGoogle: () => Promise<boolean>;
   logoutAdmin: () => Promise<void>;
 
   // Computed / Helpers
@@ -465,6 +466,41 @@ let state: StoreState = {
       return false;
     }
   },
+  loginWithGoogle: async () => {
+    try {
+      const provider = new GoogleAuthProvider();
+      provider.setCustomParameters({ prompt: 'select_account' });
+      const userCred = await signInWithPopup(auth, provider);
+      const email = (userCred.user.email || '').toLowerCase().trim();
+
+      const allowed = await confirmAdminAccess();
+      if (!allowed) {
+        await signOut(auth).catch(() => {});
+        state.addToast({ type: 'error', title: 'هذا الحساب ليس لديه صلاحية الدخول كأدمن' });
+        return false;
+      }
+      update(() => ({
+        isAdminLoggedIn: true,
+        adminCredentials: { username: userCred.user.email || email, password: '' }
+      }));
+      syncOrdersIfAdmin();
+      syncAlertsIfAdmin();
+      syncCouponsIfAdmin();
+      state.addToast({ type: 'success', title: 'مرحباً بك في لوحة الإدارة' });
+      return true;
+    } catch (err: any) {
+      console.error('Google login error:', err);
+      const code = err?.code || '';
+      let msg = 'تعذر تسجيل الدخول باستخدام حساب Google.';
+      if (code === 'auth/popup-closed-by-user') {
+        msg = 'تم إغلاق نافذة تسجيل الدخول قبل إتمام العملية.';
+      } else if (code === 'auth/unauthorized-domain') {
+        msg = 'هذا النطاق غير مضاف في قائمة النطاقات المصرح بها في Firebase Console (Authorized Domains).';
+      }
+      state.addToast({ type: 'error', title: 'فشل تسجيل الدخول', description: msg });
+      return false;
+    }
+  },
   logoutAdmin: async () => {
     try {
       await signOut(auth);
@@ -696,12 +732,34 @@ let state: StoreState = {
         body: JSON.stringify({ code: clean })
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok || !data.success || !data.coupon) {
-        return { success: false, message: data.error || 'كود الخصم غير صحيح أو غير مفعل' };
+      if (res.ok && data.success && data.coupon) {
+        coupon = { ...data.coupon, active: true, timesUsed: 0 } as Coupon;
       }
-      coupon = { ...data.coupon, active: true, timesUsed: 0 } as Coupon;
     } catch {
-      return { success: false, message: 'تعذر التحقق من الكود، تأكد من الاتصال بالإنترنت' };
+      // Continue to Firestore fallback below
+    }
+
+    if (!coupon) {
+      try {
+        const snap = await getDocs(collection(db, 'coupons'));
+        const found = snap.docs.find((d) => String(d.data()?.code || '').trim().toUpperCase() === clean);
+        if (found) {
+          const d = found.data();
+          if (d.active !== false) {
+            coupon = { id: found.id, ...d } as Coupon;
+          }
+        }
+      } catch {
+        // Fallback check against local state if admin
+        const found = state.coupons.find((c) => c.code.trim().toUpperCase() === clean);
+        if (found && found.active !== false) {
+          coupon = found;
+        }
+      }
+    }
+
+    if (!coupon) {
+      return { success: false, message: 'كود الخصم غير صحيح أو غير مفعل' };
     }
 
     const subtotal = state.getCartSubtotal();

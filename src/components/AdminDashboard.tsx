@@ -102,6 +102,7 @@ export const AdminDashboard: React.FC = () => {
     adminCredentials,
     updateAdminCredentials,
     verifyAdminLogin,
+    loginWithGoogle,
     logoutAdmin,
     seedSampleProduct,
   } = useStore();
@@ -421,6 +422,7 @@ export const AdminDashboard: React.FC = () => {
   }, 0);
 
   const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [isLoggingInGoogle, setIsLoggingInGoogle] = useState(false);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -437,6 +439,21 @@ export const AdminDashboard: React.FC = () => {
       setLoginError('حدث خطأ أثناء الاتصال بخدمة المصادقة. يرجى المحاولة مرة أخرى.');
     } finally {
       setIsLoggingIn(false);
+    }
+  };
+
+  const handleGoogleLogin = async () => {
+    setIsLoggingInGoogle(true);
+    setLoginError('');
+    try {
+      const success = await loginWithGoogle();
+      if (!success) {
+        setLoginError('تعذر تسجيل الدخول بحساب Google. تأكد من اختيار حساب الأدمن.');
+      }
+    } catch {
+      setLoginError('حدث خطأ أثناء الاتصال بخدمة Google.');
+    } finally {
+      setIsLoggingInGoogle(false);
     }
   };
 
