@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useStore } from '../store/useStore';
 import { ProductCard } from './ProductCard';
 import { HoodieSize } from '../types';
+import { isComingSoon } from '../utils/product';
 import { SlidersHorizontal, Search, Sparkles, Filter, X } from 'lucide-react';
 
 export const ProductGrid: React.FC = () => {
@@ -30,6 +31,7 @@ export const ProductGrid: React.FC = () => {
   // Filter products (memoized)
   const filteredProducts = useMemo(() => {
     return products.filter((p) => {
+      if (isComingSoon(p)) return false;
       // Category
       if (selectedCategory !== 'all' && p.category !== selectedCategory) {
         return false;

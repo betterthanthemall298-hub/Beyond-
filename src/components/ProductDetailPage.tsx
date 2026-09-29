@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useStore } from '../store/useStore';
+import { isComingSoon } from '../utils/product';
 import { HoodieSize } from '../types';
 import {
   ArrowRight,
@@ -91,7 +92,7 @@ export const ProductDetailPage: React.FC = () => {
 
   // Recommended Products: other products in the store
   const relatedProducts = products
-    .filter((p) => p.id !== product.id)
+    .filter((p) => p.id !== product.id && !isComingSoon(p))
     .slice(0, 3);
 
   return (

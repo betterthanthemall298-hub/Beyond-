@@ -10,11 +10,9 @@ import {
   FileText,
   ArrowRight,
   Building2,
-  CheckCircle2,
-  AlertCircle
+  CheckCircle2
 } from 'lucide-react';
 import { OrderItem, Order } from '../types';
-import { cleanGovernorateName, normalizeEgyptianPhone, isValidEgyptianPhone } from '../utils/governorate';
 
 export const CheckoutModal: React.FC = () => {
   const {
@@ -36,21 +34,22 @@ export const CheckoutModal: React.FC = () => {
   const [address, setAddress] = useState('');
   const [notes, setNotes] = useState('');
   const [phoneError, setPhoneError] = useState('');
-  const [formError, setFormError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [confirmedOrder, setConfirmedOrder] = useState<Order | null>(null);
 
   if (!isCheckoutOpen) return null;
 
-  const cleanSelectedGov = cleanGovernorateName(selectedGovernorate) || 'القاهرة';
-  const currentGov =
-    governorates.find((g) => cleanGovernorateName(g.name) === cleanSelectedGov) ||
-    governorates[0] ||
-    { name: 'القاهرة', cost: 45 };
-  const shippingCost = typeof currentGov.cost === 'number' ? currentGov.cost : 45;
+  const currentGov = governorates.find((g) => g.name === selectedGovernorate) || governorates[0];
+  const shippingCost = currentGov.cost;
   const subtotal = getCartSubtotal();
   const discount = getCartDiscount();
   const grandTotal = Math.max(0, subtotal - discount + shippingCost);
+
+  const validateEgyptianPhone = (p: string) => {
+    const clean = p.replace(/\s+/g, '');
+    const regex = /^01[0125][0-9]{8}$/;
+    return regex.test(clean);
+  };
 
   const handleClose = () => {
     setCustomerName('');
@@ -60,7 +59,6 @@ export const CheckoutModal: React.FC = () => {
     setAddress('');
     setNotes('');
     setPhoneError('');
-    setFormError('');
     setConfirmedOrder(null);
     setIsCheckoutOpen(false);
   };
@@ -68,35 +66,25 @@ export const CheckoutModal: React.FC = () => {
   const handleSubmitOrder = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSubmitting) return;
-    setFormError('');
 
     if (!customerName.trim()) {
-      setFormError('يرجى كتابة الاسم بالكامل للمتابعة');
+      alert('برجاء كتابة الاسم بالكامل');
       return;
     }
 
-    const normalizedPhone = normalizeEgyptianPhone(phone);
-    if (!isValidEgyptianPhone(normalizedPhone)) {
+    if (!validateEgyptianPhone(phone)) {
       setPhoneError('برجاء إدخال رقم محمول مصري صحيح مكون من 11 رقماً ويبدأ بـ 01 (مثل: 01012345678)');
       return;
     }
     setPhoneError('');
 
-    let normalizedAltPhone: string | undefined = undefined;
-    if (alternatePhone.trim()) {
-      const cleanAlt = normalizeEgyptianPhone(alternatePhone);
-      if (isValidEgyptianPhone(cleanAlt) || cleanAlt.length >= 8) {
-        normalizedAltPhone = cleanAlt;
-      }
-    }
-
     if (!center.trim()) {
-      setFormError('يرجى كتابة المركز أو المدينة التابع لها');
+      alert('برجاء كتابة المركز أو المدينة التابع لها');
       return;
     }
 
     if (!address.trim() || address.trim().length < 5) {
-      setFormError('يرجى كتابة العنوان بالتفصيل (اسم الشارع - رقم العقار / المنزل - رقم الشقة وعلامة مميزة)');
+      alert('برجاء كتابة العنوان بالتفصيل (اسم الشارع - رقم العقار / المنزل - رقم الشقة وعلامة مميزة)');
       return;
     }
 
@@ -120,9 +108,9 @@ export const CheckoutModal: React.FC = () => {
 
       const newOrder = await createOrder({
         customerName: customerName.trim(),
-        phone: normalizedPhone,
-        alternatePhone: normalizedAltPhone,
-        governorate: cleanSelectedGov,
+        phone: phone.trim(),
+        alternatePhone: alternatePhone.trim() || undefined,
+        governorate: selectedGovernorate,
         center: center.trim(),
         address: address.trim(),
         notes: notes.trim() || undefined,
@@ -130,7 +118,7 @@ export const CheckoutModal: React.FC = () => {
         subtotal,
         shippingCost,
         discount,
-        couponCode: appliedCoupon?.code,
+        couponCode: discount > 0 ? appliedCoupon?.code : undefined,
         total: grandTotal
       });
 
@@ -141,7 +129,7 @@ export const CheckoutModal: React.FC = () => {
       } catch {}
     } catch (err: any) {
       console.error('Failed to submit order:', err);
-      setFormError(err?.message || 'تعذر تأكيد الطلب حالياً، يرجى المحاولة بعد قليل.');
+      alert(err?.message || 'حدث خطأ أثناء إرسال الطلب، يرجى المحاولة مرة أخرى.');
     } finally {
       setIsSubmitting(false);
     }
@@ -222,13 +210,6 @@ export const CheckoutModal: React.FC = () => {
         {/* Modal Body */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-5">
           <form id="checkout-form" onSubmit={handleSubmitOrder} className="space-y-5">
-            {formError && (
-              <div className="p-3 rounded-xl bg-rose-950/60 border border-rose-800/60 text-rose-300 text-xs flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
-                <span>{formError}</span>
-              </div>
-            )}
-
             {/* Form Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {/* Full Name */}
@@ -303,18 +284,15 @@ export const CheckoutModal: React.FC = () => {
                 <div className="relative">
                   <select
                     id="checkout-governorate-select"
-                    value={cleanSelectedGov}
-                    onChange={(e) => setSelectedGovernorate(cleanGovernorateName(e.target.value))}
+                    value={selectedGovernorate}
+                    onChange={(e) => setSelectedGovernorate(e.target.value)}
                     className="w-full bg-stone-950 border border-stone-800 rounded-xl px-3.5 py-2 text-xs text-stone-100 focus:outline-none focus:border-amber-500 appearance-none"
                   >
-                    {governorates.map((g) => {
-                      const cleanName = cleanGovernorateName(g.name);
-                      return (
-                        <option key={cleanName} value={cleanName}>
-                          {cleanName} — شحن {g.cost} ج.م
-                        </option>
-                      );
-                    })}
+                    {governorates.map((g) => (
+                      <option key={g.name} value={g.name}>
+                        {g.name} — شحن {g.cost} ج.م
+                      </option>
+                    ))}
                   </select>
                   <Building2 className="w-4 h-4 text-stone-500 absolute left-3 top-2.5 pointer-events-none" />
                 </div>

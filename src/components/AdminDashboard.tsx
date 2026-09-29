@@ -45,14 +45,15 @@ import {
   RefreshCw,
   Sparkles,
   Users,
-  UserPlus,
-  Shield
+  UserPlus
 } from 'lucide-react';
 import { authFetch } from '../lib/authFetch';
 import { AdminCustomerAnalytics } from './AdminCustomerAnalytics';
 import { HoodieCategory, HoodieSize, OrderStatus, Product, ProductColor, OrderItem, GovernorateShipping } from '../types';
 import { INITIAL_GOVERNORATES } from '../data/initialData';
-import { compressImageFile } from '../lib/imageCompressor';
+import { uploadImageFile } from '../lib/imageCompressor';
+import { getDoc, doc } from 'firebase/firestore';
+import { db } from '../lib/firebase';
 import {
   exportOrdersToCSV,
   exportOrdersByStatus,
@@ -103,7 +104,6 @@ export const AdminDashboard: React.FC = () => {
     verifyAdminLogin,
     logoutAdmin,
     seedSampleProduct,
-    isFirebaseConnected
   } = useStore();
 
   const [activeTab, setActiveTab] = useState<
@@ -129,7 +129,7 @@ export const AdminDashboard: React.FC = () => {
     email: string;
     displayName: string;
     creationTime?: string;
-    lastSignInTime?: string;
+    isOwner?: boolean;
   }
   const [adminUsers, setAdminUsers] = useState<AdminAccount[]>([]);
   const [isLoadingAdminUsers, setIsLoadingAdminUsers] = useState(false);
@@ -173,6 +173,7 @@ export const AdminDashboard: React.FC = () => {
   const [pStockL, setPStockL] = useState(25);
   const [pStockXL, setPStockXL] = useState(20);
   const [pStock2XL, setPStock2XL] = useState(10);
+  const [pComingSoon, setPComingSoon] = useState(false);
   // Size measurements (length/width in cm)
   const [pLengthM, setPLengthM] = useState<number | string>(72);
   const [pWidthM, setPWidthM] = useState<number | string>(62);
@@ -206,6 +207,7 @@ export const AdminDashboard: React.FC = () => {
   const [editCare, setEditCare] = useState('');
   const [editBadge, setEditBadge] = useState('');
   const [editIsFeatured, setEditIsFeatured] = useState(false);
+  const [editComingSoon, setEditComingSoon] = useState(false);
   const [editStockM, setEditStockM] = useState<number>(0);
   const [editStockL, setEditStockL] = useState<number>(0);
   const [editStockXL, setEditStockXL] = useState<number>(0);
@@ -260,6 +262,9 @@ export const AdminDashboard: React.FC = () => {
   const logoFileInputRef = useRef<HTMLInputElement>(null);
   const [announcementText, setAnnouncementText] = useState(settings.announcementText);
   const [whatsappNumber, setWhatsappNumber] = useState(settings.whatsappNumber);
+  const [comingSoonEnabled, setComingSoonEnabled] = useState(settings.comingSoonEnabled !== false);
+  const [comingSoonTitle, setComingSoonTitle] = useState(settings.comingSoonTitle || '');
+  const [comingSoonSubtitle, setComingSoonSubtitle] = useState(settings.comingSoonSubtitle || '');
   const [whatsappUrl, setWhatsappUrl] = useState(settings.whatsappUrl || '');
   const [instagramUrl, setInstagramUrl] = useState(settings.instagramUrl || '');
   const [tiktokUrl, setTiktokUrl] = useState(settings.tiktokUrl || '');
@@ -290,6 +295,9 @@ export const AdminDashboard: React.FC = () => {
     setBrandLogo(settings.brandLogo || '');
     setAnnouncementText(settings.announcementText || '');
     setWhatsappNumber(settings.whatsappNumber || '');
+    setComingSoonEnabled(settings.comingSoonEnabled !== false);
+    setComingSoonTitle(settings.comingSoonTitle || '');
+    setComingSoonSubtitle(settings.comingSoonSubtitle || '');
     setWhatsappUrl(settings.whatsappUrl || '');
     setInstagramUrl(settings.instagramUrl || '');
     setTiktokUrl(settings.tiktokUrl || '');
@@ -301,8 +309,6 @@ export const AdminDashboard: React.FC = () => {
     if (!isAdminLoggedIn) return;
     const fetchPrivateSettings = async () => {
       try {
-        const { getDoc, doc } = await import('firebase/firestore');
-        const { db } = await import('../lib/firebase');
         const snap = await getDoc(doc(db, 'private_settings', 'notifications'));
         if (snap.exists()) {
           const data = snap.data();
@@ -377,7 +383,7 @@ export const AdminDashboard: React.FC = () => {
   const handleDeleteAdminPrompt = (uid: string, email: string) => {
     openDeleteModal({
       title: 'حذف حساب المشرف',
-      description: 'هل تريد بالتأكيد حذف حساب هذا المشرف؟ لا يمكن التراجع عن هذا الإجراء.',
+      description: 'سيتم إلغاء صلاحيات هذا المشرف وحذف حسابه نهائياً من Firebase Auth.',
       itemLabel: `البريد الإلكتروني: ${email}`,
       onConfirm: async () => {
         try {
@@ -425,10 +431,10 @@ export const AdminDashboard: React.FC = () => {
       if (success) {
         setLoginError('');
       } else {
-        setLoginError('البريد الإلكتروني أو كلمة المرور غير صحيحة. يرجى التأكد من صحة البيانات والمحاولة مجدداً.');
+        setLoginError('البريد الإلكتروني أو كلمة المرور غير صحيحة.');
       }
     } catch {
-      setLoginError('حدث خطأ أثناء تسجيل الدخول. يرجى المحاولة مرة أخرى.');
+      setLoginError('حدث خطأ أثناء الاتصال بخدمة المصادقة. يرجى المحاولة مرة أخرى.');
     } finally {
       setIsLoggingIn(false);
     }
@@ -457,7 +463,7 @@ export const AdminDashboard: React.FC = () => {
     setIsUpdatingCreds(false);
 
     if (success) {
-      setSecuritySuccess('تم تحديث كلمة المرور بنجاح! يمكنك الآن استخدامها لتسجيل الدخول.');
+      setSecuritySuccess('تم تحديث كلمة المرور بنجاح! يمكنك الآن استخدامها لتسجيل الدخول من أي جهاز.');
       setNewPassword('');
       setConfirmPassword('');
     } else {
@@ -473,8 +479,8 @@ export const AdminDashboard: React.FC = () => {
     setIsProcessingImages(true);
     try {
       for (const file of Array.from(files) as File[]) {
-        const compressed = await compressImageFile(file, 1200, 0.82);
-        setUploadedProductImages((prev) => [...prev, compressed]);
+        const uploaded = await uploadImageFile(file, 1200, 0.82);
+        setUploadedProductImages((prev) => [...prev, uploaded]);
       }
     } catch (err) {
       console.error('Failed to process product image:', err);
@@ -510,8 +516,8 @@ export const AdminDashboard: React.FC = () => {
     setIsProcessingImages(true);
     try {
       for (const file of Array.from(files) as File[]) {
-        const compressed = await compressImageFile(file, 1000, 0.82);
-        await addReviewImage(compressed, reviewCaption.trim() || undefined);
+        const uploaded = await uploadImageFile(file, 1000, 0.82);
+        await addReviewImage(uploaded, reviewCaption.trim() || undefined);
         setReviewCaption('');
       }
     } catch (err) {
@@ -563,7 +569,8 @@ export const AdminDashboard: React.FC = () => {
         ],
         images: imagesToUse,
         isFeatured: true,
-        badge: 'جديد'
+        badge: pComingSoon ? 'قريباً' : 'جديد',
+        comingSoon: pComingSoon
       });
 
       setPName('');
@@ -571,6 +578,7 @@ export const AdminDashboard: React.FC = () => {
       setPDescription('');
       setPOriginalPrice('');
       setUploadedProductImages([]);
+      setPComingSoon(false);
       setShowAddProduct(false);
     } catch (err) {
       console.error('Error saving product:', err);
@@ -593,6 +601,7 @@ export const AdminDashboard: React.FC = () => {
     setEditCare(product.careInstructions || '');
     setEditBadge(product.badge || '');
     setEditIsFeatured(Boolean(product.isFeatured));
+    setEditComingSoon(product.comingSoon === true);
     setEditStockM(product.sizesStock?.M ?? 0);
     setEditStockL(product.sizesStock?.L ?? 0);
     setEditStockXL(product.sizesStock?.XL ?? 0);
@@ -621,8 +630,8 @@ export const AdminDashboard: React.FC = () => {
     setIsProcessingImages(true);
     try {
       for (const file of Array.from(files) as File[]) {
-        const compressed = await compressImageFile(file, 1200, 0.82);
-        setEditImages((prev) => [...prev, compressed]);
+        const uploaded = await uploadImageFile(file, 1200, 0.82);
+        setEditImages((prev) => [...prev, uploaded]);
       }
     } catch (err) {
       console.error('Failed to process edit product image:', err);
@@ -672,6 +681,7 @@ export const AdminDashboard: React.FC = () => {
         careInstructions: editCare.trim(),
         badge: editBadge.trim() || undefined,
         isFeatured: editIsFeatured,
+        comingSoon: editComingSoon,
         sizesStock: {
           M: Number(editStockM),
           L: Number(editStockL),
@@ -771,8 +781,8 @@ export const AdminDashboard: React.FC = () => {
 
     setIsProcessingImages(true);
     try {
-      const compressed = await compressImageFile(file, 600, 0.85);
-      setBrandLogo(compressed);
+      const uploaded = await uploadImageFile(file, 600, 0.85);
+      setBrandLogo(uploaded);
     } catch (err) {
       console.error('Failed to compress logo:', err);
     } finally {
@@ -788,32 +798,14 @@ export const AdminDashboard: React.FC = () => {
     const cleanToken = telegramBotToken.trim();
     const cleanChatId = telegramChatId.trim();
 
-    try {
-      const { doc, setDoc, deleteField } = await import('firebase/firestore');
-      const { db } = await import('../lib/firebase');
-
-      // Save notification secrets in private_settings/notifications
-      await setDoc(doc(db, 'private_settings', 'notifications'), {
-        telegramBotToken: cleanToken,
-        telegramChatId: cleanChatId,
-        pushNotificationTopic: cleanTopic
-      }, { merge: true });
-
-      // Remove secrets from public settings/general
-      await setDoc(doc(db, 'settings', 'general'), {
-        telegramBotToken: deleteField(),
-        telegramChatId: deleteField(),
-        pushNotificationTopic: deleteField()
-      }, { merge: true });
-    } catch (saveErr) {
-      console.warn('Failed saving private settings directly:', saveErr);
-    }
-
-    updateSettings({
+    await updateSettings({
       storeName,
       brandLogo: cleanLogo,
       notificationLogoUrl: cleanLogo,
       announcementText,
+      comingSoonEnabled,
+      comingSoonTitle: comingSoonTitle.trim(),
+      comingSoonSubtitle: comingSoonSubtitle.trim(),
       whatsappNumber,
       whatsappUrl,
       instagramUrl,
@@ -877,7 +869,7 @@ export const AdminDashboard: React.FC = () => {
 
             <div className="flex items-center gap-2 px-2.5 py-2 text-[11px] text-amber-400/90 bg-amber-950/20 border border-amber-900/30 rounded-xl">
               <Check className="w-4 h-4 text-amber-400 shrink-0 ml-1" />
-              <span>تسجيل الدخول مشفر ومحمي — مخصص لإدارة المتجر المعتمدة فقط.</span>
+              <span>تسجيل الدخول محصور بحسابات الأدمن المعتمدة فقط.</span>
             </div>
 
             {loginError && (
@@ -919,7 +911,7 @@ export const AdminDashboard: React.FC = () => {
           </span>
           <div>
             <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-emerald-400">النظام السحابي متصل</span>
+              <span className="text-xs font-bold text-emerald-400">قاعدة البيانات متصلة</span>
               <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-950/60 border border-emerald-800/40 text-emerald-300 font-mono">
                 مزامنة حية للجميع
               </span>
@@ -1513,6 +1505,19 @@ export const AdminDashboard: React.FC = () => {
                 </div>
               </div>
 
+              <div className="flex items-center gap-2 py-1">
+                <input
+                  id="new-product-coming-soon"
+                  type="checkbox"
+                  checked={pComingSoon}
+                  onChange={(e) => setPComingSoon(e.target.checked)}
+                  className="w-4 h-4 rounded border-stone-800 bg-stone-950 text-amber-500 focus:ring-0 cursor-pointer"
+                />
+                <label htmlFor="new-product-coming-soon" className="text-xs text-stone-300 cursor-pointer">
+                  أضفه في قسم "قريباً" (يظهر للعملاء بدون إمكانية الشراء حتى تلغي الخيار)
+                </label>
+              </div>
+
               <div className="flex justify-end gap-2 pt-3 border-t border-stone-800">
                 <button
                   type="button"
@@ -1596,7 +1601,14 @@ export const AdminDashboard: React.FC = () => {
                               className="w-12 h-14 rounded-lg object-cover border border-stone-800 bg-stone-950 shrink-0"
                             />
                             <div>
-                              <p className="font-bold text-stone-200">{p.name}</p>
+                              <p className="font-bold text-stone-200">
+                                {p.name}
+                                {(p.comingSoon === true || totalStock <= 0) && (
+                                  <span className="mr-2 px-1.5 py-0.5 rounded bg-amber-500/15 border border-amber-500/30 text-amber-400 text-[10px] font-bold align-middle">
+                                    قريباً
+                                  </span>
+                                )}
+                              </p>
                               <p className="text-stone-500 text-[11px]">{p.subtitle}</p>
                             </div>
                           </td>
@@ -1764,8 +1776,8 @@ export const AdminDashboard: React.FC = () => {
                 <div className="flex items-start sm:items-center gap-2.5">
                   <Info className="w-5 h-5 text-amber-400 shrink-0 mt-0.5 sm:mt-0" />
                   <div>
-                    <span className="font-bold text-amber-300 block sm:inline">أنت تتصفح المعاينة المدمجة (iFrame): </span>
-                    <span className="text-stone-300">متصفحات الويب تمنع أذونات الإشعارات داخل النوافذ المدمجة. لتفعيل إشعارات الهاتف والكمبيوتر، افتح الموقع في نافذة جديدة.</span>
+                    <span className="font-bold text-amber-300 block sm:inline">أنت تتصفح نافذة معاينة مدمجة: </span>
+                    <span className="text-stone-300">لتفعيل إشعارات الهاتف والكمبيوتر، افتح الموقع في نافذة جديدة.</span>
                   </div>
                 </div>
                 <button
@@ -1842,9 +1854,9 @@ export const AdminDashboard: React.FC = () => {
                         if (res.success) {
                           setNotificationPerm('granted');
                           setIsPushActive(true);
-                          setTestPushMessage('✅ تم تفعيل إشعارات الويب الفورية بنجاح (High Priority Web Push)! ستصلك إشعارات الأوردرات في الخلفية وعلى شاشة القفل فوراً مثل واتساب.');
+                          setTestPushMessage('✅ تم تفعيل إشعارات الويب الفورية بنجاح! ستصلك إشعارات الأوردرات في الخلفية وعلى شاشة القفل.');
                         } else if (res.isInIframe) {
-                          setTestPushMessage('⚠️ المتصفح يمنع طلب إذن الإشعارات داخل المعاينة. اضغط زر "فتح في تبويب مستقل" بالأعلى لتفعيلها فوراً.');
+                          setTestPushMessage('⚠️ لا يمكن تفعيل الإشعارات داخل هذه المعاينة. اضغط زر "فتح في تبويب مستقل" بالأعلى لتفعيلها.');
                         } else if (res.isIosBrowser) {
                           setTestPushMessage('⚠️ على أجهزة الآيفون: اضغط زر المشاركة (Share ⬆️) ثم "إضافة إلى الشاشة الرئيسية" (Add to Home Screen) وافتح الموقع منها لتفعيل الإشعارات.');
                         } else {
@@ -1859,7 +1871,7 @@ export const AdminDashboard: React.FC = () => {
                     className="px-3 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-stone-950 text-xs font-bold flex items-center gap-1.5 transition-colors shadow-sm disabled:opacity-50"
                   >
                     <Bell className="w-3.5 h-3.5" />
-                    <span>{isSubscribingPush ? 'جاري التفعيل...' : 'فعّل إشعارات الويب الفورية (High Priority)'}</span>
+                    <span>{isSubscribingPush ? 'جاري التفعيل...' : 'فعّل إشعارات الويب الفورية'}</span>
                   </button>
                 ) : (
                   <div className="flex items-center gap-1.5">
@@ -1875,7 +1887,7 @@ export const AdminDashboard: React.FC = () => {
                         try {
                           const res = await subscribeToWebPush();
                           if (res.success) {
-                            setTestPushMessage('✅ تم تجديد وتأكيد اشتراك الويب Push في السيرفر والداتابيز بنجاح');
+                            setTestPushMessage('✅ تم تجديد الاشتراك في الإشعارات بنجاح');
                           }
                         } finally {
                           setIsSubscribingPush(false);
@@ -3108,6 +3120,39 @@ export const AdminDashboard: React.FC = () => {
               />
             </div>
 
+            <div className="rounded-xl border border-stone-800 bg-stone-950/60 p-3 space-y-3">
+              <div className="flex items-center gap-2">
+                <input
+                  id="coming-soon-enabled"
+                  type="checkbox"
+                  checked={comingSoonEnabled}
+                  onChange={(e) => setComingSoonEnabled(e.target.checked)}
+                  className="w-4 h-4 rounded border-stone-800 bg-stone-950 text-amber-500 focus:ring-0 cursor-pointer"
+                />
+                <label htmlFor="coming-soon-enabled" className="text-xs text-stone-200 font-bold cursor-pointer">
+                  إظهار قسم "قريباً" في الصفحة الرئيسية
+                </label>
+              </div>
+              <div>
+                <label className="block text-xs text-stone-400 mb-1">عنوان القسم</label>
+                <input
+                  type="text"
+                  value={comingSoonTitle}
+                  onChange={(e) => setComingSoonTitle(e.target.value)}
+                  className="w-full bg-stone-950 border border-stone-800 rounded-xl px-3 py-2 text-xs text-stone-100"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-stone-400 mb-1">الوصف تحت العنوان</label>
+                <input
+                  type="text"
+                  value={comingSoonSubtitle}
+                  onChange={(e) => setComingSoonSubtitle(e.target.value)}
+                  className="w-full bg-stone-950 border border-stone-800 rounded-xl px-3 py-2 text-xs text-stone-100"
+                />
+              </div>
+            </div>
+
             <div>
               <label className="block text-xs text-stone-400 mb-1">
                 رقم واتساب المتجر (مع كود الدولة مثل 201012345678)
@@ -3311,7 +3356,7 @@ export const AdminDashboard: React.FC = () => {
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {adminUsers.map((u) => {
-                  const isOwner = (u.email || '').toLowerCase() === 'vdbbdv1234567889@gmail.com';
+                  const isOwner = u.isOwner;
                   return (
                     <div
                       key={u.uid}
@@ -3342,10 +3387,7 @@ export const AdminDashboard: React.FC = () => {
                         )}
                       </div>
 
-                      <div className="flex items-center justify-between pt-2 border-t border-stone-900 text-[11px]">
-                        <span className="text-stone-500 font-mono text-[10px]">
-                          معرف المشرف: {u.uid.slice(0, 10)}...
-                        </span>
+                      <div className="flex items-center justify-end pt-2 border-t border-stone-900 text-[11px]">
                         {!isOwner && (
                           <button
                             type="button"
@@ -3384,10 +3426,10 @@ export const AdminDashboard: React.FC = () => {
                 </span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-stone-400">حالة الأمان:</span>
+                <span className="text-stone-400">نظام المصادقة:</span>
                 <span className="text-emerald-400 font-semibold flex items-center gap-1.5">
                   <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                  مشفر ومحمي 100%
+                  محمي ومشفر
                 </span>
               </div>
             </div>
@@ -3442,26 +3484,12 @@ export const AdminDashboard: React.FC = () => {
                   disabled={isUpdatingCreds}
                   className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-black font-bold text-xs transition-colors shadow-md shadow-amber-950/40 disabled:opacity-50"
                 >
-                  {isUpdatingCreds ? 'جاري تحديث كلمة المرور...' : 'تحديث كلمة المرور'}
+                  {isUpdatingCreds ? 'جاري التحديث...' : 'تحديث كلمة المرور'}
                 </button>
               </div>
             </form>
           </div>
 
-          {/* Section 3: Data Protection */}
-          <div className="bg-stone-900 border border-stone-800 rounded-2xl p-6 shadow-xl space-y-4">
-            <div className="flex items-center gap-2 text-stone-100 font-bold text-sm">
-              <Shield className="w-5 h-5 text-emerald-400" />
-              <span>أمان وحماية بيانات المتجر والعملاء</span>
-            </div>
-            <p className="text-xs text-stone-400 leading-relaxed">
-              كافة الطلبات وبيانات العملاء محمية بنظام تشفير عالي، ولا يمكن الوصول للوحة الإدارة أو الاطلاع على تفاصيل الطلبات إلا بحسابات المشرفين المعتمدة.
-            </p>
-            <div className="bg-stone-950 p-3.5 rounded-xl border border-stone-800 text-xs text-stone-300 flex items-center gap-2">
-              <Check className="w-4 h-4 text-emerald-400 shrink-0" />
-              <span>نظام الحماية مفعل وجاهز بنسبة 100% لتأمين متجرك.</span>
-            </div>
-          </div>
         </div>
       )}
 
@@ -3484,7 +3512,7 @@ export const AdminDashboard: React.FC = () => {
             </div>
 
             <p className="text-xs text-stone-400 leading-relaxed">
-              سيتم إنشاء حساب المشرف ومنحه صلاحية الوصول الكاملة للوحة التحكم فوراً.
+              سيتم إنشاء الحساب في Firebase Auth ومنحه صلاحية المشرف (Admin Claim) فوراً للوصول للوحة التحكم.
             </p>
 
             <form onSubmit={handleCreateAdminUser} className="space-y-4">
@@ -3680,6 +3708,20 @@ export const AdminDashboard: React.FC = () => {
                   />
                   <label htmlFor="edit-is-featured" className="text-xs text-stone-300 cursor-pointer">
                     تمييز هذا الهودي وعرضه في المعرض الرئيسي بالصفحة الأولى (Featured)
+                  </label>
+                </div>
+
+                {/* Coming Soon Checkbox */}
+                <div className="sm:col-span-2 flex items-center gap-2 py-1">
+                  <input
+                    id="edit-coming-soon"
+                    type="checkbox"
+                    checked={editComingSoon}
+                    onChange={(e) => setEditComingSoon(e.target.checked)}
+                    className="w-4 h-4 rounded border-stone-800 bg-stone-950 text-amber-500 focus:ring-0 cursor-pointer"
+                  />
+                  <label htmlFor="edit-coming-soon" className="text-xs text-stone-300 cursor-pointer">
+                    عرضه في قسم "قريباً" بدون إمكانية الشراء (وبيتحول لهناك تلقائياً لو المخزون خلص)
                   </label>
                 </div>
 

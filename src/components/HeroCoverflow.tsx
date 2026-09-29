@@ -1,12 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useStore } from '../store/useStore';
+import { isComingSoon } from '../utils/product';
 import { ChevronRight, ChevronLeft } from 'lucide-react';
 
 export const HeroCoverflow: React.FC = () => {
   const { products, setSelectedProduct, setActiveView } = useStore();
 
-  const featured = products.filter((p) => p.isFeatured);
-  const items = featured.length >= 3 ? featured : products;
+  const available = products.filter((p) => !isComingSoon(p));
+  const featured = available.filter((p) => p.isFeatured);
+  const items = featured.length >= 3 ? featured : available;
   const [activeIndex, setActiveIndex] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
   const touchStartX = useRef<number | null>(null);

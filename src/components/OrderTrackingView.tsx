@@ -16,7 +16,7 @@ import {
 import { OrderStatus, Order } from '../types';
 
 export const OrderTrackingView: React.FC = () => {
-  const { orders, products, cancelOrder, deleteOrder, openDeleteModal, settings, searchRemoteOrders } = useStore();
+  const { orders, products, cancelOrder, deleteOrder, openDeleteModal, settings, searchRemoteOrders, isAdminLoggedIn } = useStore();
   const [searchInput, setSearchInput] = useState('');
   const [searched, setSearched] = useState(false);
   const [remoteResults, setRemoteResults] = useState<Order[]>([]);
@@ -284,7 +284,7 @@ export const OrderTrackingView: React.FC = () => {
                       {getStatusBadge(order.status)}
 
                       {/* Explicit Cancel/Delete Order Button */}
-                      {!isCancelled ? (
+                      {!isCancelled && order.status === 'pending' && (
                         <button
                           id={`cancel-order-btn-${order.id}`}
                           type="button"
@@ -295,7 +295,8 @@ export const OrderTrackingView: React.FC = () => {
                           <Trash2 className="w-3.5 h-3.5" />
                           <span>إلغاء الطلب</span>
                         </button>
-                      ) : (
+                      )}
+                      {isCancelled && isAdminLoggedIn && (
                         <button
                           id={`delete-cancelled-order-btn-${order.id}`}
                           type="button"

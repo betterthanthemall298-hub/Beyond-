@@ -4,6 +4,7 @@ import { ActiveView } from './types';
 import { Navbar } from './components/Navbar';
 import { HeroCoverflow } from './components/HeroCoverflow';
 import { ProductGrid } from './components/ProductGrid';
+import { ComingSoon } from './components/ComingSoon';
 import { SmartSizeAdvisorModal } from './components/SmartSizeAdvisorModal';
 import { WishlistDrawer } from './components/WishlistDrawer';
 import { CheckoutModal } from './components/CheckoutModal';
@@ -13,7 +14,9 @@ import { CustomerReviewsGallery } from './components/CustomerReviewsGallery';
 import { CartPage } from './components/CartPage';
 import { ProductDetailPage } from './components/ProductDetailPage';
 import { WishlistPage } from './components/WishlistPage';
-import { AdminDashboard } from './components/AdminDashboard';
+const AdminDashboard = React.lazy(() =>
+  import('./components/AdminDashboard').then((m) => ({ default: m.AdminDashboard }))
+);
 import { DeleteConfirmationModal } from './components/DeleteConfirmationModal';
 import { ToastContainer } from './components/ToastContainer';
 import { ShopifyOrderBanner } from './components/ShopifyOrderBanner';
@@ -283,6 +286,9 @@ export default function App() {
             {/* Products Grid */}
             <ProductGrid />
 
+            {/* Coming Soon */}
+            <ComingSoon />
+
             {/* Customer Reviews - Image Gallery Only as requested */}
             <CustomerReviewsGallery />
           </>
@@ -315,7 +321,13 @@ export default function App() {
         )}
 
         {/* Admin Dashboard */}
-        {activeView === 'admin' && <AdminDashboard />}
+        {activeView === 'admin' && (
+          <React.Suspense
+            fallback={<div className="min-h-[60vh] flex items-center justify-center text-stone-500 text-sm">جاري التحميل...</div>}
+          >
+            <AdminDashboard />
+          </React.Suspense>
+        )}
       </main>
 
       {/* Footer - Consistent across all views as requested */}

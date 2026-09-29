@@ -1,6 +1,0 @@
-{
-  "name": "Beyond - متجر هوديز أوفر سايز فاخرة",
-  "description": "متجر Beyond المصري المتخصص في الهوديز الشتوية الأوفر سايز الفاخرة، مع إمكانية المعاينة قبل الدفع، وحاسبة المقاسات الذكية، وتتبع الطلبات، وإشعار فوري للطلبات.",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}

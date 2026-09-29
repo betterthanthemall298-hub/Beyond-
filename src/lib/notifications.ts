@@ -164,11 +164,6 @@ export async function requestNotificationPermission(): Promise<NotificationPermi
   }
 }
 
-const PUSH_TOPIC_KEY = 'beyond_push_notification_topic';
-export const DEFAULT_PUSH_TOPIC = 'beyond_orders_alerts';
-
-export const DEFAULT_VAPID_PUBLIC_KEY = 'BK-YuLDxApl-Gt3kS6awCGqMNUcsodMJB6UG79jJ1_fgeP_pQ34_Xv2ofazDyt6-jak32qW16snJQvOLwgy9BLk';
-
 /**
  * Converts a Base64URL string into a Uint8Array required for applicationServerKey
  */
@@ -187,8 +182,11 @@ export function urlBase64ToUint8Array(base64String: string): Uint8Array {
   return outputArray;
 }
 
+const PUSH_TOPIC_KEY = 'beyond_push_notification_topic';
+export const DEFAULT_PUSH_TOPIC = 'beyond_orders_alerts';
+
 /**
- * Retrieves VAPID public key from backend server with fallback
+ * Retrieves VAPID public key from backend server
  */
 export async function getVapidPublicKey(): Promise<string> {
   try {
@@ -198,9 +196,9 @@ export async function getVapidPublicKey(): Promise<string> {
       if (data?.publicKey) return data.publicKey;
     }
   } catch (e) {
-    console.warn('Failed to fetch VAPID key from backend, using fallback:', e);
+    console.warn('Failed to fetch VAPID key from backend:', e);
   }
-  return DEFAULT_VAPID_PUBLIC_KEY;
+  return '';
 }
 
 /**
@@ -300,9 +298,10 @@ export async function subscribeToWebPush(): Promise<{
 
     const subJson = subscription.toJSON();
 
-    // 5. Send subscription to Node.js backend server
+    // 5. Send subscription to the server (also persists it to the database)
+    let serverAccepted = false;
     try {
-      await authFetch('/api/push/subscribe', {
+      const res = await authFetch('/api/push/subscribe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -310,28 +309,13 @@ export async function subscribeToWebPush(): Promise<{
           userAgent: navigator.userAgent
         })
       });
+      serverAccepted = res.ok;
     } catch (apiErr) {
       console.warn('Backend server push registration warning:', apiErr);
     }
 
-    // 6. Save subscription into Firestore database (push_subscriptions collection)
-    try {
-      const { setDoc, doc } = await import('firebase/firestore');
-      const { db } = await import('./firebase');
-      const safeId = btoa(subscription.endpoint.slice(-40)).replace(/[^a-zA-Z0-9]/g, '_');
-      await setDoc(
-        doc(db, 'push_subscriptions', safeId),
-        {
-          endpoint: subscription.endpoint,
-          keys: subJson.keys || {},
-          userAgent: navigator.userAgent,
-          priority: 'high',
-          createdAt: new Date().toISOString()
-        },
-        { merge: true }
-      );
-    } catch (firestoreErr) {
-      console.warn('Firestore subscription save warning:', firestoreErr);
+    if (!serverAccepted) {
+      return { success: false, error: 'تعذر تسجيل الاشتراك في السيرفر، حاول مرة أخرى' };
     }
 
     return { success: true, subscription };

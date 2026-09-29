@@ -32,6 +32,7 @@ export interface Product {
   rating: number;
   reviewsCount: number;
   badge?: string;
+  comingSoon?: boolean; // يظهر في قسم "قريباً" بدل قائمة المنتجات المتاحة
 }
 
 export interface CartItem {
@@ -117,6 +118,9 @@ export interface StoreSettings {
   tiktokUrl: string;
   facebookUrl: string;
   freeShippingThreshold: number;
+  comingSoonEnabled?: boolean;
+  comingSoonTitle?: string;
+  comingSoonSubtitle?: string;
   pushNotificationTopic?: string;
   telegramBotToken?: string;
   telegramChatId?: string;

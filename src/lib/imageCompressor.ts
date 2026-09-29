@@ -1,9 +1,12 @@
 /**
- * Helper to compress and resize images before saving to Firestore.
- * Firestore documents have a strict 1MB limit. High-res smartphone photos (3-10MB)
- * will fail if saved uncompressed. This utility downscales images to a max dimension
- * and applies JPEG compression to keep images sharp, fast to load, and well under 100-150KB.
+ * Helper to compress and resize images before uploading.
+ * High-res smartphone photos (3-10MB) load slowly and add up quickly across a whole
+ * catalog. This utility downscales images to a max dimension and applies JPEG
+ * compression to keep them sharp, fast to load, and small.
  */
+
+import { storage } from './firebase';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 export async function compressImageFile(file: File, maxDimension = 900, quality = 0.78): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -60,6 +63,35 @@ export async function compressImageFile(file: File, maxDimension = 900, quality 
     reader.onerror = (e) => reject(e);
     reader.readAsDataURL(file);
   });
+}
+
+function dataUrlToBlob(dataUrl: string): Blob {
+  const [meta, b64] = dataUrl.split(',');
+  const mime = meta.match(/data:(.*);base64/)?.[1] || 'image/jpeg';
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return new Blob([bytes], { type: mime });
+}
+
+/**
+ * Compresses an image and uploads it to Firebase Storage, returning a public download URL.
+ * Falls back to an inline (base64) image only if the upload itself fails, so the admin
+ * is never blocked from saving just because Storage is briefly unreachable.
+ */
+export async function uploadImageFile(file: File, maxDimension = 1200, quality = 0.82): Promise<string> {
+  const compressed = await compressImageFile(file, maxDimension, quality);
+  try {
+    const blob = dataUrlToBlob(compressed);
+    const ext = blob.type === 'image/png' ? 'png' : blob.type === 'image/svg+xml' ? 'svg' : 'jpg';
+    const path = `uploads/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+    const fileRef = ref(storage, path);
+    await uploadBytes(fileRef, blob, { contentType: blob.type });
+    return await getDownloadURL(fileRef);
+  } catch (err) {
+    console.warn('Image upload to Storage failed, saving inline instead:', err);
+    return compressed;
+  }
 }
 
 /**

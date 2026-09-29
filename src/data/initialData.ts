@@ -31,7 +31,7 @@ export const INITIAL_GOVERNORATES: GovernorateShipping[] = [
   { name: 'الأقصر', cost: 80 },
   { name: 'أسوان', cost: 85 },
   { name: 'البحر الأحمر', cost: 85 },
-  { name: 'مطروح', cost: 85 },
+  { name: 'مرسى مطروح', cost: 85 },
   { name: 'الوادي الجديد', cost: 95 },
   { name: 'شمال سيناء', cost: 95 },
   { name: 'جنوب سيناء', cost: 95 }
@@ -91,5 +91,8 @@ export const INITIAL_SETTINGS: StoreSettings = {
   tiktokUrl: 'https://tiktok.com',
   facebookUrl: 'https://facebook.com',
   freeShippingThreshold: 2000,
+  comingSoonEnabled: true,
+  comingSoonTitle: 'جديدنا على الطريق',
+  comingSoonSubtitle: 'حاجات جديدة بتتجهز عشانك، خليك متابعنا.',
   pushNotificationTopic: 'beyond_orders_alerts'
 };

@@ -35,12 +35,16 @@ export const CartPage: React.FC = () => {
   const discount = getCartDiscount();
   const total = Math.max(0, subtotal - discount);
 
-  const handleApplyCoupon = (e: React.FormEvent) => {
+  const [isApplyingCoupon, setIsApplyingCoupon] = useState(false);
+
+  const handleApplyCoupon = async (e: React.FormEvent) => {
     e.preventDefault();
     setCouponError('');
-    if (!couponInput.trim()) return;
+    if (!couponInput.trim() || isApplyingCoupon) return;
 
-    const res = applyCoupon(couponInput.trim());
+    setIsApplyingCoupon(true);
+    const res = await applyCoupon(couponInput.trim());
+    setIsApplyingCoupon(false);
     if (!res.success) {
       setCouponError(res.message);
     } else {
@@ -308,9 +312,10 @@ export const CartPage: React.FC = () => {
                     <button
                       id="cart-apply-coupon-btn"
                       type="submit"
-                      className="px-4 py-2 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-200 text-xs font-bold transition-colors"
+                      disabled={isApplyingCoupon}
+                      className="px-4 py-2 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-200 text-xs font-bold transition-colors disabled:opacity-50"
                     >
-                      تطبيق
+                      {isApplyingCoupon ? '...' : 'تطبيق'}
                     </button>
                   </div>
                   {couponError && (

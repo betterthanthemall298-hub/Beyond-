@@ -1,5 +1,6 @@
 import React from 'react';
 import { useStore } from '../store/useStore';
+import { isComingSoon } from '../utils/product';
 import { ProductCard } from './ProductCard';
 import { Heart, ArrowRight, ShoppingBag, Sparkles } from 'lucide-react';
 
@@ -7,9 +8,10 @@ export const WishlistPage: React.FC = () => {
   const { wishlist, products, setActiveView, setSelectedProduct } = useStore();
 
   const wishlistedProducts = products.filter((p) => wishlist.includes(p.id));
-  const suggestedProducts = products.filter((p) => !wishlist.includes(p.id)).length > 0
-    ? products.filter((p) => !wishlist.includes(p.id)).slice(0, 3)
-    : products.slice(0, 3);
+  const availableProducts = products.filter((p) => !isComingSoon(p));
+  const suggestedProducts = availableProducts.filter((p) => !wishlist.includes(p.id)).length > 0
+    ? availableProducts.filter((p) => !wishlist.includes(p.id)).slice(0, 3)
+    : availableProducts.slice(0, 3);
 
   return (
     <div id="wishlist-page" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
