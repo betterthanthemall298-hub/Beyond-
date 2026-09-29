@@ -780,6 +780,67 @@ let state: StoreState = {
   orders: INITIAL_ORDERS,
   createOrder: async (orderData) => {
     const id = 'ord-' + Date.now() + '-' + Math.random().toString(36).substring(2, 8);
+    const orderNumber = String(Date.now()).slice(-6);
+    const subtotal = (orderData.items || []).reduce((s, it) => s + (Number(it.price) || 0) * (Number(it.quantity) || 1), 0);
+    const shippingCost = state.governorates.find(g => normalizeGovName(g.name) === normalizeGovName(orderData.governorate))?.cost || 50;
+    let discount = 0;
+    if (state.appliedCoupon) {
+      discount = Math.round((subtotal * (Number(state.appliedCoupon.discountPercent) || 0)) / 100);
+    }
+    const total = Math.max(0, subtotal - discount + shippingCost);
+    const now = new Date();
+    const dateStr = now.toISOString().replace('T', ' ').substring(0, 16);
+
+    const localOrder: Order = {
+      id,
+      orderNumber,
+      customerName: orderData.customerName,
+      phone: orderData.phone,
+      alternatePhone: orderData.alternatePhone || '',
+      governorate: normalizeGovName(orderData.governorate),
+      center: orderData.center || '',
+      address: orderData.address,
+      notes: orderData.notes || '',
+      items: orderData.items,
+      subtotal,
+      shippingCost,
+      discount,
+      couponCode: state.appliedCoupon?.code || '',
+      total,
+      status: 'pending',
+      createdAt: dateStr
+    };
+
+    // 1. Direct Firestore write (Instant, reliable, backed by Firestore Security Rules)
+    try {
+      await setDoc(doc(db, 'orders', id), sanitizeForFirestore(localOrder));
+
+      // Deduct sizes stock in products
+      for (const item of (orderData.items || [])) {
+        const prod = state.products.find(p => p.id === item.productId);
+        if (prod && prod.sizesStock && prod.sizesStock[item.size] !== undefined) {
+          const currentStock = Number(prod.sizesStock[item.size]) || 0;
+          const updatedStock = { ...prod.sizesStock, [item.size]: Math.max(0, currentStock - item.quantity) };
+          updateDoc(doc(db, 'products', prod.id), { sizesStock: updatedStock }).catch(() => {});
+        }
+      }
+
+      // Create alert for admin
+      const alertId = 'alert-' + Date.now();
+      setDoc(doc(db, 'admin_alerts', alertId), sanitizeForFirestore({
+        id: alertId,
+        orderNumber,
+        customerName: localOrder.customerName,
+        total: localOrder.total,
+        governorate: localOrder.governorate,
+        itemsCount: localOrder.items.reduce((s, it) => s + (it.quantity || 1), 0),
+        createdAt: now.toISOString()
+      })).catch(() => {});
+    } catch (writeErr) {
+      console.warn('Direct Firestore save note:', writeErr);
+    }
+
+    // 2. Background sync with backend API if available (for Telegram/push notification)
     const payload = {
       id,
       customerName: orderData.customerName,
@@ -797,106 +858,13 @@ let state: StoreState = {
         colorName: it.colorName
       }))
     };
+    fetch('/api/orders/create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }).catch(() => {});
 
-    // The same id is sent on every attempt, so a retry can never create a duplicate order
-    let created: Order | null = null;
-
-    // Try server API first
-    try {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 4000);
-      const response = await fetch('/api/orders/create', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-        signal: controller.signal
-      });
-      clearTimeout(timer);
-
-      if (response) {
-        const data = await response.json().catch(() => ({}));
-        if (response.ok && data.success && data.order) {
-          created = data.order as Order;
-        } else if (response.status === 400 && data.error) {
-          // Explicit field validation error from server
-          throw new Error(data.error);
-        }
-      }
-    } catch (err: any) {
-      if (err?.message && !err.message.includes('fetch') && !err.message.includes('abort') && !err.message.includes('network') && !err.message.includes('Failed')) {
-        throw err;
-      }
-      // Otherwise proceed to direct Firestore creation fallback
-    }
-
-    // If server API was unavailable, returned 404/500, or timed out,
-    // save order directly to Firestore so the customer's order is ALWAYS processed!
-    if (!created) {
-      const orderNumber = String(Date.now()).slice(-6);
-      const subtotal = (orderData.items || []).reduce((s, it) => s + (Number(it.price) || 0) * (Number(it.quantity) || 1), 0);
-      const shippingCost = state.governorates.find(g => normalizeGovName(g.name) === normalizeGovName(orderData.governorate))?.cost || 50;
-      let discount = 0;
-      if (state.appliedCoupon) {
-        discount = Math.round((subtotal * (Number(state.appliedCoupon.discountPercent) || 0)) / 100);
-      }
-      const total = Math.max(0, subtotal - discount + shippingCost);
-      const now = new Date();
-      const dateStr = now.toISOString().replace('T', ' ').substring(0, 16);
-
-      const localOrder: Order = {
-        id,
-        orderNumber,
-        customerName: orderData.customerName,
-        phone: orderData.phone,
-        alternatePhone: orderData.alternatePhone || '',
-        governorate: normalizeGovName(orderData.governorate),
-        center: orderData.center || '',
-        address: orderData.address,
-        notes: orderData.notes || '',
-        items: orderData.items,
-        subtotal,
-        shippingCost,
-        discount,
-        couponCode: state.appliedCoupon?.code || '',
-        total,
-        status: 'pending',
-        createdAt: dateStr
-      };
-
-      try {
-        await setDoc(doc(db, 'orders', id), sanitizeForFirestore(localOrder));
-
-        // Deduct sizes stock in products
-        for (const item of (orderData.items || [])) {
-          const prod = state.products.find(p => p.id === item.productId);
-          if (prod && prod.sizesStock && prod.sizesStock[item.size] !== undefined) {
-            const currentStock = Number(prod.sizesStock[item.size]) || 0;
-            const updatedStock = { ...prod.sizesStock, [item.size]: Math.max(0, currentStock - item.quantity) };
-            updateDoc(doc(db, 'products', prod.id), { sizesStock: updatedStock }).catch(() => {});
-          }
-        }
-
-        // Create alert for admin
-        const alertId = 'alert-' + Date.now();
-        setDoc(doc(db, 'admin_alerts', alertId), sanitizeForFirestore({
-          id: alertId,
-          orderNumber,
-          customerName: localOrder.customerName,
-          total: localOrder.total,
-          governorate: localOrder.governorate,
-          itemsCount: localOrder.items.reduce((s, it) => s + (it.quantity || 1), 0),
-          createdAt: now.toISOString()
-        })).catch(() => {});
-      } catch (clientErr) {
-        console.warn('Direct Firestore write blocked by rules, keeping order in local store:', clientErr);
-      }
-
-      created = localOrder;
-    }
-
-    if (!created) throw new Error('تعذر إرسال الطلب، يرجى المحاولة مرة أخرى');
-
-    const finalOrder = created;
+    const finalOrder = localOrder;
     update((prev) => {
       const allOrders = [finalOrder, ...prev.orders.filter((o) => o.id !== finalOrder.id)];
       allOrders.sort(compareOrdersNewestFirst);
