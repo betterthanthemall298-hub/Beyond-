@@ -11,7 +11,8 @@ import {
   Phone,
   MapPin,
   MessageCircle,
-  AlertCircle
+  AlertCircle,
+  X
 } from 'lucide-react';
 import { OrderStatus, Order } from '../types';
 
@@ -82,7 +83,16 @@ export const OrderTrackingView: React.FC = () => {
         if (!hasLocal) {
           setIsSearchingRemote(true);
           searchRemoteOrders(savedQuery.trim())
-            .then((res) => setRemoteResults(res))
+            .then((res) => {
+              setRemoteResults(res);
+              if (!res || res.length === 0) {
+                try {
+                  localStorage.removeItem('beyond_last_track_query');
+                } catch {}
+                setSearchInput('');
+                setSearched(false);
+              }
+            })
             .catch(() => {})
             .finally(() => setIsSearchingRemote(false));
         }
@@ -236,6 +246,23 @@ export const OrderTrackingView: React.FC = () => {
             className="w-full bg-stone-950 border border-stone-800 rounded-xl px-4 py-3 pl-10 text-xs sm:text-sm text-stone-100 placeholder-stone-500 focus:outline-none focus:border-amber-500 font-mono"
           />
           <Search className="w-4 h-4 text-stone-500 absolute left-3.5 top-3.5" />
+          {searchInput && (
+            <button
+              type="button"
+              onClick={() => {
+                setSearchInput('');
+                setSearched(false);
+                setRemoteResults([]);
+                try {
+                  localStorage.removeItem('beyond_last_track_query');
+                } catch {}
+              }}
+              className="absolute left-9 top-3.5 text-stone-500 hover:text-stone-300 transition-colors"
+              title="مسح البحث"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
         </div>
         <button
           id="tracking-search-submit-btn"
