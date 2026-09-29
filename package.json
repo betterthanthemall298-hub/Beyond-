@@ -6,11 +6,11 @@
   "scripts": {
     "dev": "tsx server.ts",
     "start": "tsx server.ts",
-    "build": "vite build && npm run build:api",
+    "build": "vite build",
     "preview": "vite preview",
     "lint": "tsc --noEmit",
     "test": "tsx tests/api.test.ts",
-    "build:api": "esbuild api-src/index.ts --bundle --platform=node --target=node20 --format=cjs --outfile=api/index.cjs"
+    "build:api": "esbuild api/index.ts --bundle --platform=node --target=node20 --format=cjs --outfile=api/index.cjs"
   },
   "dependencies": {
     "dotenv": "^17.2.3",
