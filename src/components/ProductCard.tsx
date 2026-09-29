@@ -26,6 +26,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
   const [chosenColorIndex, setChosenColorIndex] = useState(0);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [isHovered, setIsHovered] = useState(false);
+  const [imageLoaded, setImageLoaded] = useState(false);
 
   const isCurrentSizeOutOfStock = (product.sizesStock?.[chosenSize] || 0) <= 0;
   const isFav = wishlist.includes(product.id);
@@ -76,13 +77,21 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
             </span>
           </div>
         )}
+        {!imageLoaded && (
+          <div className="absolute inset-0 bg-stone-900/80 animate-pulse flex items-center justify-center pointer-events-none">
+            <div className="w-6 h-6 rounded-full border-2 border-stone-700 border-t-amber-400 animate-spin opacity-50" />
+          </div>
+        )}
         <img
           src={product.images[activeImageIndex] || product.images[0]}
           alt={product.name}
           loading="lazy"
           decoding="async"
+          onLoad={() => setImageLoaded(true)}
           referrerPolicy="no-referrer"
-          className="w-full h-full object-cover transition-all duration-500 transform group-hover:scale-105"
+          className={`w-full h-full object-cover transition-all duration-300 transform group-hover:scale-105 ${
+            imageLoaded ? "opacity-100" : "opacity-0"
+          }`}
         />
 
         {/* Multiple Images Dots Indicator */}

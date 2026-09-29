@@ -134,6 +134,8 @@ export const ProductDetailPage: React.FC = () => {
             <img
               src={product.images[activeImageIndex] || product.images[0]}
               alt={product.name}
+              loading="eager"
+              decoding="async"
               referrerPolicy="no-referrer"
               className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
             />

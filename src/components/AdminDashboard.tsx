@@ -495,10 +495,9 @@ export const AdminDashboard: React.FC = () => {
 
     setIsProcessingImages(true);
     try {
-      for (const file of Array.from(files) as File[]) {
-        const uploaded = await uploadImageFile(file, 1200, 0.82);
-        setUploadedProductImages((prev) => [...prev, uploaded]);
-      }
+      const fileList = Array.from(files) as File[];
+      const uploadedList = await Promise.all(fileList.map((f) => uploadImageFile(f, 850, 0.74)));
+      setUploadedProductImages((prev) => [...prev, ...uploadedList]);
     } catch (err) {
       console.error('Failed to process product image:', err);
     } finally {
@@ -532,11 +531,12 @@ export const AdminDashboard: React.FC = () => {
 
     setIsProcessingImages(true);
     try {
-      for (const file of Array.from(files) as File[]) {
-        const uploaded = await uploadImageFile(file, 1000, 0.82);
+      const fileList = Array.from(files) as File[];
+      const uploadedList = await Promise.all(fileList.map((f) => uploadImageFile(f, 850, 0.74)));
+      for (const uploaded of uploadedList) {
         await addReviewImage(uploaded, reviewCaption.trim() || undefined);
-        setReviewCaption('');
       }
+      setReviewCaption('');
     } catch (err) {
       console.error('Failed to process review image:', err);
     } finally {
@@ -646,10 +646,9 @@ export const AdminDashboard: React.FC = () => {
 
     setIsProcessingImages(true);
     try {
-      for (const file of Array.from(files) as File[]) {
-        const uploaded = await uploadImageFile(file, 1200, 0.82);
-        setEditImages((prev) => [...prev, uploaded]);
-      }
+      const fileList = Array.from(files) as File[];
+      const uploadedList = await Promise.all(fileList.map((f) => uploadImageFile(f, 850, 0.74)));
+      setEditImages((prev) => [...prev, ...uploadedList]);
     } catch (err) {
       console.error('Failed to process edit product image:', err);
     } finally {

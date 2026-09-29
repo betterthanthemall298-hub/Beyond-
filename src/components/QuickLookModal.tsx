@@ -167,6 +167,8 @@ export const QuickLookModal: React.FC = () => {
               <img
                 src={product.images[activeImageIndex] || product.images[0]}
                 alt={product.name}
+                loading="lazy"
+                decoding="async"
                 referrerPolicy="no-referrer"
                 className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
               />
