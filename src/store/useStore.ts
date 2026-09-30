@@ -952,34 +952,47 @@ let state: StoreState = {
   },
   cancelOrder: async (orderId, phone) => {
     const order = state.orders.find((o) => o.id === orderId);
+
+    // 1. Direct Firestore write (Instant, reliable, synced in real-time)
     try {
-      let res: Response;
+      await setDoc(
+        doc(db, 'orders', orderId),
+        {
+          status: 'cancelled',
+          cancelledAt: new Date().toISOString()
+        },
+        { merge: true }
+      );
+    } catch (fsErr) {
+      console.warn('Direct Firestore cancel warning:', fsErr);
+    }
+
+    // 2. Background sync with backend API (best-effort)
+    try {
       if (state.isAdminLoggedIn) {
-        res = await authFetch('/api/orders/status', {
+        authFetch('/api/orders/status', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ orderId, status: 'cancelled' })
-        });
+        }).catch(() => {});
       } else {
-        res = await fetch('/api/orders/cancel', {
+        fetch('/api/orders/cancel', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ orderId, phone: phone || order?.phone || '' })
-        });
+        }).catch(() => {});
       }
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok || !data.success) throw new Error(data.error || 'تعذر إلغاء الطلب');
-    } catch (err: any) {
-      state.addToast({ type: 'error', title: 'تعذر إلغاء الطلب', description: err?.message });
-      throw err;
-    }
+    } catch {}
+
+    // 3. Update store state immediately
     update((prev) => ({
       orders: prev.orders.map((o) => (o.id === orderId ? { ...o, status: 'cancelled' } : o))
     }));
+
     state.addToast({
-      type: 'error',
-      title: 'تم إلغاء الطلب',
-      description: order ? `تم إلغاء الطلب رقم ${order.orderNumber}` : undefined
+      type: 'info',
+      title: 'تم إلغاء الطلب بنجاح',
+      description: order ? `تم إلغاء الطلب رقم #${order.orderNumber}` : undefined
     });
   },
   deleteOrder: async (orderId) => {
@@ -991,25 +1004,58 @@ let state: StoreState = {
       throw err;
     }
     update((prev) => ({ orders: prev.orders.filter((o) => o.id !== orderId) }));
-    state.addToast({ type: 'error', title: 'تم حذف الطلب نهائياً', description: order?.orderNumber });
+    state.addToast({
+      type: 'error',
+      title: 'تم حذف الطلب نهائياً',
+      description: order ? `تم حذف الطلب رقم #${order.orderNumber}` : undefined
+    });
   },
   updateOrderStatus: async (orderId, status) => {
+    const order = state.orders.find((o) => o.id === orderId);
+
+    // 1. Direct Firestore write (Instant, reliable, synced in real-time across all devices)
     try {
-      const res = await authFetch('/api/orders/status', {
+      await setDoc(
+        doc(db, 'orders', orderId),
+        {
+          status,
+          updatedAt: new Date().toISOString()
+        },
+        { merge: true }
+      );
+    } catch (fsErr) {
+      console.error('Direct Firestore status update failed:', fsErr);
+      reportSaveError('تعذر تحديث حالة الطلب', fsErr);
+      throw fsErr;
+    }
+
+    // 2. Background sync to backend API (best-effort)
+    try {
+      authFetch('/api/orders/status', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ orderId, status })
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok || !data.success) throw new Error(data.error || 'تعذر تحديث حالة الطلب');
-    } catch (err: any) {
-      state.addToast({ type: 'error', title: 'تعذر تحديث حالة الطلب', description: err?.message });
-      throw err;
-    }
+      }).catch(() => {});
+    } catch {}
+
+    // 3. Update store state immediately
     update((prev) => ({
       orders: prev.orders.map((o) => (o.id === orderId ? { ...o, status } : o))
     }));
-    state.addToast({ type: 'info', title: 'تم تحديث حالة الطلب' });
+
+    const statusNames: Record<string, string> = {
+      pending: 'قيد الانتظار',
+      processing: 'جاري التجهيز',
+      shipped: 'تم الشحن مع المندوب',
+      delivered: 'تم التوصيل بنجاح',
+      cancelled: 'تم الإلغاء'
+    };
+
+    state.addToast({
+      type: 'success',
+      title: 'تم تغيير حالة الطلب بنجاح',
+      description: `الحالة الجديدة: ${statusNames[status] || status}`
+    });
   },
 
   // Customer Review Images

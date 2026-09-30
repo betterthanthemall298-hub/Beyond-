@@ -109,13 +109,16 @@ export const OrderTrackingView: React.FC = () => {
     const target = matchedOrders.find((o) => o.id === orderId) || orders.find((o) => o.id === orderId);
     const existingPhone = target?.phone || (/^01[0125][0-9]{8}$/.test(searchInput.trim()) ? searchInput.trim() : '');
 
-    if (existingPhone) {
+    if (existingPhone || isAdminLoggedIn) {
       openDeleteModal({
-        title: 'إلغاء وحذف الطلب',
-        description: 'هل تريد حقاً إلغاء هذا الطلب وحذفه؟ لا يمكن التراجع عن هذه الخطوة.',
+        title: 'إلغاء الطلب',
+        description: 'هل تريد حقاً إلغاء هذا الطلب؟ لا يمكن التراجع عن هذه الخطوة.',
         itemLabel: `رقم الطلب: #${orderNumber}`,
-        onConfirm: () => {
-          cancelOrder(orderId, existingPhone);
+        onConfirm: async () => {
+          await cancelOrder(orderId, existingPhone);
+          setRemoteResults((prev) =>
+            prev.map((o) => (o.id === orderId ? { ...o, status: 'cancelled' } : o))
+          );
         }
       });
     } else {
@@ -138,6 +141,9 @@ export const OrderTrackingView: React.FC = () => {
     setCancelPhoneError('');
     try {
       await cancelOrder(cancellingOrder.id, cleanPhone);
+      setRemoteResults((prev) =>
+        prev.map((o) => (o.id === cancellingOrder.id ? { ...o, status: 'cancelled' } : o))
+      );
       setCancellingOrder(null);
     } catch (err: any) {
       setCancelPhoneError(err?.message || 'تعذر إلغاء الطلب، يرجى التأكد من رقم الهاتف');
@@ -150,9 +156,10 @@ export const OrderTrackingView: React.FC = () => {
     openDeleteModal({
       title: 'حذف الطلب نهائياً من السجلات',
       description: 'سيتم مسح هذا الطلب نهائياً من قاعدة بيانات المتجر.',
-      itemLabel: `رقم الطلب: ${orderNumber}`,
-      onConfirm: () => {
-        deleteOrder(orderId);
+      itemLabel: `رقم الطلب: #${orderNumber}`,
+      onConfirm: async () => {
+        await deleteOrder(orderId);
+        setRemoteResults((prev) => prev.filter((o) => o.id !== orderId));
       }
     });
   };
@@ -311,7 +318,7 @@ export const OrderTrackingView: React.FC = () => {
                       {getStatusBadge(order.status)}
 
                       {/* Explicit Cancel/Delete Order Button */}
-                      {!isCancelled && order.status === 'pending' && (
+                      {!isCancelled && (
                         <button
                           id={`cancel-order-btn-${order.id}`}
                           type="button"
@@ -323,7 +330,7 @@ export const OrderTrackingView: React.FC = () => {
                           <span>إلغاء الطلب</span>
                         </button>
                       )}
-                      {isCancelled && isAdminLoggedIn && (
+                      {isCancelled && (
                         <button
                           id={`delete-cancelled-order-btn-${order.id}`}
                           type="button"
