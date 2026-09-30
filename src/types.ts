@@ -79,6 +79,9 @@ export interface Order {
   total: number;
   status: OrderStatus;
   createdAt: string;
+  createdAtMs?: number;
+  updatedAt?: string;
+  cancelledAt?: string;
 }
 
 // Review is image-only as requested by the user

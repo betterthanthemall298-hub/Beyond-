@@ -15,6 +15,7 @@ import {
   X
 } from 'lucide-react';
 import { OrderStatus, Order } from '../types';
+import { formatOrderDateTime, getOrderTimestamp } from '../utils/date';
 
 export const OrderTrackingView: React.FC = () => {
   const { orders, products, cancelOrder, deleteOrder, openDeleteModal, settings, searchRemoteOrders, isAdminLoggedIn } = useStore();
@@ -46,10 +47,13 @@ export const OrderTrackingView: React.FC = () => {
     ...localMatches,
     ...remoteResults.filter((r) => !localMatches.some((m) => m.id === r.id))
   ].sort((a, b) => {
+    const timeA = getOrderTimestamp(a.createdAt, a.createdAtMs);
+    const timeB = getOrderTimestamp(b.createdAt, b.createdAtMs);
+    if (timeB !== timeA) return timeB - timeA;
     const numA = parseInt(String(a.orderNumber || '').replace(/\D/g, ''), 10) || 0;
     const numB = parseInt(String(b.orderNumber || '').replace(/\D/g, ''), 10) || 0;
     if (numB !== numA) return numB - numA;
-    return (b.createdAt || '').localeCompare(a.createdAt || '');
+    return String(b.id || '').localeCompare(String(a.id || ''));
   });
 
   const handleSearch = async (e: React.FormEvent) => {
@@ -311,7 +315,17 @@ export const OrderTrackingView: React.FC = () => {
                           {order.orderNumber}
                         </span>
                       </div>
-                      <p className="text-xs text-stone-500 mt-0.5">تاريخ التسجيل: {order.createdAt}</p>
+                      {(() => {
+                        const dt = formatOrderDateTime(order.createdAt, order.createdAtMs);
+                        return (
+                          <div className="flex items-center gap-1.5 text-xs text-stone-400 mt-1" title={dt.full}>
+                            <Clock className="w-3.5 h-3.5 text-amber-500/80 shrink-0" />
+                            <span>تاريخ ووقت الطلب:</span>
+                            <span className="font-semibold text-stone-300">{dt.relative}</span>
+                            {dt.full && <span className="text-[11px] text-stone-500 hidden sm:inline">({dt.full})</span>}
+                          </div>
+                        );
+                      })()}
                     </div>
 
                     <div className="flex items-center gap-2">

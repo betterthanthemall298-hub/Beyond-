@@ -73,6 +73,7 @@ import {
   subscribeToWebPush,
   getActivePushSubscription
 } from '../lib/notifications';
+import { formatOrderDateTime, getOrderTimestamp } from '../utils/date';
 
 export const AdminDashboard: React.FC = () => {
   const {
@@ -1736,12 +1737,17 @@ export const AdminDashboard: React.FC = () => {
           const matchAddress = (order.address || '').toLowerCase().includes(cleanQuery);
           return matchName || matchGov || matchCenter || matchAddress;
         }).sort((a, b) => {
+          const timeA = getOrderTimestamp(a.createdAt, a.createdAtMs);
+          const timeB = getOrderTimestamp(b.createdAt, b.createdAtMs);
+          if (timeB !== timeA) {
+            return timeB - timeA;
+          }
           const numA = parseInt(String(a.orderNumber || '').replace(/\D/g, ''), 10) || 0;
           const numB = parseInt(String(b.orderNumber || '').replace(/\D/g, ''), 10) || 0;
           if (numB !== numA) {
             return numB - numA;
           }
-          return (b.createdAt || '').localeCompare(a.createdAt || '');
+          return String(b.id || '').localeCompare(String(a.id || ''));
         });
 
         const statusTabs: Array<{ id: 'all' | OrderStatus; label: string; count: number }> = [
@@ -2155,11 +2161,26 @@ export const AdminDashboard: React.FC = () => {
                       className="bg-stone-900 border border-stone-800 rounded-2xl p-4 sm:p-5 space-y-4"
                     >
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-stone-800 pb-3">
-                    <div className="flex items-center gap-3">
-                      <span className="font-mono font-bold text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-lg border border-amber-500/20">
-                        {order.orderNumber}
+                    <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
+                      <span className="font-mono font-black text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-lg border border-amber-500/20 text-xs sm:text-sm">
+                        #{order.orderNumber}
                       </span>
-                      <span className="text-xs text-stone-400">{order.createdAt}</span>
+                      {(() => {
+                        const dt = formatOrderDateTime(order.createdAt, order.createdAtMs);
+                        return (
+                          <div className="flex items-center gap-1.5 text-xs" title={dt.full}>
+                            <Clock className="w-3.5 h-3.5 text-amber-500/80 shrink-0" />
+                            <span className="font-semibold text-stone-200 bg-stone-950/60 px-2 py-0.5 rounded-md border border-stone-800/80">
+                              {dt.relative}
+                            </span>
+                            {dt.full && (
+                              <span className="text-[11px] text-stone-500 hidden md:inline">
+                                ({dt.full})
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </div>
 
                     <div className="flex items-center gap-2">

@@ -2,6 +2,7 @@ import { useSyncExternalStore } from 'react';
 import {
   collection,
   doc,
+  getDoc,
   onSnapshot,
   setDoc,
   updateDoc,
@@ -15,6 +16,7 @@ import {
 } from 'firebase/firestore';
 import { db, sanitizeForFirestore, auth } from '../lib/firebase';
 import { authFetch } from '../lib/authFetch';
+import { getOrderTimestamp } from '../utils/date';
 import { signInWithEmailAndPassword, updatePassword, signOut, onAuthStateChanged, signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
 import {
   triggerNewOrderNotification,
@@ -837,8 +839,38 @@ let state: StoreState = {
   // Orders: created and changed through the server; only admins receive the live list
   orders: INITIAL_ORDERS,
   createOrder: async (orderData) => {
-    const id = 'ord-' + Date.now() + '-' + Math.random().toString(36).substring(2, 8);
-    const orderNumber = String(Date.now()).slice(-6);
+    const now = new Date();
+    const nowMs = now.getTime();
+    const fullIsoDate = now.toISOString();
+    const id = 'ord-' + nowMs + '-' + Math.random().toString(36).substring(2, 8);
+
+    // Generate fast, clean sequential order number (starting from 1001) with zero server pressure
+    let orderNum = 1001;
+    try {
+      const counterRef = doc(db, 'counters', 'orders');
+      const counterSnap = await getDoc(counterRef);
+      if (counterSnap.exists()) {
+        const val = Number(counterSnap.data()?.currentNumber);
+        if (!isNaN(val) && val >= 1000 && val < 9000000) {
+          orderNum = val + 1;
+        }
+      } else {
+        const maxInState = state.orders.reduce((max, o) => {
+          const n = parseInt(String(o.orderNumber || '').replace(/\D/g, ''), 10);
+          return !isNaN(n) && n >= 1000 && n < 9000000 ? Math.max(max, n) : max;
+        }, 1000);
+        orderNum = maxInState + 1;
+      }
+      setDoc(counterRef, { currentNumber: orderNum, updatedAt: fullIsoDate }, { merge: true }).catch(() => {});
+    } catch {
+      const maxInState = state.orders.reduce((max, o) => {
+        const n = parseInt(String(o.orderNumber || '').replace(/\D/g, ''), 10);
+        return !isNaN(n) && n >= 1000 && n < 9000000 ? Math.max(max, n) : max;
+      }, 1000);
+      orderNum = maxInState + 1;
+    }
+    const orderNumber = String(orderNum);
+
     const subtotal = (orderData.items || []).reduce((s, it) => s + (Number(it.price) || 0) * (Number(it.quantity) || 1), 0);
     const shippingCost = state.governorates.find(g => normalizeGovName(g.name) === normalizeGovName(orderData.governorate))?.cost || 50;
     let discount = 0;
@@ -846,8 +878,6 @@ let state: StoreState = {
       discount = Math.round((subtotal * (Number(state.appliedCoupon.discountPercent) || 0)) / 100);
     }
     const total = Math.max(0, subtotal - discount + shippingCost);
-    const now = new Date();
-    const dateStr = now.toISOString().replace('T', ' ').substring(0, 16);
 
     const localOrder: Order = {
       id,
@@ -866,7 +896,8 @@ let state: StoreState = {
       couponCode: state.appliedCoupon?.code || '',
       total,
       status: 'pending',
-      createdAt: dateStr
+      createdAt: fullIsoDate,
+      createdAtMs: nowMs
     };
 
     // 1. Direct Firestore write (Instant, reliable, backed by Firestore Security Rules)
@@ -1191,10 +1222,13 @@ function reconcileCart(cart: CartItem[], products: Product[]): CartItem[] {
 }
 
 function compareOrdersNewestFirst(a: Order, b: Order): number {
+  const timeA = getOrderTimestamp(a.createdAt, a.createdAtMs);
+  const timeB = getOrderTimestamp(b.createdAt, b.createdAtMs);
+  if (timeB !== timeA) return timeB - timeA;
   const numA = parseInt(String(a.orderNumber || '').replace(/\D/g, ''), 10) || 0;
   const numB = parseInt(String(b.orderNumber || '').replace(/\D/g, ''), 10) || 0;
   if (numB !== numA) return numB - numA;
-  return (b.createdAt || '').localeCompare(a.createdAt || '');
+  return String(b.id || '').localeCompare(String(a.id || ''));
 }
 
 function reportSaveError(title: string, err: unknown) {
@@ -1259,8 +1293,12 @@ function syncOrdersIfAdmin() {
         snapshot.forEach((docSnap) => {
           const raw = docSnap.data() as any;
           if (!raw) return;
+          const createdAtMs = typeof raw.createdAtMs === 'number' && raw.createdAtMs > 0
+            ? raw.createdAtMs
+            : getOrderTimestamp(raw.createdAt);
           loadedOrders.push({
             ...raw,
+            createdAtMs,
             items: Array.isArray(raw.items) ? raw.items : [],
             total: typeof raw.total === 'number' ? raw.total : 0,
             subtotal: typeof raw.subtotal === 'number' ? raw.subtotal : 0,
