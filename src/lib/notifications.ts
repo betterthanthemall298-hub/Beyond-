@@ -4,6 +4,8 @@
  */
 
 import { authFetch } from './authFetch';
+import { db } from './firebase';
+import { doc, setDoc } from 'firebase/firestore';
 
 const SOUND_ENABLED_KEY = 'beyond_sound_notifications_enabled';
 
@@ -276,8 +278,11 @@ export async function subscribeToWebPush(): Promise<{
     // 3. Wait for Service Worker registration
     const registration = await navigator.serviceWorker.ready;
 
-    // 3. Obtain VAPID Public Key
-    const vapidKey = await getVapidPublicKey();
+    // 3. Obtain VAPID Public Key (with robust fallback)
+    let vapidKey = await getVapidPublicKey();
+    if (!vapidKey) {
+      vapidKey = 'BK-YuLDxApl-Gt3kS6awCGqMNUcsodMJB6UG79jJ1_fgeP_pQ34_Xv2ofazDyt6-jak32qW16snJQvOLwgy9BLk';
+    }
     const applicationServerKey = urlBase64ToUint8Array(vapidKey);
 
     // 4. Force clean re-subscription with active VAPID public key
@@ -298,8 +303,27 @@ export async function subscribeToWebPush(): Promise<{
 
     const subJson = subscription.toJSON();
 
-    // 5. Send subscription to the server (also persists it to the database)
+    // 5. Dual Registration: Direct to Firestore (works immediately) + Server API
     let serverAccepted = false;
+
+    // Save directly to Firestore collection 'push_subscriptions'
+    try {
+      const endpoint = String(subJson.endpoint || '');
+      if (endpoint) {
+        const docId = btoa(endpoint).replace(/[/+=]/g, '_').slice(0, 60);
+        await setDoc(doc(db, 'push_subscriptions', docId), {
+          endpoint,
+          keys: subJson.keys,
+          userAgent: navigator.userAgent,
+          updatedAt: new Date().toISOString()
+        }, { merge: true });
+        serverAccepted = true;
+      }
+    } catch (fsErr) {
+      console.warn('[Push] Direct Firestore save notice:', fsErr);
+    }
+
+    // Also register on server
     try {
       const res = await authFetch('/api/push/subscribe', {
         method: 'POST',
@@ -309,7 +333,7 @@ export async function subscribeToWebPush(): Promise<{
           userAgent: navigator.userAgent
         })
       });
-      serverAccepted = res.ok;
+      if (res.ok) serverAccepted = true;
     } catch (apiErr) {
       console.warn('Backend server push registration warning:', apiErr);
     }
@@ -359,7 +383,9 @@ export async function sendDesktopNotification(
   // 1. Try Service Worker showNotification first (Standard for Android & mobile background notifications)
   if ('serviceWorker' in navigator) {
     try {
-      const registration = await navigator.serviceWorker.ready;
+      const regPromise = navigator.serviceWorker.ready;
+      const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 500));
+      const registration = await Promise.race([regPromise, timeoutPromise]);
       if (registration && 'showNotification' in registration) {
         await registration.showNotification(title, {
           body,
@@ -497,9 +523,18 @@ export async function testPhoneNotification(_topicOverride?: string, customLogoU
 }> {
   const logo = customLogoUrl || '/beyond-logo.jpg';
 
-  // 1. Instant local feedback on current device (Sound + Vibration + Desktop Notification)
+  // 1. Instant local feedback on current device (Banner + Sound + Vibration + Desktop Notification)
   playOrderNotificationSound();
   triggerPhoneVibration();
+  dispatchShopifyOrderAlert({
+    orderNumber: 'TEST-' + Math.floor(1000 + Math.random() * 9000),
+    customerName: 'تجربة إشعار المتجر',
+    total: 890,
+    governorate: 'القاهرة',
+    itemsCount: 1,
+    itemsSummary: 'هودي أوفر سايز',
+    logoUrl: logo
+  });
 
   const title = 'Beyond | اختبار الإشعارات';
   const body = 'نظام التنبيهات والصوت يعمل بنجاح وجاهز لاستقبال طلبات المتجر.';

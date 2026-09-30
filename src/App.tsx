@@ -5,22 +5,38 @@ import { Navbar } from './components/Navbar';
 import { HeroCoverflow } from './components/HeroCoverflow';
 import { ProductGrid } from './components/ProductGrid';
 import { ComingSoon } from './components/ComingSoon';
-import { SmartSizeAdvisorModal } from './components/SmartSizeAdvisorModal';
-import { WishlistDrawer } from './components/WishlistDrawer';
-import { CheckoutModal } from './components/CheckoutModal';
-import { QuickLookModal } from './components/QuickLookModal';
-import { OrderTrackingView } from './components/OrderTrackingView';
 import { CustomerReviewsGallery } from './components/CustomerReviewsGallery';
-import { CartPage } from './components/CartPage';
-import { ProductDetailPage } from './components/ProductDetailPage';
-import { WishlistPage } from './components/WishlistPage';
+import { WishlistDrawer } from './components/WishlistDrawer';
+const CartPage = React.lazy(() =>
+  import('./components/CartPage').then((m) => ({ default: m.CartPage }))
+);
+const ProductDetailPage = React.lazy(() =>
+  import('./components/ProductDetailPage').then((m) => ({ default: m.ProductDetailPage }))
+);
+const OrderTrackingView = React.lazy(() =>
+  import('./components/OrderTrackingView').then((m) => ({ default: m.OrderTrackingView }))
+);
+const WishlistPage = React.lazy(() =>
+  import('./components/WishlistPage').then((m) => ({ default: m.WishlistPage }))
+);
 const AdminDashboard = React.lazy(() =>
   import('./components/AdminDashboard').then((m) => ({ default: m.AdminDashboard }))
+);
+const CheckoutModal = React.lazy(() =>
+  import('./components/CheckoutModal').then((m) => ({ default: m.CheckoutModal }))
+);
+const QuickLookModal = React.lazy(() =>
+  import('./components/QuickLookModal').then((m) => ({ default: m.QuickLookModal }))
+);
+const ProductShareModal = React.lazy(() =>
+  import('./components/ProductShareModal').then((m) => ({ default: m.ProductShareModal }))
+);
+const SmartSizeAdvisorModal = React.lazy(() =>
+  import('./components/SmartSizeAdvisorModal').then((m) => ({ default: m.SmartSizeAdvisorModal }))
 );
 import { DeleteConfirmationModal } from './components/DeleteConfirmationModal';
 import { ToastContainer } from './components/ToastContainer';
 import { ShopifyOrderBanner } from './components/ShopifyOrderBanner';
-import { ProductShareModal } from './components/ProductShareModal';
 import { Footer } from './components/Footer';
 import { trackVisit } from './lib/analytics';
 
@@ -268,11 +284,13 @@ export default function App() {
       <ToastContainer />
       <ShopifyOrderBanner />
       <DeleteConfirmationModal />
-      <SmartSizeAdvisorModal />
-      <ProductShareModal />
       <WishlistDrawer />
-      <CheckoutModal />
-      <QuickLookModal />
+      <React.Suspense fallback={null}>
+        <SmartSizeAdvisorModal />
+        <ProductShareModal />
+        <CheckoutModal />
+        <QuickLookModal />
+      </React.Suspense>
 
       {/* Main Navigation Bar */}
       <Navbar />
@@ -295,13 +313,46 @@ export default function App() {
         )}
 
         {/* Dedicated Standalone Cart Page (بدل النافذة) */}
-        {activeView === 'cart' && <CartPage />}
+        {activeView === 'cart' && (
+          <React.Suspense
+            fallback={
+              <div className="min-h-[50vh] flex flex-col items-center justify-center gap-3 text-stone-400 py-16 animate-pulse">
+                <div className="w-8 h-8 rounded-full border-2 border-stone-800 border-t-amber-400 animate-spin" />
+                <span className="text-xs font-bold text-stone-500">جاري تحميل السلة...</span>
+              </div>
+            }
+          >
+            <CartPage />
+          </React.Suspense>
+        )}
 
         {/* Dedicated Wishlist Page (صفحة منفصلة بالكامل) */}
-        {activeView === 'wishlist' && <WishlistPage />}
+        {activeView === 'wishlist' && (
+          <React.Suspense
+            fallback={
+              <div className="min-h-[50vh] flex flex-col items-center justify-center gap-3 text-stone-400 py-16 animate-pulse">
+                <div className="w-8 h-8 rounded-full border-2 border-stone-800 border-t-amber-400 animate-spin" />
+                <span className="text-xs font-bold text-stone-500">جاري تحميل المفضلة...</span>
+              </div>
+            }
+          >
+            <WishlistPage />
+          </React.Suspense>
+        )}
 
         {/* Dedicated Product Detail Page (مع زر الخروج ومنتجات قد تعجبك) */}
-        {activeView === 'product' && <ProductDetailPage />}
+        {activeView === 'product' && (
+          <React.Suspense
+            fallback={
+              <div className="min-h-[60vh] flex flex-col items-center justify-center gap-3 text-stone-400 py-20 animate-pulse">
+                <div className="w-9 h-9 rounded-full border-2 border-stone-800 border-t-amber-400 animate-spin" />
+                <span className="text-xs font-bold text-stone-500">جاري تحميل تفاصيل المنتج...</span>
+              </div>
+            }
+          >
+            <ProductDetailPage />
+          </React.Suspense>
+        )}
 
         {/* Catalog View */}
         {activeView === 'catalog' && (
@@ -311,7 +362,18 @@ export default function App() {
         )}
 
         {/* Order Tracking View */}
-        {activeView === 'tracking' && <OrderTrackingView />}
+        {activeView === 'tracking' && (
+          <React.Suspense
+            fallback={
+              <div className="min-h-[50vh] flex flex-col items-center justify-center gap-3 text-stone-400 py-16 animate-pulse">
+                <div className="w-8 h-8 rounded-full border-2 border-stone-800 border-t-amber-400 animate-spin" />
+                <span className="text-xs font-bold text-stone-500">جاري تحميل تتبع الطلب...</span>
+              </div>
+            }
+          >
+            <OrderTrackingView />
+          </React.Suspense>
+        )}
 
         {/* Customer Reviews View */}
         {activeView === 'reviews' && (

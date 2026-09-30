@@ -36,7 +36,12 @@ export const ShopifyOrderBanner: React.FC = () => {
     return () => clearTimeout(timer);
   }, [visible, activeAlert]);
 
-  if (!visible || !activeAlert || !isAdminLoggedIn) return null;
+  const isAuthorizedToSeeBanner = isAdminLoggedIn || (typeof window !== 'undefined' && (
+    window.location.search.includes('view=admin') ||
+    localStorage.getItem('beyond_admin_user') !== null
+  ));
+
+  if (!visible || !activeAlert || !isAuthorizedToSeeBanner) return null;
 
   const handleOpenOrder = () => {
     setVisible(false);

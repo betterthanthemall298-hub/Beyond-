@@ -1252,7 +1252,7 @@ function syncAlertsIfAdmin() {
             const alertData = change.doc.data();
             if (!alertData) return;
             const createdAt = alertData.createdAt ? new Date(alertData.createdAt).getTime() : Date.now();
-            if (Date.now() - createdAt > 60000) return;
+            if (Math.abs(Date.now() - createdAt) > 5 * 60 * 1000) return;
             const finalLogo = state.settings.notificationLogoUrl || state.settings.brandLogo || '/beyond-logo.jpg';
             playOrderNotificationSound();
             triggerPhoneVibration();
