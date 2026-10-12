@@ -6,14 +6,10 @@ import {
   ArrowRight,
   ShoppingBag,
   Heart,
-  ShieldCheck,
-  Truck,
-  RotateCcw,
   Check,
   Package,
   Share2,
   Palette,
-  Sparkles,
   Tag
 } from 'lucide-react';
 import { ProductCard } from './ProductCard';
@@ -258,19 +254,6 @@ export const ProductDetailPage: React.FC = () => {
             <p className="text-xs sm:text-sm text-stone-300 leading-relaxed pt-1">
               {product.description}
             </p>
-
-            {/* Quick feature tags */}
-            <div className="flex flex-wrap gap-2 pt-1 border-t border-stone-800/60">
-              <span className="text-[11px] font-medium text-stone-300 bg-stone-950/60 px-2.5 py-1 rounded-lg border border-stone-800/60">
-                قطن ميلتون ثقيل معالج ضد الانكماش
-              </span>
-              <span className="text-[11px] font-medium text-stone-300 bg-stone-950/60 px-2.5 py-1 rounded-lg border border-stone-800/60">
-                بطانة داخلية ناعمة ودافئة
-              </span>
-              <span className="text-[11px] font-medium text-amber-300/90 bg-amber-500/10 px-2.5 py-1 rounded-lg border border-amber-500/20">
-                قصة أوفر سايز عصرية
-              </span>
-            </div>
           </div>
 
           {/* Box 2: Color Selection Card (if colors exist) */}
@@ -461,44 +444,6 @@ export const ProductDetailPage: React.FC = () => {
                   <span>شراء فوري ومتابعة السلة</span>
                 </button>
               )}
-            </div>
-
-            {/* Free shipping banner if 2 or more pieces */}
-            <div className="pt-1 text-center">
-              <span className="text-[11px] text-amber-300/80 font-medium bg-amber-500/10 px-3 py-1 rounded-full border border-amber-500/20 inline-block">
-                🚚 شحن مجاني عند طلب قطعتين أو أكثر لجميع المحافظات!
-              </span>
-            </div>
-          </div>
-
-          {/* Box 5: Trust & Guarantees Card */}
-          <div className="bg-stone-900/50 border border-stone-800/90 rounded-2xl p-4 shadow-md space-y-3">
-            <h4 className="text-xs font-bold text-stone-300">ضمانات متجرنا وتجربة الشراء:</h4>
-            
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs text-stone-300">
-              <div className="p-2.5 rounded-xl bg-stone-950/70 border border-stone-800/70 flex items-center gap-2.5">
-                <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
-                <div>
-                  <strong className="block text-stone-200 text-[11px]">معاينة قبل الدفع</strong>
-                  <span className="text-[10px] text-stone-400">افحص الخامة قبل الاستلام</span>
-                </div>
-              </div>
-
-              <div className="p-2.5 rounded-xl bg-stone-950/70 border border-stone-800/70 flex items-center gap-2.5">
-                <Truck className="w-4 h-4 text-amber-400 shrink-0" />
-                <div>
-                  <strong className="block text-stone-200 text-[11px]">شحن سريع</strong>
-                  <span className="text-[10px] text-stone-400">توصيل لباب بيتك</span>
-                </div>
-              </div>
-
-              <div className="p-2.5 rounded-xl bg-stone-950/70 border border-stone-800/70 flex items-center gap-2.5">
-                <RotateCcw className="w-4 h-4 text-blue-400 shrink-0" />
-                <div>
-                  <strong className="block text-stone-200 text-[11px]">استبدال سهل</strong>
-                  <span className="text-[10px] text-stone-400">متاح خلال 14 يوماً</span>
-                </div>
-              </div>
             </div>
           </div>
         </div>
