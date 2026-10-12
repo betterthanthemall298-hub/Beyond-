@@ -23,7 +23,8 @@ export const CheckoutModal: React.FC = () => {
     appliedCoupon,
     getCartSubtotal,
     getCartDiscount,
-    createOrder
+    createOrder,
+    settings
   } = useStore();
 
   const [customerName, setCustomerName] = useState('');
@@ -40,7 +41,13 @@ export const CheckoutModal: React.FC = () => {
   if (!isCheckoutOpen) return null;
 
   const currentGov = governorates.find((g) => g.name === selectedGovernorate) || governorates[0];
-  const shippingCost = currentGov.cost;
+  const baseShippingCost = currentGov.cost;
+  const totalPieces = cart.reduce((sum, item) => sum + (Number(item.quantity) || 1), 0);
+  const minQtyForOffer = Math.max(1, Number(settings.quantityShippingMinItems) || 2);
+  const isQtyOfferActive = Boolean(settings.quantityShippingEnabled && totalPieces >= minQtyForOffer);
+  const shippingCost = isQtyOfferActive
+    ? Math.max(0, Number(settings.quantityShippingCost ?? 0))
+    : baseShippingCost;
   const subtotal = getCartSubtotal();
   const discount = getCartDiscount();
   const grandTotal = Math.max(0, subtotal - discount + shippingCost);
@@ -290,7 +297,7 @@ export const CheckoutModal: React.FC = () => {
                   >
                     {governorates.map((g) => (
                       <option key={g.name} value={g.name}>
-                        {g.name} — شحن {g.cost} ج.م
+                        {g.name} — شحن {isQtyOfferActive ? (shippingCost === 0 ? 'مجاني (0 ج.م)' : `${shippingCost} ج.م`) : `${g.cost} ج.م`}
                       </option>
                     ))}
                   </select>
@@ -357,7 +364,7 @@ export const CheckoutModal: React.FC = () => {
             {/* Order Cost Summary */}
             <div className="bg-stone-950/80 border border-stone-800 rounded-xl p-4 space-y-2 text-xs">
               <div className="flex justify-between text-stone-400">
-                <span>سعر الهوديز ({cart.length} قطع):</span>
+                <span>سعر الهوديز ({totalPieces} قطع):</span>
                 <span className="font-mono text-stone-200">{subtotal} ج.م</span>
               </div>
               {discount > 0 && (
@@ -370,8 +377,20 @@ export const CheckoutModal: React.FC = () => {
                 </div>
               )}
               <div className="flex justify-between text-stone-400">
-                <span>الشحن لمحافظة {selectedGovernorate}:</span>
-                <span className="font-mono text-stone-200">{shippingCost} ج.م</span>
+                <span>
+                  الشحن لمحافظة {selectedGovernorate}
+                  {isQtyOfferActive ? ` (عرض ${minQtyForOffer} قطع أو أكثر)` : ''}:
+                </span>
+                {isQtyOfferActive ? (
+                  <span className="font-mono font-bold text-emerald-400 flex items-center gap-1.5">
+                    {baseShippingCost !== shippingCost && (
+                      <span className="line-through text-stone-500 text-[11px]">{baseShippingCost} ج.م</span>
+                    )}
+                    <span>{shippingCost === 0 ? 'مجاني (0 ج.م)' : `${shippingCost} ج.م`}</span>
+                  </span>
+                ) : (
+                  <span className="font-mono text-stone-200">{shippingCost} ج.م</span>
+                )}
               </div>
               <div className="flex justify-between text-sm font-bold text-stone-100 border-t border-stone-800 pt-2">
                 <span>المبلغ الإجمالي عند الاستلام:</span>

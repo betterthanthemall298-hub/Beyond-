@@ -25,7 +25,8 @@ export const CartPage: React.FC = () => {
     removeAppliedCoupon,
     setActiveView,
     setIsCheckoutOpen,
-    openDeleteModal
+    openDeleteModal,
+    settings
   } = useStore();
 
   const [couponInput, setCouponInput] = useState('');
@@ -33,7 +34,11 @@ export const CartPage: React.FC = () => {
 
   const subtotal = getCartSubtotal();
   const discount = getCartDiscount();
-  const total = Math.max(0, subtotal - discount);
+  const totalPieces = cart.reduce((sum, item) => sum + (Number(item.quantity) || 1), 0);
+  const minQtyForOffer = Math.max(1, Number(settings.quantityShippingMinItems) || 2);
+  const isQtyOfferActive = Boolean(settings.quantityShippingEnabled && totalPieces >= minQtyForOffer);
+  const qtyOfferCost = Math.max(0, Number(settings.quantityShippingCost ?? 0));
+  const total = Math.max(0, subtotal - discount + (isQtyOfferActive ? qtyOfferCost : 0));
 
   const [isApplyingCoupon, setIsApplyingCoupon] = useState(false);
 
@@ -344,8 +349,20 @@ export const CartPage: React.FC = () => {
 
               <div className="flex justify-between text-stone-400">
                 <span>الشحن والتوصيل:</span>
-                <span className="text-stone-300">يُحسب عند اختيار المحافظة</span>
+                {isQtyOfferActive ? (
+                  <span className="font-mono font-bold text-emerald-400">
+                    {qtyOfferCost === 0 ? 'مجاني (0 ج.م)' : `${qtyOfferCost} ج.م`}
+                  </span>
+                ) : (
+                  <span className="text-stone-300">يُحسب عند اختيار المحافظة</span>
+                )}
               </div>
+
+              {settings.quantityShippingEnabled && !isQtyOfferActive && totalPieces > 0 && (
+                <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-[11px] font-bold">
+                  أضف {minQtyForOffer - totalPieces} قطعة أخرى للحصول على شحن {qtyOfferCost === 0 ? 'مجاني (0 ج.م)' : `بـ ${qtyOfferCost} ج.م فقط`}!
+                </div>
+              )}
 
               <div className="flex justify-between items-baseline text-stone-100 text-base font-black border-t border-stone-800 pt-3">
                 <span>الإجمالي التقريبي:</span>

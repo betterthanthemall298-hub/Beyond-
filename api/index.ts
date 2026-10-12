@@ -638,8 +638,21 @@ export function createApp(getDeps: () => Deps) {
       });
 
       const shippingMap = await loadShippingMap(deps);
-      const shippingCost = shippingMap.get(governorate);
+      let shippingCost = shippingMap.get(governorate);
       if (shippingCost === undefined) throw new HttpError(400, 'المحافظة المحددة غير مدعومة');
+      try {
+        const totalItemQty = items.reduce((s, it) => s + it.quantity, 0);
+        const genSnap = await deps.db.collection('settings').doc('general').get();
+        if (genSnap.exists) {
+          const genData = genSnap.data() || {};
+          const minQty = Math.max(1, Number(genData.quantityShippingMinItems) || 2);
+          if (genData.quantityShippingEnabled && totalItemQty >= minQty) {
+            shippingCost = Math.max(0, Number(genData.quantityShippingCost ?? 0));
+          }
+        }
+      } catch {
+        // Ignore fallback error
+      }
 
       // Coupon (looked up by code, re-validated inside the transaction)
       let couponId: string | null = null;

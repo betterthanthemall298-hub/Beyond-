@@ -872,7 +872,13 @@ let state: StoreState = {
     const orderNumber = String(orderNum);
 
     const subtotal = (orderData.items || []).reduce((s, it) => s + (Number(it.price) || 0) * (Number(it.quantity) || 1), 0);
-    const shippingCost = state.governorates.find(g => normalizeGovName(g.name) === normalizeGovName(orderData.governorate))?.cost || 50;
+    const totalOrderQty = (orderData.items || []).reduce((s, it) => s + (Number(it.quantity) || 1), 0);
+    const baseShippingCost = state.governorates.find(g => normalizeGovName(g.name) === normalizeGovName(orderData.governorate))?.cost || 50;
+    const minQtyForOffer = Math.max(1, Number(state.settings.quantityShippingMinItems) || 2);
+    const shippingCost =
+      state.settings.quantityShippingEnabled && totalOrderQty >= minQtyForOffer
+        ? Math.max(0, Number(state.settings.quantityShippingCost ?? 0))
+        : baseShippingCost;
     let discount = 0;
     if (state.appliedCoupon) {
       discount = Math.round((subtotal * (Number(state.appliedCoupon.discountPercent) || 0)) / 100);

@@ -286,6 +286,10 @@ export const AdminDashboard: React.FC = () => {
   const [hasUnsavedShippingChanges, setHasUnsavedShippingChanges] = useState(false);
   const [newGovName, setNewGovName] = useState('');
   const [newGovCost, setNewGovCost] = useState('60');
+  const [quantityShippingEnabled, setQuantityShippingEnabled] = useState<boolean>(Boolean(settings.quantityShippingEnabled));
+  const [quantityShippingMinItems, setQuantityShippingMinItems] = useState<string>(String(settings.quantityShippingMinItems ?? 2));
+  const [quantityShippingCost, setQuantityShippingCost] = useState<string>(String(settings.quantityShippingCost ?? 0));
+  const [isSavingQtyShipping, setIsSavingQtyShipping] = useState<boolean>(false);
 
   useEffect(() => {
     setEditableGovernorates(governorates);
@@ -304,6 +308,9 @@ export const AdminDashboard: React.FC = () => {
     setInstagramUrl(settings.instagramUrl || '');
     setTiktokUrl(settings.tiktokUrl || '');
     setFacebookUrl(settings.facebookUrl || '');
+    setQuantityShippingEnabled(Boolean(settings.quantityShippingEnabled));
+    setQuantityShippingMinItems(String(settings.quantityShippingMinItems ?? 2));
+    setQuantityShippingCost(String(settings.quantityShippingCost ?? 0));
   }, [settings]);
 
   // Load private notification settings securely from private_settings/notifications
@@ -828,6 +835,9 @@ export const AdminDashboard: React.FC = () => {
       instagramUrl,
       tiktokUrl,
       facebookUrl,
+      quantityShippingEnabled,
+      quantityShippingMinItems: Math.max(1, Number(quantityShippingMinItems) || 2),
+      quantityShippingCost: Math.max(0, Number(quantityShippingCost) || 0),
       pushNotificationTopic: cleanTopic,
       telegramBotToken: cleanToken,
       telegramChatId: cleanChatId
@@ -2708,6 +2718,11 @@ export const AdminDashboard: React.FC = () => {
                   setIsSavingShipping(true);
                   try {
                     await saveAllGovernorates(editableGovernorates);
+                    await updateSettings({
+                      quantityShippingEnabled,
+                      quantityShippingMinItems: Math.max(1, Number(quantityShippingMinItems) || 2),
+                      quantityShippingCost: Math.max(0, Number(quantityShippingCost) || 0)
+                    });
                     setHasUnsavedShippingChanges(false);
                   } catch (err) {
                     console.error('Error saving shipping:', err);
@@ -2730,6 +2745,156 @@ export const AdminDashboard: React.FC = () => {
                     : '✅ كافة أسعار الشحن محفوظة سحابياً'}
                 </span>
               </button>
+            </div>
+          </div>
+
+          {/* Quantity-Based Shipping Offer Control */}
+          <div className="bg-stone-900/80 border border-amber-500/30 rounded-2xl p-5 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <Package className="w-5 h-5 text-amber-400" />
+                  <h4 className="text-sm font-bold text-stone-100">
+                    التحكم في سعر الشحن حسب عدد القطع (عرض الكمية)
+                  </h4>
+                  <span
+                    className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
+                      quantityShippingEnabled
+                        ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+                        : 'bg-stone-800 text-stone-400 border border-stone-700'
+                    }`}
+                  >
+                    {quantityShippingEnabled ? 'مفعّل حالياً' : 'غير مفعّل'}
+                  </span>
+                </div>
+                <p className="text-xs text-stone-400 mt-1">
+                  حدد عدد الهوديز التي إذا طلبها العميل (أو أكثر) يتغير سعر الشحن تلقائياً (مثلاً: عند طلب قطعتين يكون سعر التوصيل 0 ج.م).
+                </p>
+              </div>
+
+              <button
+                id="toggle-quantity-shipping-btn"
+                type="button"
+                onClick={async () => {
+                  const nextState = !quantityShippingEnabled;
+                  setQuantityShippingEnabled(nextState);
+                  setIsSavingQtyShipping(true);
+                  try {
+                    await updateSettings({
+                      quantityShippingEnabled: nextState,
+                      quantityShippingMinItems: Math.max(1, Number(quantityShippingMinItems) || 2),
+                      quantityShippingCost: Math.max(0, Number(quantityShippingCost) || 0)
+                    });
+                  } finally {
+                    setIsSavingQtyShipping(false);
+                  }
+                }}
+                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all shrink-0 ${
+                  quantityShippingEnabled
+                    ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm'
+                    : 'bg-stone-800 hover:bg-stone-700 text-stone-300 border border-stone-700'
+                }`}
+              >
+                {quantityShippingEnabled ? '✅ العرض مفعّل (اضغط للإيقاف)' : 'تفعيل عرض شحن الكمية'}
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2 border-t border-stone-800/80">
+              {/* Minimum Quantity Input */}
+              <div className="bg-stone-950/80 border border-stone-800 rounded-xl p-3.5 space-y-1.5">
+                <label className="block text-xs font-bold text-stone-300">
+                  عدد القطع المطلوبة (أو أكثر):
+                </label>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const next = Math.max(1, (Number(quantityShippingMinItems) || 2) - 1);
+                      setQuantityShippingMinItems(String(next));
+                    }}
+                    className="w-8 h-8 rounded-lg bg-stone-800 hover:bg-stone-700 text-stone-200 font-bold text-sm flex items-center justify-center"
+                  >
+                    -
+                  </button>
+                  <input
+                    id="quantity-shipping-min-items-input"
+                    type="number"
+                    min="1"
+                    value={quantityShippingMinItems}
+                    onChange={(e) => setQuantityShippingMinItems(e.target.value)}
+                    className="w-full bg-stone-900 border border-stone-700 focus:border-amber-500 rounded-lg px-3 py-1.5 text-sm font-mono font-bold text-amber-400 text-center"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const next = Math.max(1, (Number(quantityShippingMinItems) || 2) + 1);
+                      setQuantityShippingMinItems(String(next));
+                    }}
+                    className="w-8 h-8 rounded-lg bg-stone-800 hover:bg-stone-700 text-stone-200 font-bold text-sm flex items-center justify-center"
+                  >
+                    +
+                  </button>
+                </div>
+                <p className="text-[11px] text-stone-500">مثال: 2 قطعة (هوديز)</p>
+              </div>
+
+              {/* Shipping Cost Input */}
+              <div className="bg-stone-950/80 border border-stone-800 rounded-xl p-3.5 space-y-1.5">
+                <label className="block text-xs font-bold text-stone-300">
+                  سعر التوصيل عند تحقيق العدد (ج.م):
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    id="quantity-shipping-cost-input"
+                    type="number"
+                    min="0"
+                    value={quantityShippingCost}
+                    onChange={(e) => setQuantityShippingCost(e.target.value)}
+                    className="w-full bg-stone-900 border border-stone-700 focus:border-amber-500 rounded-lg px-3 py-1.5 text-sm font-mono font-bold text-emerald-400 text-center"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setQuantityShippingCost('0')}
+                    className="px-2.5 py-1.5 rounded-lg bg-emerald-950/60 hover:bg-emerald-900/60 text-emerald-400 border border-emerald-800/50 text-[11px] font-bold shrink-0"
+                  >
+                    0 (مجاني)
+                  </button>
+                </div>
+                <p className="text-[11px] text-stone-500">اكتب 0 ليكون الشحن مجانياً تماماً</p>
+              </div>
+
+              {/* Save & Quick Apply */}
+              <div className="bg-stone-950/80 border border-stone-800 rounded-xl p-3.5 flex flex-col justify-between gap-2">
+                <div className="text-xs text-stone-300">
+                  <span className="text-stone-400">القاعدة الحالية: </span>
+                  <span className="font-bold text-amber-400">
+                    عند طلب {Math.max(1, Number(quantityShippingMinItems) || 2)} قطع أو أكثر = الشحن{' '}
+                    {Number(quantityShippingCost) === 0 ? 'مجاني (0 ج.م)' : `${Number(quantityShippingCost) || 0} ج.م`}
+                  </span>
+                </div>
+                <button
+                  id="save-quantity-shipping-btn"
+                  type="button"
+                  disabled={isSavingQtyShipping}
+                  onClick={async () => {
+                    setIsSavingQtyShipping(true);
+                    try {
+                      await updateSettings({
+                        quantityShippingEnabled: true,
+                        quantityShippingMinItems: Math.max(1, Number(quantityShippingMinItems) || 2),
+                        quantityShippingCost: Math.max(0, Number(quantityShippingCost) || 0)
+                      });
+                      setQuantityShippingEnabled(true);
+                    } finally {
+                      setIsSavingQtyShipping(false);
+                    }
+                  }}
+                  className="w-full py-2 px-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-stone-950 font-bold text-xs flex items-center justify-center gap-1.5 transition-colors shadow-sm disabled:opacity-50"
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  <span>{isSavingQtyShipping ? 'جاري الحفظ...' : 'حفظ وتفعيل هذا العرض الآن'}</span>
+                </button>
+              </div>
             </div>
           </div>
 

@@ -121,6 +121,9 @@ export interface StoreSettings {
   tiktokUrl: string;
   facebookUrl: string;
   freeShippingThreshold: number;
+  quantityShippingEnabled?: boolean;
+  quantityShippingMinItems?: number;
+  quantityShippingCost?: number;
   comingSoonEnabled?: boolean;
   comingSoonTitle?: string;
   comingSoonSubtitle?: string;
