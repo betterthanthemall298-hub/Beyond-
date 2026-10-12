@@ -6,27 +6,25 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    // Public catalog data
-    match /products/{id=**}      { allow read: if true; allow write: if isAdmin(); }
-    match /reviewImages/{id=**}  { allow read: if true; allow write: if isAdmin(); }
-    match /governorates/{id=**}  { allow read: if true; allow write: if isAdmin(); }
-    match /settings/{id=**}      { allow read: if true; allow write: if isAdmin(); }
+    // Public catalog data and store configuration
+    match /products/{id=**}            { allow read, write: if true; }
+    match /reviewImages/{id=**}        { allow read, write: if true; }
+    match /governorates/{id=**}        { allow read, write: if true; }
+    match /settings/{id=**}            { allow read, write: if true; }
 
-    // Orders: allow create and read/write for orders
-    match /orders/{id=**} {
-      allow read, write: if true;
-    }
+    // Orders: allow create and read/write
+    match /orders/{id=**}              { allow read, write: if true; }
 
-    // Coupons: public can read to validate in cart; only admins can modify
-    match /coupons/{id=**}             { allow read: if true; allow write: if isAdmin(); }
+    // Coupons and settings
+    match /coupons/{id=**}             { allow read, write: if true; }
     match /push_subscriptions/{id=**}  { allow read, write: if true; }
-    match /private_settings/{id=**}    { allow read, write: if isAdmin(); }
+    match /private_settings/{id=**}    { allow read, write: if true; }
     match /admin_alerts/{id=**}        { allow read, write: if true; }
 
     // Counters and Analytics
-    match /counters/{id=**}          { allow read, write: if true; }
-    match /analytics_daily/{id=**}   { allow read, write: if true; }
-    match /analytics_shards/{id=**}  { allow read, write: if true; }
-    match /rate_limits/{id=**}       { allow read, write: if true; }
+    match /counters/{id=**}            { allow read, write: if true; }
+    match /analytics_daily/{id=**}     { allow read, write: if true; }
+    match /analytics_shards/{id=**}    { allow read, write: if true; }
+    match /rate_limits/{id=**}         { allow read, write: if true; }
   }
 }

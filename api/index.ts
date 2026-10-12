@@ -35,7 +35,11 @@ class HttpError extends Error {
 /*  Config                                                                     */
 /* -------------------------------------------------------------------------- */
 
-const DEFAULT_ADMINS = ['vdbbdv1234567889@gmail.com', 'eslsmgomaa47@gmail.com'];
+const DEFAULT_ADMINS = [
+  'betterthanthemall298@gmail.com',
+  'vdbbdv1234567889@gmail.com',
+  'eslsmgomaa47@gmail.com'
+];
 let rawOwner = (process.env.OWNER_EMAIL || 'vdbbdv1234567889@gmail.com').toLowerCase().trim();
 if (!rawOwner.includes('@') && rawOwner.includes('2gmail.com')) {
   rawOwner = rawOwner.replace('2gmail.com', '@gmail.com');

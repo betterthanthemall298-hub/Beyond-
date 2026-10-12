@@ -531,16 +531,18 @@ let state: StoreState = {
     }
   },
   updateProduct: async (id, updates) => {
+    const existing = state.products.find((p) => p.id === id);
+    const merged = { ...(existing || {}), ...updates, id };
     try {
-      await updateDoc(doc(db, 'products', id), sanitizeForFirestore(updates));
+      await setDoc(doc(db, 'products', id), sanitizeForFirestore(merged), { merge: true });
       update((prev) => ({
         products: prev.products.map((p) => (p.id === id ? { ...p, ...updates } : p)),
         selectedProduct:
           prev.selectedProduct?.id === id ? { ...prev.selectedProduct, ...updates } : prev.selectedProduct
       }));
-      state.addToast({ type: 'info', title: 'تم تحديث بيانات المنتج' });
+      state.addToast({ type: 'success', title: 'تم حفظ تعديلات المنتج بنجاح' });
     } catch (err) {
-      reportSaveError('تعذر تحديث المنتج', err);
+      reportSaveError('تعذر حفظ تعديلات المنتج', err);
       throw err;
     }
   },

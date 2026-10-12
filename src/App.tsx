@@ -31,9 +31,6 @@ const QuickLookModal = React.lazy(() =>
 const ProductShareModal = React.lazy(() =>
   import('./components/ProductShareModal').then((m) => ({ default: m.ProductShareModal }))
 );
-const SmartSizeAdvisorModal = React.lazy(() =>
-  import('./components/SmartSizeAdvisorModal').then((m) => ({ default: m.SmartSizeAdvisorModal }))
-);
 import { DeleteConfirmationModal } from './components/DeleteConfirmationModal';
 import { ToastContainer } from './components/ToastContainer';
 import { ShopifyOrderBanner } from './components/ShopifyOrderBanner';
@@ -59,8 +56,6 @@ export default function App() {
     closeShareModal,
     isCheckoutOpen,
     setIsCheckoutOpen,
-    isSizeAdvisorOpen,
-    setIsSizeAdvisorOpen,
     isWishlistOpen,
     setIsWishlistOpen,
     deleteModalState,
@@ -83,7 +78,6 @@ export default function App() {
     quickLookProduct,
     shareModalProduct,
     isCheckoutOpen,
-    isSizeAdvisorOpen,
     isWishlistOpen,
     isDeleteOpen: deleteModalState.isOpen,
     products
@@ -96,7 +90,6 @@ export default function App() {
       quickLookProduct,
       shareModalProduct,
       isCheckoutOpen,
-      isSizeAdvisorOpen,
       isWishlistOpen,
       isDeleteOpen: deleteModalState.isOpen,
       products
@@ -108,7 +101,6 @@ export default function App() {
     quickLookProduct ||
     shareModalProduct ||
     isCheckoutOpen ||
-    isSizeAdvisorOpen ||
     isWishlistOpen ||
     deleteModalState.isOpen
   );
@@ -227,8 +219,6 @@ export default function App() {
         closeShareModal();
       } else if (current.isCheckoutOpen) {
         setIsCheckoutOpen(false);
-      } else if (current.isSizeAdvisorOpen) {
-        setIsSizeAdvisorOpen(false);
       } else if (current.isWishlistOpen) {
         setIsWishlistOpen(false);
       } else if (current.isDeleteOpen) {
@@ -271,7 +261,6 @@ export default function App() {
     closeQuickLook,
     closeShareModal,
     setIsCheckoutOpen,
-    setIsSizeAdvisorOpen,
     setIsWishlistOpen,
     closeDeleteModal,
     setActiveView,
@@ -286,7 +275,6 @@ export default function App() {
       <DeleteConfirmationModal />
       <WishlistDrawer />
       <React.Suspense fallback={null}>
-        <SmartSizeAdvisorModal />
         <ProductShareModal />
         <CheckoutModal />
         <QuickLookModal />

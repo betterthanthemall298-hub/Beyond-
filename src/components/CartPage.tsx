@@ -190,6 +190,8 @@ export const CartPage: React.FC = () => {
                     <img
                       src={item.product.images[0]}
                       alt={item.product.name}
+                      loading="lazy"
+                      decoding="async"
                       referrerPolicy="no-referrer"
                       className="w-20 h-24 sm:w-22 sm:h-26 rounded-xl object-cover border border-stone-800 bg-stone-950 shrink-0"
                     />

@@ -26,7 +26,6 @@ export const QuickLookModal: React.FC = () => {
     addToCart,
     wishlist,
     toggleWishlist,
-    setIsSizeAdvisorOpen,
     openShareModal,
     setSelectedProduct,
     setActiveView,
@@ -350,17 +349,6 @@ export const QuickLookModal: React.FC = () => {
                   <span className="font-semibold">
                     المقاس: <strong className="text-amber-400">{selectedSize}</strong>
                   </span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      closeQuickLook();
-                      setIsSizeAdvisorOpen(true);
-                    }}
-                    className="text-amber-400 hover:text-amber-300 text-[11px] font-bold flex items-center gap-1 transition-colors"
-                  >
-                    <Sparkles className="w-3.5 h-3.5" />
-                    <span>حاسبة المقاسات الذكية</span>
-                  </button>
                 </div>
 
                 <div className="grid grid-cols-4 gap-2">

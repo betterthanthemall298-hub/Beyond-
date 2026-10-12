@@ -158,6 +158,7 @@ export const AdminDashboard: React.FC = () => {
   // Image Processing & Product Submitting States
   const [isProcessingImages, setIsProcessingImages] = useState(false);
   const [isSavingProduct, setIsSavingProduct] = useState(false);
+  const [isSavingSettings, setIsSavingSettings] = useState(false);
 
   // Add Product Form States
   const [showAddProduct, setShowAddProduct] = useState(false);
@@ -176,15 +177,6 @@ export const AdminDashboard: React.FC = () => {
   const [pStockXL, setPStockXL] = useState(20);
   const [pStock2XL, setPStock2XL] = useState(10);
   const [pComingSoon, setPComingSoon] = useState(false);
-  // Size measurements (length/width in cm)
-  const [pLengthM, setPLengthM] = useState<number | string>(72);
-  const [pWidthM, setPWidthM] = useState<number | string>(62);
-  const [pLengthL, setPLengthL] = useState<number | string>(74);
-  const [pWidthL, setPWidthL] = useState<number | string>(65);
-  const [pLengthXL, setPLengthXL] = useState<number | string>(76);
-  const [pWidthXL, setPWidthXL] = useState<number | string>(68);
-  const [pLength2XL, setPLength2XL] = useState<number | string>(78);
-  const [pWidth2XL, setPWidth2XL] = useState<number | string>(72);
   // Add Product Colors
   const [pColors, setPColors] = useState<ProductColor[]>([
     { name: 'أسود كربوني', hex: '#171717' },
@@ -214,15 +206,6 @@ export const AdminDashboard: React.FC = () => {
   const [editStockL, setEditStockL] = useState<number>(0);
   const [editStockXL, setEditStockXL] = useState<number>(0);
   const [editStock2XL, setEditStock2XL] = useState<number>(0);
-  // Edit size measurements
-  const [editLengthM, setEditLengthM] = useState<number | string>(72);
-  const [editWidthM, setEditWidthM] = useState<number | string>(62);
-  const [editLengthL, setEditLengthL] = useState<number | string>(74);
-  const [editWidthL, setEditWidthL] = useState<number | string>(65);
-  const [editLengthXL, setEditLengthXL] = useState<number | string>(76);
-  const [editWidthXL, setEditWidthXL] = useState<number | string>(68);
-  const [editLength2XL, setEditLength2XL] = useState<number | string>(78);
-  const [editWidth2XL, setEditWidth2XL] = useState<number | string>(72);
   const [editImages, setEditImages] = useState<string[]>([]);
   const [editColors, setEditColors] = useState<ProductColor[]>([]);
   const [newColorName, setNewColorName] = useState('');
@@ -504,7 +487,7 @@ export const AdminDashboard: React.FC = () => {
     setIsProcessingImages(true);
     try {
       const fileList = Array.from(files) as File[];
-      const uploadedList = await Promise.all(fileList.map((f) => uploadImageFile(f, 1920, 0.92)));
+      const uploadedList = await Promise.all(fileList.map((f) => uploadImageFile(f, 1440, 0.82)));
       setUploadedProductImages((prev) => [...prev, ...uploadedList]);
     } catch (err) {
       console.error('Failed to process product image:', err);
@@ -540,7 +523,7 @@ export const AdminDashboard: React.FC = () => {
     setIsProcessingImages(true);
     try {
       const fileList = Array.from(files) as File[];
-      const uploadedList = await Promise.all(fileList.map((f) => uploadImageFile(f, 1920, 0.92)));
+      const uploadedList = await Promise.all(fileList.map((f) => uploadImageFile(f, 1440, 0.82)));
       for (const uploaded of uploadedList) {
         await addReviewImage(uploaded, reviewCaption.trim() || undefined);
       }
@@ -582,12 +565,6 @@ export const AdminDashboard: React.FC = () => {
           L: Number(pStockL),
           XL: Number(pStockXL),
           '2XL': Number(pStock2XL)
-        },
-        sizeMeasurements: {
-          M: { length: Number(pLengthM) || 72, width: Number(pWidthM) || 62 },
-          L: { length: Number(pLengthL) || 74, width: Number(pWidthL) || 65 },
-          XL: { length: Number(pLengthXL) || 76, width: Number(pWidthXL) || 68 },
-          '2XL': { length: Number(pLength2XL) || 78, width: Number(pWidth2XL) || 72 }
         },
         colors: pColors.length > 0 ? pColors : [
           { name: 'أسود كربوني', hex: '#171717' }
@@ -631,17 +608,6 @@ export const AdminDashboard: React.FC = () => {
     setEditStockL(product.sizesStock?.L ?? 0);
     setEditStockXL(product.sizesStock?.XL ?? 0);
     setEditStock2XL(product.sizesStock?.['2XL'] ?? 0);
-    // Measurements
-    const m = product.sizeMeasurements || {};
-    setEditLengthM(m.M?.length ?? 72);
-    setEditWidthM(m.M?.width ?? 62);
-    setEditLengthL(m.L?.length ?? 74);
-    setEditWidthL(m.L?.width ?? 65);
-    setEditLengthXL(m.XL?.length ?? 76);
-    setEditWidthXL(m.XL?.width ?? 68);
-    setEditLength2XL(m['2XL']?.length ?? 78);
-    setEditWidth2XL(m['2XL']?.width ?? 72);
-
     setEditImages(product.images ? [...product.images] : []);
     setEditColors(product.colors ? [...product.colors] : []);
     setNewColorName('');
@@ -655,7 +621,7 @@ export const AdminDashboard: React.FC = () => {
     setIsProcessingImages(true);
     try {
       const fileList = Array.from(files) as File[];
-      const uploadedList = await Promise.all(fileList.map((f) => uploadImageFile(f, 1920, 0.92)));
+      const uploadedList = await Promise.all(fileList.map((f) => uploadImageFile(f, 1440, 0.82)));
       setEditImages((prev) => [...prev, ...uploadedList]);
     } catch (err) {
       console.error('Failed to process edit product image:', err);
@@ -711,12 +677,6 @@ export const AdminDashboard: React.FC = () => {
           L: Number(editStockL),
           XL: Number(editStockXL),
           '2XL': Number(editStock2XL)
-        },
-        sizeMeasurements: {
-          M: { length: Number(editLengthM) || 72, width: Number(editWidthM) || 62 },
-          L: { length: Number(editLengthL) || 74, width: Number(editWidthL) || 65 },
-          XL: { length: Number(editLengthXL) || 76, width: Number(editWidthXL) || 68 },
-          '2XL': { length: Number(editLength2XL) || 78, width: Number(editWidth2XL) || 72 }
         },
         images: editImages.length > 0 ? editImages : editingProduct.images,
         colors: editColors.length > 0 ? editColors : editingProduct.colors
@@ -805,7 +765,7 @@ export const AdminDashboard: React.FC = () => {
 
     setIsProcessingImages(true);
     try {
-      const uploaded = await uploadImageFile(file, 1920, 0.95);
+      const uploaded = await uploadImageFile(file, 800, 0.85);
       setBrandLogo(uploaded);
     } catch (err) {
       console.error('Failed to compress logo:', err);
@@ -822,28 +782,35 @@ export const AdminDashboard: React.FC = () => {
     const cleanToken = telegramBotToken.trim();
     const cleanChatId = telegramChatId.trim();
 
-    await updateSettings({
-      storeName,
-      brandLogo: cleanLogo,
-      notificationLogoUrl: cleanLogo,
-      announcementText,
-      comingSoonEnabled,
-      comingSoonTitle: comingSoonTitle.trim(),
-      comingSoonSubtitle: comingSoonSubtitle.trim(),
-      whatsappNumber,
-      whatsappUrl,
-      instagramUrl,
-      tiktokUrl,
-      facebookUrl,
-      quantityShippingEnabled,
-      quantityShippingMinItems: Math.max(1, Number(quantityShippingMinItems) || 2),
-      quantityShippingCost: Math.max(0, Number(quantityShippingCost) || 0),
-      pushNotificationTopic: cleanTopic,
-      telegramBotToken: cleanToken,
-      telegramChatId: cleanChatId
-    });
-    if (cleanTopic) {
-      setPushTopic(cleanTopic);
+    setIsSavingSettings(true);
+    try {
+      await updateSettings({
+        storeName,
+        brandLogo: cleanLogo,
+        notificationLogoUrl: cleanLogo,
+        announcementText,
+        comingSoonEnabled,
+        comingSoonTitle: comingSoonTitle.trim(),
+        comingSoonSubtitle: comingSoonSubtitle.trim(),
+        whatsappNumber,
+        whatsappUrl,
+        instagramUrl,
+        tiktokUrl,
+        facebookUrl,
+        quantityShippingEnabled,
+        quantityShippingMinItems: Math.max(1, Number(quantityShippingMinItems) || 2),
+        quantityShippingCost: Math.max(0, Number(quantityShippingCost) || 0),
+        pushNotificationTopic: cleanTopic,
+        telegramBotToken: cleanToken,
+        telegramChatId: cleanChatId
+      });
+      if (cleanTopic) {
+        setPushTopic(cleanTopic);
+      }
+    } catch (err) {
+      console.error('Failed to save store settings:', err);
+    } finally {
+      setIsSavingSettings(false);
     }
   };
 
@@ -1352,110 +1319,6 @@ export const AdminDashboard: React.FC = () => {
                         onChange={(e) => setPStock2XL(Number(e.target.value))}
                         className="w-full bg-stone-950 border border-stone-800 rounded-lg px-2 py-1 text-xs text-center text-stone-100"
                       />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Measurements (Length and Width) */}
-                <div className="sm:col-span-2 p-3 bg-stone-950/60 border border-stone-800 rounded-xl">
-                  <label className="block text-xs text-amber-400 font-bold mb-2">
-                    جدول قياسات الهودي (الطول والعرض بالسنتيمتر cm):
-                  </label>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    <div className="p-2.5 bg-stone-900 border border-stone-800 rounded-lg">
-                      <span className="text-xs font-bold text-amber-400 block mb-1.5 text-center">مقاس M</span>
-                      <div className="space-y-1.5">
-                        <div>
-                          <span className="text-[10px] text-stone-400">الطول (cm):</span>
-                          <input
-                            type="number"
-                            value={pLengthM}
-                            onChange={(e) => setPLengthM(e.target.value === '' ? '' : Number(e.target.value))}
-                            className="w-full bg-stone-950 border border-stone-800 rounded px-2 py-1 text-xs text-center text-stone-100 font-mono"
-                          />
-                        </div>
-                        <div>
-                          <span className="text-[10px] text-stone-400">العرض (cm):</span>
-                          <input
-                            type="number"
-                            value={pWidthM}
-                            onChange={(e) => setPWidthM(e.target.value === '' ? '' : Number(e.target.value))}
-                            className="w-full bg-stone-950 border border-stone-800 rounded px-2 py-1 text-xs text-center text-stone-100 font-mono"
-                          />
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="p-2.5 bg-stone-900 border border-stone-800 rounded-lg">
-                      <span className="text-xs font-bold text-amber-400 block mb-1.5 text-center">مقاس L</span>
-                      <div className="space-y-1.5">
-                        <div>
-                          <span className="text-[10px] text-stone-400">الطول (cm):</span>
-                          <input
-                            type="number"
-                            value={pLengthL}
-                            onChange={(e) => setPLengthL(e.target.value === '' ? '' : Number(e.target.value))}
-                            className="w-full bg-stone-950 border border-stone-800 rounded px-2 py-1 text-xs text-center text-stone-100 font-mono"
-                          />
-                        </div>
-                        <div>
-                          <span className="text-[10px] text-stone-400">العرض (cm):</span>
-                          <input
-                            type="number"
-                            value={pWidthL}
-                            onChange={(e) => setPWidthL(e.target.value === '' ? '' : Number(e.target.value))}
-                            className="w-full bg-stone-950 border border-stone-800 rounded px-2 py-1 text-xs text-center text-stone-100 font-mono"
-                          />
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="p-2.5 bg-stone-900 border border-stone-800 rounded-lg">
-                      <span className="text-xs font-bold text-amber-400 block mb-1.5 text-center">مقاس XL</span>
-                      <div className="space-y-1.5">
-                        <div>
-                          <span className="text-[10px] text-stone-400">الطول (cm):</span>
-                          <input
-                            type="number"
-                            value={pLengthXL}
-                            onChange={(e) => setPLengthXL(e.target.value === '' ? '' : Number(e.target.value))}
-                            className="w-full bg-stone-950 border border-stone-800 rounded px-2 py-1 text-xs text-center text-stone-100 font-mono"
-                          />
-                        </div>
-                        <div>
-                          <span className="text-[10px] text-stone-400">العرض (cm):</span>
-                          <input
-                            type="number"
-                            value={pWidthXL}
-                            onChange={(e) => setPWidthXL(e.target.value === '' ? '' : Number(e.target.value))}
-                            className="w-full bg-stone-950 border border-stone-800 rounded px-2 py-1 text-xs text-center text-stone-100 font-mono"
-                          />
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="p-2.5 bg-stone-900 border border-stone-800 rounded-lg">
-                      <span className="text-xs font-bold text-amber-400 block mb-1.5 text-center">مقاس 2XL</span>
-                      <div className="space-y-1.5">
-                        <div>
-                          <span className="text-[10px] text-stone-400">الطول (cm):</span>
-                          <input
-                            type="number"
-                            value={pLength2XL}
-                            onChange={(e) => setPLength2XL(e.target.value === '' ? '' : Number(e.target.value))}
-                            className="w-full bg-stone-950 border border-stone-800 rounded px-2 py-1 text-xs text-center text-stone-100 font-mono"
-                          />
-                        </div>
-                        <div>
-                          <span className="text-[10px] text-stone-400">العرض (cm):</span>
-                          <input
-                            type="number"
-                            value={pWidth2XL}
-                            onChange={(e) => setPWidth2XL(e.target.value === '' ? '' : Number(e.target.value))}
-                            className="w-full bg-stone-950 border border-stone-800 rounded px-2 py-1 text-xs text-center text-stone-100 font-mono"
-                          />
-                        </div>
-                      </div>
                     </div>
                   </div>
                 </div>
@@ -3503,9 +3366,17 @@ export const AdminDashboard: React.FC = () => {
             <button
               id="save-settings-btn"
               type="submit"
-              className="px-6 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-bold text-xs shadow-md shadow-amber-950/40"
+              disabled={isSavingSettings || isProcessingImages}
+              className="px-6 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-black font-bold text-xs shadow-md shadow-amber-950/40 flex items-center gap-2"
             >
-              حفظ الروابط والتعديلات
+              {isSavingSettings ? (
+                <>
+                  <div className="w-3.5 h-3.5 border-2 border-black border-t-transparent rounded-full animate-spin" />
+                  <span>جاري حفظ الإعدادات سحابياً...</span>
+                </>
+              ) : (
+                <span>حفظ الروابط والتعديلات</span>
+              )}
             </button>
           </div>
         </form>
@@ -4027,110 +3898,6 @@ export const AdminDashboard: React.FC = () => {
                         onChange={(e) => setEditStock2XL(Number(e.target.value))}
                         className="w-full bg-stone-900 border border-stone-800 rounded-lg px-2 py-1.5 text-xs text-center text-stone-100 font-mono focus:outline-none focus:border-amber-500"
                       />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Measurements in Edit Modal (Length and Width) */}
-                <div className="sm:col-span-2 p-3 bg-stone-950/60 border border-stone-800 rounded-xl">
-                  <label className="block text-xs text-amber-400 font-bold mb-2">
-                    جدول قياسات الهودي (الطول والعرض بالسنتيمتر cm):
-                  </label>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    <div className="p-2.5 bg-stone-900 border border-stone-800 rounded-lg">
-                      <span className="text-xs font-bold text-amber-400 block mb-1.5 text-center">مقاس M</span>
-                      <div className="space-y-1.5">
-                        <div>
-                          <span className="text-[10px] text-stone-400">الطول (cm):</span>
-                          <input
-                            type="number"
-                            value={editLengthM}
-                            onChange={(e) => setEditLengthM(e.target.value === '' ? '' : Number(e.target.value))}
-                            className="w-full bg-stone-950 border border-stone-800 rounded px-2 py-1 text-xs text-center text-stone-100 font-mono"
-                          />
-                        </div>
-                        <div>
-                          <span className="text-[10px] text-stone-400">العرض (cm):</span>
-                          <input
-                            type="number"
-                            value={editWidthM}
-                            onChange={(e) => setEditWidthM(e.target.value === '' ? '' : Number(e.target.value))}
-                            className="w-full bg-stone-950 border border-stone-800 rounded px-2 py-1 text-xs text-center text-stone-100 font-mono"
-                          />
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="p-2.5 bg-stone-900 border border-stone-800 rounded-lg">
-                      <span className="text-xs font-bold text-amber-400 block mb-1.5 text-center">مقاس L</span>
-                      <div className="space-y-1.5">
-                        <div>
-                          <span className="text-[10px] text-stone-400">الطول (cm):</span>
-                          <input
-                            type="number"
-                            value={editLengthL}
-                            onChange={(e) => setEditLengthL(e.target.value === '' ? '' : Number(e.target.value))}
-                            className="w-full bg-stone-950 border border-stone-800 rounded px-2 py-1 text-xs text-center text-stone-100 font-mono"
-                          />
-                        </div>
-                        <div>
-                          <span className="text-[10px] text-stone-400">العرض (cm):</span>
-                          <input
-                            type="number"
-                            value={editWidthL}
-                            onChange={(e) => setEditWidthL(e.target.value === '' ? '' : Number(e.target.value))}
-                            className="w-full bg-stone-950 border border-stone-800 rounded px-2 py-1 text-xs text-center text-stone-100 font-mono"
-                          />
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="p-2.5 bg-stone-900 border border-stone-800 rounded-lg">
-                      <span className="text-xs font-bold text-amber-400 block mb-1.5 text-center">مقاس XL</span>
-                      <div className="space-y-1.5">
-                        <div>
-                          <span className="text-[10px] text-stone-400">الطول (cm):</span>
-                          <input
-                            type="number"
-                            value={editLengthXL}
-                            onChange={(e) => setEditLengthXL(e.target.value === '' ? '' : Number(e.target.value))}
-                            className="w-full bg-stone-950 border border-stone-800 rounded px-2 py-1 text-xs text-center text-stone-100 font-mono"
-                          />
-                        </div>
-                        <div>
-                          <span className="text-[10px] text-stone-400">العرض (cm):</span>
-                          <input
-                            type="number"
-                            value={editWidthXL}
-                            onChange={(e) => setEditWidthXL(e.target.value === '' ? '' : Number(e.target.value))}
-                            className="w-full bg-stone-950 border border-stone-800 rounded px-2 py-1 text-xs text-center text-stone-100 font-mono"
-                          />
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="p-2.5 bg-stone-900 border border-stone-800 rounded-lg">
-                      <span className="text-xs font-bold text-amber-400 block mb-1.5 text-center">مقاس 2XL</span>
-                      <div className="space-y-1.5">
-                        <div>
-                          <span className="text-[10px] text-stone-400">الطول (cm):</span>
-                          <input
-                            type="number"
-                            value={editLength2XL}
-                            onChange={(e) => setEditLength2XL(e.target.value === '' ? '' : Number(e.target.value))}
-                            className="w-full bg-stone-950 border border-stone-800 rounded px-2 py-1 text-xs text-center text-stone-100 font-mono"
-                          />
-                        </div>
-                        <div>
-                          <span className="text-[10px] text-stone-400">العرض (cm):</span>
-                          <input
-                            type="number"
-                            value={editWidth2XL}
-                            onChange={(e) => setEditWidth2XL(e.target.value === '' ? '' : Number(e.target.value))}
-                            className="w-full bg-stone-950 border border-stone-800 rounded px-2 py-1 text-xs text-center text-stone-100 font-mono"
-                          />
-                        </div>
-                      </div>
                     </div>
                   </div>
                 </div>

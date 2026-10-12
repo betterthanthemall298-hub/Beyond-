@@ -174,6 +174,8 @@ export const CustomerReviewsGallery: React.FC = () => {
                     <img
                       src={item.imageUrl}
                       alt={item.caption || 'رأي عميل'}
+                      loading="lazy"
+                      decoding="async"
                       referrerPolicy="no-referrer"
                       className={`w-full h-full object-cover transition-transform duration-500 ${
                         isCenter ? 'group-hover:scale-105' : ''

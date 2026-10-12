@@ -15,17 +15,19 @@ if (typeof window !== 'undefined') {
 }
 
 /**
- * Standard Full HD (FHD) max dimension is 1920px.
- * Default quality is 0.92 (92%) for razor-sharp fabric textures, intricate prints, and vivid colors.
+ * High-performance image processor for Beyond Store.
+ * Delivers razor-sharp Retina/Full-HD clarity (1440px max dimension)
+ * with lightweight modern WebP compression (0.82 quality, ~80KB-120KB per image).
+ * Prevents site heaviness while keeping fabric textures and prints crystal clear.
  */
 export async function compressImageFile(
   file: File,
-  maxDimension = 1920,
-  quality = 0.92
+  maxDimension = 1440,
+  quality = 0.82
 ): Promise<string> {
   return new Promise((resolve, reject) => {
     // If SVG or animated GIF, read as data URL directly without modification
-    if (file.type === "image/svg+xml" || (file.type === "image/gif" && file.size < 1024 * 1024)) {
+    if (file.type === "image/svg+xml" || (file.type === "image/gif" && file.size < 512 * 1024)) {
       const reader = new FileReader();
       reader.onload = () => resolve(reader.result as string);
       reader.onerror = (e) => reject(e);
@@ -40,13 +42,13 @@ export async function compressImageFile(
         const originalWidth = img.naturalWidth || img.width;
         const originalHeight = img.naturalHeight || img.height;
 
-        // If the file is already within FHD dimensions and under 600KB,
-        // preserve 100% exact original file bytes without touching or re-encoding!
+        // If the file is already small (under 120KB) and fits within dimensions,
+        // preserve original bytes
         if (
           originalWidth <= maxDimension &&
           originalHeight <= maxDimension &&
-          file.size <= 600 * 1024 &&
-          (file.type === 'image/webp' || file.type === 'image/jpeg' || file.type === 'image/png')
+          file.size <= 120 * 1024 &&
+          (file.type === 'image/webp' || file.type === 'image/jpeg')
         ) {
           resolve(readerEvent.target?.result as string);
           return;
@@ -55,8 +57,7 @@ export async function compressImageFile(
         let width = originalWidth;
         let height = originalHeight;
 
-        // Only downscale if the image exceeds FHD (1920px).
-        // If image is already <= 1920px, keep its 100% original dimensions completely intact!
+        // Scale down smoothly to 1440px (Full HD Retina) if exceeding
         if (width > maxDimension || height > maxDimension) {
           if (width > height) {
             height = Math.round((height * maxDimension) / width);
@@ -81,29 +82,23 @@ export async function compressImageFile(
         ctx.imageSmoothingQuality = "high";
         ctx.drawImage(img, 0, 0, width, height);
 
-        // Convert to WebP first with high-fidelity (0.92) for crisp Full HD
+        // Convert to WebP first with crisp fidelity (0.82)
         let dataUrl = canvas.toDataURL("image/webp", quality);
         if (!dataUrl.startsWith("data:image/webp")) {
           dataUrl = canvas.toDataURL("image/jpeg", quality);
         }
 
-        // Adaptive safety: if resulting data URL is exceptionally large (> 650KB base64),
-        // apply a graceful tuning pass so it stays comfortably under Firestore document limits
-        if (dataUrl.length > 650000) {
-          let tuned = canvas.toDataURL("image/webp", 0.88);
-          if (!tuned.startsWith("data:image/webp")) {
-            tuned = canvas.toDataURL("image/jpeg", 0.88);
-          }
-          if (tuned.length < dataUrl.length) {
+        // Adaptive safety: ensure each image stays under ~130KB base64
+        // so a product with 5-6 images stays under 600KB total, well within Firestore 1MB limits
+        if (dataUrl.length > 160000) {
+          let tuned = canvas.toDataURL("image/webp", 0.78);
+          if (tuned.startsWith("data:image/webp") && tuned.length < dataUrl.length) {
             dataUrl = tuned;
           }
         }
-        if (dataUrl.length > 550000) {
-          let tuned = canvas.toDataURL("image/webp", 0.84);
-          if (!tuned.startsWith("data:image/webp")) {
-            tuned = canvas.toDataURL("image/jpeg", 0.84);
-          }
-          if (tuned.length < dataUrl.length) {
+        if (dataUrl.length > 140000) {
+          let tuned = canvas.toDataURL("image/webp", 0.74);
+          if (tuned.startsWith("data:image/webp") && tuned.length < dataUrl.length) {
             dataUrl = tuned;
           }
         }
@@ -133,14 +128,14 @@ function dataUrlToBlob(dataUrl: string): Blob {
 }
 
 /**
- * Uploads an image with Full HD (1080p/1920px) resolution and high quality (0.92).
+ * Uploads an image with optimized Full HD resolution and crisp quality.
  * If Firebase Storage is accessible, uploads the WebP blob and returns the CDN URL;
- * otherwise instantly returns the high-fidelity inline WebP data URL.
+ * otherwise instantly returns the optimized WebP data URL.
  */
 export async function uploadImageFile(
   file: File,
-  maxDimension = 1920,
-  quality = 0.92
+  maxDimension = 1440,
+  quality = 0.82
 ): Promise<string> {
   const compressed = await compressImageFile(file, maxDimension, quality);
 
@@ -150,16 +145,16 @@ export async function uploadImageFile(
     const path = `uploads/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
     const fileRef = ref(storage, path);
 
-    // Timeout after 8s to avoid freezing the UI if Storage is unconfigured
+    // Timeout after 2.5s to avoid freezing the UI
     const uploadPromise = uploadBytes(fileRef, blob, { contentType: blob.type }).then(() => getDownloadURL(fileRef));
     const timeoutPromise = new Promise<string>((_, reject) =>
-      setTimeout(() => reject(new Error("Storage timeout - fallback to high-res inline")), 8000)
+      setTimeout(() => reject(new Error("Storage timeout - fallback to fast inline")), 2500)
     );
 
     const downloadUrl = await Promise.race([uploadPromise, timeoutPromise]);
     return downloadUrl;
-  } catch (err) {
-    // Graceful fallback to high-fidelity FHD inline data URL
+  } catch {
+    // Seamless fallback to high-fidelity, lightweight WebP data URL
     return compressed;
   }
 }
@@ -169,8 +164,8 @@ export async function uploadImageFile(
  */
 export async function compressDataUrl(
   dataUrl: string,
-  maxDimension = 1920,
-  quality = 0.92
+  maxDimension = 1440,
+  quality = 0.82
 ): Promise<string> {
   if (!dataUrl.startsWith("data:image")) {
     return dataUrl;

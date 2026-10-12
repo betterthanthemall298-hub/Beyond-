@@ -6,16 +6,15 @@ import {
   ArrowRight,
   ShoppingBag,
   Heart,
-  Sparkles,
   ShieldCheck,
   Truck,
   RotateCcw,
-  Star,
   Check,
   Package,
-  Layers,
-  Flame,
-  Share2
+  Share2,
+  Palette,
+  Sparkles,
+  Tag
 } from 'lucide-react';
 import { ProductCard } from './ProductCard';
 
@@ -27,10 +26,10 @@ export const ProductDetailPage: React.FC = () => {
     wishlist,
     toggleWishlist,
     setActiveView,
-    setIsSizeAdvisorOpen,
     openShareModal,
     addToast,
-    products
+    products,
+    setIsCartOpen
   } = useStore();
 
   // If no product is selected, fallback gracefully
@@ -86,14 +85,15 @@ export const ProductDetailPage: React.FC = () => {
       currentColor?.hex,
       quantity
     );
-    setActiveView('cart');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    setIsCartOpen(true);
   };
 
   // Recommended Products: other products in the store
   const relatedProducts = products
     .filter((p) => p.id !== product.id && !isComingSoon(p))
     .slice(0, 3);
+
+  const subtotal = (product.price || 0) * quantity;
 
   return (
     <div id="product-detail-page" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-10">
@@ -126,117 +126,167 @@ export const ProductDetailPage: React.FC = () => {
       </div>
 
       {/* Main Product Showcase Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-start mb-16">
-        {/* Gallery Column (6 cols) */}
-        <div className="lg:col-span-6 space-y-4">
-          {/* Main Large Image */}
-          <div className="relative aspect-[4/5] rounded-3xl overflow-hidden bg-stone-900 border border-stone-800 shadow-2xl group">
-            <img
-              src={product.images[activeImageIndex] || product.images[0]}
-              alt={product.name}
-              loading="eager"
-              decoding="async"
-              referrerPolicy="no-referrer"
-              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-            />
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start mb-16">
+        {/* Gallery Column (6 cols) - Encased in a beautiful organized Card */}
+        <div className="lg:col-span-6">
+          <div className="bg-stone-900/60 border border-stone-800/90 rounded-3xl p-4 sm:p-5 shadow-2xl backdrop-blur-sm space-y-4">
+            {/* Main Large Image Container */}
+            <div className="relative aspect-[4/5] rounded-2xl overflow-hidden bg-stone-950 border border-stone-800 shadow-inner group">
+              <img
+                src={product.images[activeImageIndex] || product.images[0]}
+                alt={product.name}
+                loading="eager"
+                decoding="async"
+                referrerPolicy="no-referrer"
+                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+              />
 
-            {product.badge && (
-              <div className="absolute top-4 right-4 px-3 py-1.5 rounded-xl bg-amber-500 text-black text-xs font-black shadow-lg">
-                {product.badge}
+              {product.badge && (
+                <div className="absolute top-4 right-4 px-3.5 py-1.5 rounded-xl bg-amber-500 text-black text-xs font-black shadow-lg">
+                  {product.badge}
+                </div>
+              )}
+
+              {/* Wishlist Button */}
+              <button
+                id="product-page-wishlist-toggle"
+                type="button"
+                onClick={() => toggleWishlist(product.id)}
+                className={`absolute top-4 left-4 p-3 rounded-2xl backdrop-blur-md border transition-all ${
+                  isFav
+                    ? 'bg-rose-950/80 border-rose-800 text-rose-400'
+                    : 'bg-stone-950/70 border-stone-800 text-stone-300 hover:text-white'
+                }`}
+                title="إضافة للمفضلة"
+              >
+                <Heart className={`w-5 h-5 ${isFav ? 'fill-rose-400' : ''}`} />
+              </button>
+
+              {/* Share Button on Image */}
+              <button
+                id="product-page-share-image-btn"
+                type="button"
+                onClick={() => openShareModal(product)}
+                className="absolute top-4 left-18 p-3 rounded-2xl backdrop-blur-md border border-stone-800 bg-stone-950/70 text-stone-300 hover:text-white hover:border-amber-500/50 transition-all"
+                title="مشاركة المنتج عبر واتساب وانستجرام"
+              >
+                <Share2 className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Thumbnail Strip inside the Gallery Card */}
+            {product.images.length > 1 && (
+              <div className="pt-1">
+                <div className="text-[11px] text-stone-400 font-medium mb-2 flex items-center justify-between">
+                  <span>صور تفاصيل الهودي ({product.images.length} صور)</span>
+                  <span className="text-stone-500 text-[10px]">اضغط على الصورة للتكبير</span>
+                </div>
+                <div className="flex items-center gap-3 overflow-x-auto pb-2 scrollbar-thin">
+                  {product.images.map((img, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => setActiveImageIndex(idx)}
+                      className={`relative w-20 h-24 rounded-xl overflow-hidden border-2 transition-all shrink-0 bg-stone-950 ${
+                        activeImageIndex === idx
+                          ? 'border-amber-500 shadow-md shadow-amber-950/50 scale-105 ring-2 ring-amber-500/30'
+                          : 'border-stone-800 opacity-60 hover:opacity-100 hover:border-stone-700'
+                      }`}
+                    >
+                      <img
+                        src={img}
+                        alt={`${product.name} - ${idx + 1}`}
+                        loading="lazy"
+                        decoding="async"
+                        referrerPolicy="no-referrer"
+                        className="w-full h-full object-cover"
+                      />
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
-
-            <button
-              id="product-page-wishlist-toggle"
-              type="button"
-              onClick={() => toggleWishlist(product.id)}
-              className={`absolute top-4 left-4 p-3 rounded-2xl backdrop-blur-md border transition-all ${
-                isFav
-                  ? 'bg-rose-950/80 border-rose-800 text-rose-400'
-                  : 'bg-stone-950/70 border-stone-800 text-stone-300 hover:text-white'
-              }`}
-            >
-              <Heart className={`w-5 h-5 ${isFav ? 'fill-rose-400' : ''}`} />
-            </button>
-
-            {/* Share Button on Image */}
-            <button
-              id="product-page-share-image-btn"
-              type="button"
-              onClick={() => openShareModal(product)}
-              className="absolute top-4 left-18 p-3 rounded-2xl backdrop-blur-md border border-stone-800 bg-stone-950/70 text-stone-300 hover:text-white hover:border-amber-500/50 transition-all"
-              title="مشاركة المنتج عبر واتساب وانستجرام"
-            >
-              <Share2 className="w-5 h-5" />
-            </button>
           </div>
-
-          {/* Thumbnail Strip */}
-          {product.images.length > 1 && (
-            <div className="flex items-center gap-3 overflow-x-auto pb-2">
-              {product.images.map((img, idx) => (
-                <button
-                  key={idx}
-                  type="button"
-                  onClick={() => setActiveImageIndex(idx)}
-                  className={`relative w-20 h-24 rounded-xl overflow-hidden border-2 transition-all shrink-0 bg-stone-900 ${
-                    activeImageIndex === idx
-                      ? 'border-amber-500 shadow-md shadow-amber-950/50 scale-105'
-                      : 'border-stone-800 opacity-60 hover:opacity-100'
-                  }`}
-                >
-                  <img
-                    src={img}
-                    alt={`${product.name} - ${idx + 1}`}
-                    referrerPolicy="no-referrer"
-                    className="w-full h-full object-cover"
-                  />
-                </button>
-              ))}
-            </div>
-          )}
         </div>
 
-        {/* Product Details & Purchase Controls (6 cols) */}
-        <div className="lg:col-span-6 space-y-6">
-          <div>
-            <span className="text-xs font-bold text-amber-500 uppercase tracking-widest block mb-1">
-              {product.subtitle}
-            </span>
-            <h1 className="text-2xl sm:text-3xl font-black text-stone-100 leading-tight">
-              {product.name}
-            </h1>
+        {/* Product Details & Purchase Controls (6 cols) - Organized in Neat Distinct Boxes */}
+        <div className="lg:col-span-6 space-y-4 sm:space-y-5">
+          {/* Box 1: Product Information & Pricing Card */}
+          <div className="bg-stone-900/60 border border-stone-800/90 rounded-2xl p-4 sm:p-5 shadow-lg space-y-4">
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-2">
+                <span className="inline-block px-2.5 py-0.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-bold">
+                  {product.subtitle || 'هودي شتوي فاخر'}
+                </span>
+                {product.fit && (
+                  <span className="inline-block px-2.5 py-0.5 rounded-lg bg-stone-800/80 text-stone-300 text-xs font-medium">
+                    {product.fit}
+                  </span>
+                )}
+              </div>
+              <h1 className="text-2xl sm:text-3xl font-black text-stone-100 leading-tight">
+                {product.name}
+              </h1>
+            </div>
 
-            {/* Pricing */}
-            <div className="flex items-baseline gap-4 mt-3">
-              <span className="text-3xl font-black text-amber-400 font-mono">
-                {product.price} ج.م
-              </span>
+            {/* Pricing Box Container */}
+            <div className="bg-stone-950/80 border border-stone-800/80 rounded-xl p-3.5 flex items-center justify-between">
+              <div className="space-y-0.5">
+                <span className="text-[11px] text-stone-400 block">سعر القطعة</span>
+                <div className="flex items-baseline gap-3">
+                  <span className="text-3xl font-black text-amber-400 font-mono">
+                    {product.price} ج.م
+                  </span>
+                  {product.originalPrice != null && product.originalPrice > product.price && (
+                    <span className="text-sm font-bold text-stone-500 line-through font-mono">
+                      {product.originalPrice} ج.م
+                    </span>
+                  )}
+                </div>
+              </div>
+
               {product.originalPrice != null && product.originalPrice > product.price && (
-                <>
-                  <span className="text-sm font-bold text-stone-500 line-through font-mono">
-                    {product.originalPrice} ج.م
+                <div className="text-left">
+                  <span className="text-xs font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-800/50 px-2.5 py-1 rounded-lg inline-block">
+                    وفرت {product.originalPrice - product.price} ج.م
                   </span>
-                  <span className="text-xs font-bold text-emerald-400 bg-emerald-950/40 border border-emerald-800/40 px-2.5 py-0.5 rounded-lg">
-                    وفر {product.originalPrice - product.price} ج.م
-                  </span>
-                </>
+                </div>
               )}
             </div>
 
-            <p className="text-xs sm:text-sm text-stone-400 mt-3.5 leading-relaxed">
+            {/* Description */}
+            <p className="text-xs sm:text-sm text-stone-300 leading-relaxed pt-1">
               {product.description}
             </p>
+
+            {/* Quick feature tags */}
+            <div className="flex flex-wrap gap-2 pt-1 border-t border-stone-800/60">
+              <span className="text-[11px] font-medium text-stone-300 bg-stone-950/60 px-2.5 py-1 rounded-lg border border-stone-800/60">
+                قطن ميلتون ثقيل معالج ضد الانكماش
+              </span>
+              <span className="text-[11px] font-medium text-stone-300 bg-stone-950/60 px-2.5 py-1 rounded-lg border border-stone-800/60">
+                بطانة داخلية ناعمة ودافئة
+              </span>
+              <span className="text-[11px] font-medium text-amber-300/90 bg-amber-500/10 px-2.5 py-1 rounded-lg border border-amber-500/20">
+                قصة أوفر سايز عصرية
+              </span>
+            </div>
           </div>
 
-          {/* Color Selection with swatches */}
+          {/* Box 2: Color Selection Card (if colors exist) */}
           {colors.length > 0 && (
-            <div className="space-y-2 pt-2 border-t border-stone-800/80">
+            <div className="bg-stone-900/60 border border-stone-800/90 rounded-2xl p-4 sm:p-5 shadow-lg space-y-3">
               <div className="flex items-center justify-between text-xs">
-                <span className="text-stone-300 font-semibold">الألوان المتوفرة:</span>
-                <span className="text-amber-400 font-bold">{currentColor?.name}</span>
+                <span className="text-stone-200 font-bold flex items-center gap-2">
+                  <Palette className="w-4 h-4 text-amber-400" />
+                  <span>الألوان المتوفرة:</span>
+                </span>
+                <span className="px-2.5 py-1 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-300 font-bold text-xs">
+                  {currentColor?.name}
+                </span>
               </div>
-              <div className="flex items-center gap-3">
+
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
                 {colors.map((clr, idx) => {
                   const isSelected = selectedColorIndex === idx;
                   return (
@@ -244,18 +294,18 @@ export const ProductDetailPage: React.FC = () => {
                       key={clr.name}
                       type="button"
                       onClick={() => setSelectedColorIndex(idx)}
-                      className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border transition-all ${
+                      className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl border transition-all text-right ${
                         isSelected
-                          ? 'bg-stone-900 border-amber-500 shadow-sm shadow-amber-950/40'
-                          : 'bg-stone-950 border-stone-800 hover:border-stone-700 text-stone-400'
+                          ? 'bg-stone-800 border-amber-500 shadow-md shadow-amber-950/40 ring-1 ring-amber-500/40'
+                          : 'bg-stone-950/80 border-stone-800 hover:border-stone-700 text-stone-300'
                       }`}
                     >
                       <span
-                        className="w-4 h-4 rounded-full border border-stone-600 inline-block shadow-inner"
+                        className="w-4 h-4 rounded-full border border-stone-600 inline-block shadow-inner shrink-0"
                         style={{ backgroundColor: clr.hex }}
                       />
-                      <span className="text-xs font-bold text-stone-200">{clr.name}</span>
-                      {isSelected && <Check className="w-3 h-3 text-amber-400" />}
+                      <span className="text-xs font-bold text-stone-200 truncate flex-1">{clr.name}</span>
+                      {isSelected && <Check className="w-3.5 h-3.5 text-amber-400 shrink-0" />}
                     </button>
                   );
                 })}
@@ -263,21 +313,19 @@ export const ProductDetailPage: React.FC = () => {
             </div>
           )}
 
-          {/* Size Selection */}
-          <div className="space-y-2.5 pt-2 border-t border-stone-800/80">
+          {/* Box 3: Size Selection Card */}
+          <div className="bg-stone-900/60 border border-stone-800/90 rounded-2xl p-4 sm:p-5 shadow-lg space-y-3.5">
             <div className="flex items-center justify-between text-xs">
-              <span className="text-stone-300 font-semibold">المقاس المطلوب:</span>
-              <button
-                type="button"
-                onClick={() => setIsSizeAdvisorOpen(true)}
-                className="text-amber-400 hover:text-amber-300 font-bold flex items-center gap-1 hover:underline"
-              >
-                <Sparkles className="w-3.5 h-3.5" />
-                <span>حاسبة ناصح المقاسات</span>
-              </button>
+              <span className="text-stone-200 font-bold flex items-center gap-2">
+                <Tag className="w-4 h-4 text-amber-400" />
+                <span>المقاس المطلوب:</span>
+              </span>
+              <span className="px-2.5 py-1 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-300 font-bold text-xs">
+                المقاس المختار: {selectedSize}
+              </span>
             </div>
 
-            <div className="grid grid-cols-4 gap-2">
+            <div className="grid grid-cols-4 gap-2.5">
               {sizes.map((sz) => {
                 const stock = product.sizesStock[sz] || 0;
                 const isAvailable = stock > 0;
@@ -289,20 +337,30 @@ export const ProductDetailPage: React.FC = () => {
                     type="button"
                     disabled={!isAvailable}
                     onClick={() => setSelectedSize(sz)}
-                    className={`py-3 rounded-xl text-xs font-bold border transition-all flex flex-col items-center justify-center ${
+                    className={`py-3 px-2 rounded-xl text-xs font-bold border transition-all flex flex-col items-center justify-center gap-1 ${
                       isSelected
-                        ? 'bg-amber-500 text-black border-amber-500 shadow-md shadow-amber-950/50'
+                        ? 'bg-amber-500 text-black border-amber-400 shadow-lg shadow-amber-950/50 scale-[1.02]'
                         : isAvailable
-                        ? 'bg-stone-900 border-stone-800 text-stone-300 hover:border-stone-700'
-                        : 'bg-stone-950 border-stone-900 text-stone-600 line-through cursor-not-allowed'
+                        ? 'bg-stone-950/80 border-stone-800 text-stone-300 hover:border-stone-700 hover:bg-stone-800/60'
+                        : 'bg-stone-950/40 border-stone-900 text-stone-600 line-through cursor-not-allowed opacity-60'
                     }`}
                   >
-                    <span>{sz}</span>
-                    <span className="text-[10px] font-normal opacity-80 mt-0.5">
+                    <span className="text-sm font-black">{sz}</span>
+                    <span
+                      className={`text-[10px] font-medium leading-none ${
+                        isSelected
+                          ? 'text-black/80 font-bold'
+                          : !isAvailable
+                          ? 'text-stone-600'
+                          : stock < 5
+                          ? 'text-amber-400'
+                          : 'text-stone-400'
+                      }`}
+                    >
                       {!isAvailable
                         ? 'نفد'
                         : stock < 5
-                        ? `متبقي ${stock} فقط`
+                        ? `باقي ${stock}`
                         : 'متوفر'}
                     </span>
                   </button>
@@ -310,16 +368,16 @@ export const ProductDetailPage: React.FC = () => {
               })}
             </div>
 
-            {/* Low stock or Out of Stock Alert */}
+            {/* Low stock or Out of Stock Alert Box */}
             {isAllOutOfStock ? (
-              <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-2">
+              <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-rose-500 shrink-0" />
-                <span>نفدت كمية هذا المنتج بالكامل حالياً. يمكنك إضافته للمفضلة لتصلك تنبيهات عند إعادة التوفر!</span>
+                <span>نفدت كمية هذا المنتج بالكامل حالياً. تواصل معنا لتأكيد إعادة التوفر قريباً!</span>
               </div>
             ) : isCurrentOutOfStock ? (
               <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-rose-500 shrink-0" />
-                <span>المقاس المختار ({selectedSize}) نفد من المخزون، يرجى اختيار مقاس آخر متوفر.</span>
+                <span>المقاس المختار ({selectedSize}) نفد حالياً، يرجى اختيار مقاس آخر متوفر.</span>
               </div>
             ) : currentStock > 0 && currentStock < 5 ? (
               <div className="flex items-center gap-2 p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs">
@@ -329,118 +387,120 @@ export const ProductDetailPage: React.FC = () => {
             ) : null}
           </div>
 
-          {/* Quantity & Action Buttons */}
-          <div className="space-y-3 pt-4 border-t border-stone-800/80">
-            <div className="flex items-center gap-3">
-              {/* Quantity selector */}
-              <div className="flex items-center bg-stone-950 border border-stone-800 rounded-xl p-1 shrink-0">
-                <button
-                  type="button"
-                  disabled={isCurrentOutOfStock}
-                  onClick={() => setQuantity(Math.max(1, quantity - 1))}
-                  className="w-9 h-9 rounded-lg hover:bg-stone-800 text-stone-400 hover:text-white disabled:opacity-30 disabled:hover:bg-transparent flex items-center justify-center text-sm"
-                >
-                  -
-                </button>
-                <span className="w-10 text-center text-xs font-mono font-bold text-stone-100">
-                  {quantity}
-                </span>
-                <button
-                  type="button"
-                  disabled={isCurrentOutOfStock || quantity >= currentStock}
-                  onClick={() => setQuantity(quantity + 1)}
-                  className="w-9 h-9 rounded-lg hover:bg-stone-800 text-stone-400 hover:text-white disabled:opacity-30 disabled:hover:bg-transparent flex items-center justify-center text-sm"
-                >
-                  +
-                </button>
-              </div>
+          {/* Box 4: Quantity Selection & Order Action Card */}
+          <div className="bg-stone-900/80 border-2 border-amber-500/30 rounded-2xl p-4 sm:p-5 shadow-xl space-y-4 ring-1 ring-amber-500/10">
+            {/* Quantity Stepper Row */}
+            <div className="flex items-center justify-between pb-3 border-b border-stone-800/80">
+              <span className="text-xs font-bold text-stone-200">الكمية المطلوبة:</span>
+              
+              <div className="flex items-center gap-3">
+                <div className="flex items-center bg-stone-950 border border-stone-800 rounded-xl p-1">
+                  <button
+                    type="button"
+                    disabled={isCurrentOutOfStock}
+                    onClick={() => setQuantity(Math.max(1, quantity - 1))}
+                    className="w-8 h-8 rounded-lg hover:bg-stone-800 text-stone-300 hover:text-white disabled:opacity-30 disabled:hover:bg-transparent flex items-center justify-center text-sm font-bold transition-colors"
+                  >
+                    -
+                  </button>
+                  <span className="w-9 text-center text-xs font-mono font-bold text-stone-100">
+                    {quantity}
+                  </span>
+                  <button
+                    type="button"
+                    disabled={isCurrentOutOfStock || quantity >= currentStock}
+                    onClick={() => setQuantity(quantity + 1)}
+                    className="w-8 h-8 rounded-lg hover:bg-stone-800 text-stone-300 hover:text-white disabled:opacity-30 disabled:hover:bg-transparent flex items-center justify-center text-sm font-bold transition-colors"
+                  >
+                    +
+                  </button>
+                </div>
 
-              {/* Add to Cart */}
+                <div className="text-left font-mono">
+                  <span className="text-[11px] text-stone-400 block leading-tight">الإجمالي</span>
+                  <span className="text-sm font-black text-amber-400">{subtotal.toLocaleString()} ج.م</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="space-y-2.5">
+              {/* Primary Add to Cart Button */}
               <button
                 id="product-page-add-to-cart-btn"
                 type="button"
                 disabled={isCurrentOutOfStock}
                 onClick={handleAddToCart}
-                className={`flex-1 py-3 px-4 rounded-xl border text-xs sm:text-sm font-bold flex items-center justify-center gap-2 transition-all shadow-sm ${
-                  isCurrentOutOfStock
-                    ? 'bg-stone-900 border-stone-800 text-stone-500 cursor-not-allowed'
-                    : 'bg-stone-900 hover:bg-stone-800 border-stone-700 text-stone-200 hover:text-white'
+                className={`w-full py-3.5 px-4 rounded-xl font-black text-sm flex items-center justify-center gap-2 transition-all shadow-lg ${
+                  isAllOutOfStock
+                    ? 'bg-stone-800 text-stone-500 border border-stone-700/50 cursor-not-allowed'
+                    : isCurrentOutOfStock
+                    ? 'bg-stone-800 text-stone-500 border border-stone-700/50 cursor-not-allowed'
+                    : 'bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-black shadow-amber-950/40 hover:scale-[1.01]'
                 }`}
               >
-                <ShoppingBag className="w-4 h-4 text-amber-400" />
-                <span>{isCurrentOutOfStock ? 'نفد المقاس' : 'إضافة إلى السلة'}</span>
+                <ShoppingBag className="w-5 h-5" />
+                <span>
+                  {isAllOutOfStock
+                    ? 'نفدت كمية المنتج بالكامل'
+                    : isCurrentOutOfStock
+                    ? `المقاس (${selectedSize}) غير متوفر حالياً`
+                    : 'أضف إلى السلة'}
+                </span>
               </button>
+
+              {/* Fast Direct Order / Buy Now Button */}
+              {!isCurrentOutOfStock && (
+                <button
+                  id="product-page-buy-now-btn"
+                  type="button"
+                  onClick={handleBuyNow}
+                  className="w-full py-3 px-4 rounded-xl font-bold text-xs bg-stone-950 hover:bg-stone-800 border border-stone-700 text-stone-200 hover:text-white flex items-center justify-center gap-2 transition-all"
+                >
+                  <Package className="w-4 h-4 text-amber-400" />
+                  <span>شراء فوري ومتابعة السلة</span>
+                </button>
+              )}
             </div>
 
-            {/* Action Buttons: Primary Add to Cart as requested */}
-            <button
-              id="product-page-buy-now-btn"
-              type="button"
-              disabled={isCurrentOutOfStock}
-              onClick={handleAddToCart}
-              className={`w-full py-3.5 px-4 rounded-xl font-extrabold text-sm flex items-center justify-center gap-2 transition-all shadow-lg ${
-                isAllOutOfStock
-                  ? 'bg-stone-800 text-stone-500 border border-stone-700/50 cursor-not-allowed'
-                  : isCurrentOutOfStock
-                  ? 'bg-stone-800 text-stone-500 border border-stone-700/50 cursor-not-allowed'
-                  : 'bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-black shadow-amber-950/40'
-              }`}
-            >
-              <ShoppingBag className="w-5 h-5" />
-              <span>
-                {isAllOutOfStock
-                  ? 'نفدت كمية المنتج بالكامل'
-                  : isCurrentOutOfStock
-                  ? `المقاس (${selectedSize}) غير متوفر حالياً`
-                  : 'أضف إلى السلة'}
+            {/* Free shipping banner if 2 or more pieces */}
+            <div className="pt-1 text-center">
+              <span className="text-[11px] text-amber-300/80 font-medium bg-amber-500/10 px-3 py-1 rounded-full border border-amber-500/20 inline-block">
+                🚚 شحن مجاني عند طلب قطعتين أو أكثر لجميع المحافظات!
               </span>
-            </button>
+            </div>
           </div>
 
-          {/* Measurements Guide (الطول والعرض بالسنتيمتر) */}
-          {product.sizeMeasurements && Object.keys(product.sizeMeasurements).length > 0 && (
-            <div className="bg-stone-900/70 border border-stone-800 rounded-2xl p-4 space-y-3 text-xs">
-              <div className="flex items-center justify-between">
-                <h4 className="font-bold text-stone-200 flex items-center gap-2">
-                  <Layers className="w-4 h-4 text-amber-500" />
-                  <span>جدول قياسات الهودي (طول × عرض بالسم)</span>
-                </h4>
-                <span className="text-[10px] text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-md border border-amber-500/20">
-                  {product.fit || 'قصة واسعة مريحة'}
-                </span>
+          {/* Box 5: Trust & Guarantees Card */}
+          <div className="bg-stone-900/50 border border-stone-800/90 rounded-2xl p-4 shadow-md space-y-3">
+            <h4 className="text-xs font-bold text-stone-300">ضمانات متجرنا وتجربة الشراء:</h4>
+            
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs text-stone-300">
+              <div className="p-2.5 rounded-xl bg-stone-950/70 border border-stone-800/70 flex items-center gap-2.5">
+                <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+                <div>
+                  <strong className="block text-stone-200 text-[11px]">معاينة قبل الدفع</strong>
+                  <span className="text-[10px] text-stone-400">افحص الخامة قبل الاستلام</span>
+                </div>
               </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-center border-collapse text-xs">
-                  <thead>
-                    <tr className="border-b border-stone-800 text-stone-400">
-                      <th className="py-1.5 px-2 text-right">المقاس</th>
-                      <th className="py-1.5 px-2">الطول (cm)</th>
-                      <th className="py-1.5 px-2">العرض (cm)</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-stone-800/60 font-mono text-stone-200">
-                    {sizes.map((sz) => {
-                      const m = product.sizeMeasurements?.[sz];
-                      if (!m) return null;
-                      const isSelected = selectedSize === sz;
-                      return (
-                        <tr
-                          key={sz}
-                          className={`transition-colors ${
-                            isSelected ? 'bg-amber-500/15 text-amber-300 font-bold' : ''
-                          }`}
-                        >
-                          <td className="py-2 px-2 text-right font-sans font-bold">{sz}</td>
-                          <td className="py-2 px-2">{m.length || '-'} سم</td>
-                          <td className="py-2 px-2">{m.width || '-'} سم</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+
+              <div className="p-2.5 rounded-xl bg-stone-950/70 border border-stone-800/70 flex items-center gap-2.5">
+                <Truck className="w-4 h-4 text-amber-400 shrink-0" />
+                <div>
+                  <strong className="block text-stone-200 text-[11px]">شحن سريع</strong>
+                  <span className="text-[10px] text-stone-400">توصيل لباب بيتك</span>
+                </div>
+              </div>
+
+              <div className="p-2.5 rounded-xl bg-stone-950/70 border border-stone-800/70 flex items-center gap-2.5">
+                <RotateCcw className="w-4 h-4 text-blue-400 shrink-0" />
+                <div>
+                  <strong className="block text-stone-200 text-[11px]">استبدال سهل</strong>
+                  <span className="text-[10px] text-stone-400">متاح خلال 14 يوماً</span>
+                </div>
               </div>
             </div>
-          )}
+          </div>
         </div>
       </div>
 

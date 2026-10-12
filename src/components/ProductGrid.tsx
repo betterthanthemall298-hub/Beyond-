@@ -13,8 +13,7 @@ export const ProductGrid: React.FC = () => {
     selectedCategory,
     setSelectedCategory,
     selectedSizeFilter,
-    setSelectedSizeFilter,
-    setIsSizeAdvisorOpen
+    setSelectedSizeFilter
   } = useStore();
 
   const [sortBy, setSortBy] = useState<'featured' | 'price-asc' | 'price-desc'>('featured');
@@ -71,17 +70,6 @@ export const ProductGrid: React.FC = () => {
             الهوديز
           </h2>
         </div>
-
-        {/* Size advisor button */}
-        <button
-          id="catalog-open-size-advisor-btn"
-          type="button"
-          onClick={() => setIsSizeAdvisorOpen(true)}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-stone-900 border border-stone-800 text-stone-300 hover:text-amber-400 text-xs font-semibold transition-colors shadow-sm"
-        >
-          <Sparkles className="w-4 h-4 text-amber-400" />
-          <span>دليل تحديد المقاس</span>
-        </button>
       </div>
 
       {/* Products Grid Display */}

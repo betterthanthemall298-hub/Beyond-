@@ -91,6 +91,8 @@ export const WishlistDrawer: React.FC = () => {
                   <img
                     src={product.images[0]}
                     alt={product.name}
+                    loading="lazy"
+                    decoding="async"
                     referrerPolicy="no-referrer"
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform"
                   />
