@@ -504,7 +504,7 @@ export const AdminDashboard: React.FC = () => {
     setIsProcessingImages(true);
     try {
       const fileList = Array.from(files) as File[];
-      const uploadedList = await Promise.all(fileList.map((f) => uploadImageFile(f, 850, 0.74)));
+      const uploadedList = await Promise.all(fileList.map((f) => uploadImageFile(f, 1920, 0.92)));
       setUploadedProductImages((prev) => [...prev, ...uploadedList]);
     } catch (err) {
       console.error('Failed to process product image:', err);
@@ -540,7 +540,7 @@ export const AdminDashboard: React.FC = () => {
     setIsProcessingImages(true);
     try {
       const fileList = Array.from(files) as File[];
-      const uploadedList = await Promise.all(fileList.map((f) => uploadImageFile(f, 850, 0.74)));
+      const uploadedList = await Promise.all(fileList.map((f) => uploadImageFile(f, 1920, 0.92)));
       for (const uploaded of uploadedList) {
         await addReviewImage(uploaded, reviewCaption.trim() || undefined);
       }
@@ -655,7 +655,7 @@ export const AdminDashboard: React.FC = () => {
     setIsProcessingImages(true);
     try {
       const fileList = Array.from(files) as File[];
-      const uploadedList = await Promise.all(fileList.map((f) => uploadImageFile(f, 850, 0.74)));
+      const uploadedList = await Promise.all(fileList.map((f) => uploadImageFile(f, 1920, 0.92)));
       setEditImages((prev) => [...prev, ...uploadedList]);
     } catch (err) {
       console.error('Failed to process edit product image:', err);
@@ -805,7 +805,7 @@ export const AdminDashboard: React.FC = () => {
 
     setIsProcessingImages(true);
     try {
-      const uploaded = await uploadImageFile(file, 600, 0.85);
+      const uploaded = await uploadImageFile(file, 1920, 0.95);
       setBrandLogo(uploaded);
     } catch (err) {
       console.error('Failed to compress logo:', err);
@@ -1239,17 +1239,17 @@ export const AdminDashboard: React.FC = () => {
                       {isProcessingImages ? (
                         <>
                           <div className="w-4 h-4 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
-                          <span>جاري ضغط ومعالجة الصور...</span>
+                          <span>جاري حفظ الصور بدقة فائقة FHD (1080p)...</span>
                         </>
                       ) : (
                         <>
                           <Upload className="w-4 h-4 text-amber-400" />
-                          <span>اختر صور من جهازك (كمبيوتر أو هاتف)</span>
+                          <span>اختر صور من جهازك (دقة فائقة Full HD)</span>
                         </>
                       )}
                     </button>
-                    <span className="text-[11px] text-stone-500">
-                      يمكنك تحديد صورة أو عدة صور وسيتم تحويلها وحفظها مع الهودي
+                    <span className="text-[11px] text-stone-400">
+                      يتم حفظ الصور بدقة Full HD (1080p) فائقة النقاء مع الحفاظ التام على تفاصيل القماش والطباعة الأصلية
                     </span>
                   </div>
 
