@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useStore } from '../store/useStore';
 import { Product, HoodieSize } from '../types';
+import { getColorSizeStock, getTotalStock } from '../utils/product';
 import { Heart, ShoppingBag, Star, Check, Share2, Eye } from 'lucide-react';
 
 interface ProductCardProps {
@@ -18,20 +19,23 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
     openQuickLook
   } = useStore();
   const sizes: HoodieSize[] = ['M', 'L', 'XL', '2XL'];
-  const totalStock = sizes.reduce((sum, sz) => sum + (Number(product.sizesStock?.[sz]) || 0), 0);
+  const colors = product.colors || [];
+  const [chosenColorIndex, setChosenColorIndex] = useState(0);
+  const currentColor = colors[chosenColorIndex] || colors[0];
+
+  const totalStock = getTotalStock(product);
   const isAllOutOfStock = totalStock <= 0;
 
-  const firstAvailableSize = sizes.find((sz) => (product.sizesStock?.[sz] || 0) > 0) || 'L';
+  const firstAvailableSize =
+    sizes.find((sz) => getColorSizeStock(product, currentColor?.name, sz) > 0) || 'L';
   const [chosenSize, setChosenSize] = useState<HoodieSize>(firstAvailableSize);
-  const [chosenColorIndex, setChosenColorIndex] = useState(0);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [isHovered, setIsHovered] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
 
-  const isCurrentSizeOutOfStock = (product.sizesStock?.[chosenSize] || 0) <= 0;
+  const currentStock = getColorSizeStock(product, currentColor?.name, chosenSize);
+  const isCurrentSizeOutOfStock = currentStock <= 0;
   const isFav = wishlist.includes(product.id);
-  const colors = product.colors || [];
-  const currentColor = colors[chosenColorIndex] || colors[0];
 
   React.useEffect(() => {
     if (!isHovered || !product.images || product.images.length <= 1) {
@@ -185,15 +189,15 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
           <div>
             <div className="flex items-center justify-between text-[11px] text-stone-400 mb-1">
               <span>المقاس: <span className="text-amber-400 font-bold">{chosenSize}</span></span>
-              {product.sizesStock[chosenSize] > 0 && product.sizesStock[chosenSize] < 5 && (
+              {currentStock > 0 && currentStock < 5 && (
                 <span className="text-[10px] text-amber-400 font-bold animate-pulse">
-                  متبقي {product.sizesStock[chosenSize]} فقط!
+                  متبقي {currentStock} فقط!
                 </span>
               )}
             </div>
             <div className="grid grid-cols-4 gap-1">
               {sizes.map((sz) => {
-                const inStock = (product.sizesStock[sz] || 0) > 0;
+                const inStock = getColorSizeStock(product, currentColor?.name, sz) > 0;
                 const isSelected = chosenSize === sz;
 
                 return (
@@ -208,7 +212,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
                     }}
                     className={`py-1 rounded-md text-[11px] font-bold border transition-all ${
                       isSelected
-                        ? 'bg-amber-500 text-black border-amber-500'
+                        ? 'bg-amber-500 text-black border-amber-400 shadow-sm'
                         : inStock
                         ? 'bg-stone-950 border-stone-800 text-stone-300 hover:border-stone-700'
                         : 'bg-stone-950/30 border-stone-900 text-stone-600 line-through cursor-not-allowed'
@@ -239,6 +243,12 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
                       onClick={(e) => {
                         e.stopPropagation();
                         setChosenColorIndex(idx);
+                        const targetColor = colors[idx];
+                        const stockInCurrent = getColorSizeStock(product, targetColor?.name, chosenSize);
+                        if (stockInCurrent <= 0) {
+                          const firstAvailable = sizes.find((sz) => getColorSizeStock(product, targetColor?.name, sz) > 0);
+                          if (firstAvailable) setChosenSize(firstAvailable);
+                        }
                       }}
                       className={`relative w-6 h-6 rounded-full border-2 transition-all flex items-center justify-center ${
                         isSelected

@@ -48,6 +48,7 @@ import {
   INITIAL_GOVERNORATES,
   SAMPLE_HOODIE_TEMPLATE
 } from '../data/initialData';
+import { getColorSizeStock } from '../utils/product';
 
 export function normalizeGovName(name: unknown): string {
   return String(name ?? '')
@@ -573,19 +574,19 @@ let state: StoreState = {
       state.addToast({ type: 'info', title: 'قريباً', description: `"${product.name}" لسه مانزلش، خليك متابعنا.` });
       return;
     }
-    const availableStock = Number(product?.sizesStock?.[size]) || 0;
+    const defaultColor = product.colors && product.colors.length > 0 ? product.colors[0] : undefined;
+    const finalColorName = colorName || defaultColor?.name;
+    const finalColorHex = colorHex || defaultColor?.hex;
+
+    const availableStock = getColorSizeStock(product, finalColorName, size);
     if (availableStock <= 0) {
       state.addToast({
         type: 'error',
         title: 'نفدت الكمية',
-        description: `عذراً، مقاس (${size}) من "${product.name}" نفد من المخزون حالياً.`
+        description: `عذراً، مقاس (${size}) ${finalColorName ? `بلون "${finalColorName}"` : ''} من "${product.name}" نفد من المخزون حالياً.`
       });
       return;
     }
-
-    const defaultColor = product.colors && product.colors.length > 0 ? product.colors[0] : undefined;
-    const finalColorName = colorName || defaultColor?.name;
-    const finalColorHex = colorHex || defaultColor?.hex;
 
     const cartItemId = `${product.id}-${size}-${finalColorName || 'default'}`;
     const existingIndex = state.cart.findIndex((item) => item.id === cartItemId);
@@ -653,7 +654,7 @@ let state: StoreState = {
     }
     const cartItem = state.cart.find((c) => c.id === itemId);
     if (cartItem && cartItem.product) {
-      const maxAvailable = Number(cartItem.product.sizesStock?.[cartItem.size]) || 0;
+      const maxAvailable = getColorSizeStock(cartItem.product, cartItem.colorName, cartItem.size);
       if (quantity > maxAvailable && maxAvailable > 0) {
         state.addToast({
           type: 'error',
@@ -918,7 +919,28 @@ let state: StoreState = {
         if (prod && prod.sizesStock && prod.sizesStock[item.size] !== undefined) {
           const currentStock = Number(prod.sizesStock[item.size]) || 0;
           const updatedStock = { ...prod.sizesStock, [item.size]: Math.max(0, currentStock - item.quantity) };
-          updateDoc(doc(db, 'products', prod.id), { sizesStock: updatedStock }).catch(() => {});
+
+          let updatedColors = prod.colors;
+          if (item.colorName && prod.colors && prod.colors.length > 0) {
+            updatedColors = prod.colors.map(c => {
+              if (c.name === item.colorName && c.sizesStock && c.sizesStock[item.size] !== undefined) {
+                const cStock = Number(c.sizesStock[item.size]) || 0;
+                return {
+                  ...c,
+                  sizesStock: {
+                    ...c.sizesStock,
+                    [item.size]: Math.max(0, cStock - item.quantity)
+                  }
+                };
+              }
+              return c;
+            });
+          }
+
+          updateDoc(doc(db, 'products', prod.id), {
+            sizesStock: updatedStock,
+            colors: updatedColors
+          }).catch(() => {});
         }
       }
 
@@ -965,7 +987,43 @@ let state: StoreState = {
     update((prev) => {
       const allOrders = [finalOrder, ...prev.orders.filter((o) => o.id !== finalOrder.id)];
       allOrders.sort(compareOrdersNewestFirst);
-      return { orders: allOrders, cart: [], appliedCoupon: null };
+
+      const updatedProducts = prev.products.map((p) => {
+        const orderItemsForProd = (orderData.items || []).filter((it) => it.productId === p.id);
+        if (orderItemsForProd.length === 0) return p;
+
+        const nextSizesStock = { ...(p.sizesStock || {}) };
+        let nextColors = p.colors ? [...p.colors] : [];
+
+        for (const it of orderItemsForProd) {
+          if (nextSizesStock[it.size] !== undefined) {
+            nextSizesStock[it.size] = Math.max(0, (Number(nextSizesStock[it.size]) || 0) - it.quantity);
+          }
+          if (it.colorName && nextColors.length > 0) {
+            nextColors = nextColors.map((c) => {
+              if (c.name === it.colorName && c.sizesStock && c.sizesStock[it.size] !== undefined) {
+                const cur = Number(c.sizesStock[it.size]) || 0;
+                return {
+                  ...c,
+                  sizesStock: {
+                    ...c.sizesStock,
+                    [it.size]: Math.max(0, cur - it.quantity)
+                  }
+                };
+              }
+              return c;
+            });
+          }
+        }
+
+        return {
+          ...p,
+          sizesStock: nextSizesStock as Record<HoodieSize, number>,
+          colors: nextColors
+        };
+      });
+
+      return { orders: allOrders, cart: [], appliedCoupon: null, products: updatedProducts };
     });
     return finalOrder;
   },
@@ -1217,7 +1275,7 @@ function reconcileCart(cart: CartItem[], products: Product[]): CartItem[] {
       changed = true;
       continue;
     }
-    const stock = Number(live.sizesStock?.[item.size]) || 0;
+    const stock = getColorSizeStock(live, item.colorName, item.size);
     if (live.comingSoon === true || stock <= 0) {
       changed = true;
       continue;

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useStore } from '../store/useStore';
 import { HoodieSize } from '../types';
+import { getColorSizeStock } from '../utils/product';
 import {
   X,
   Heart,
@@ -67,7 +68,7 @@ export const QuickLookModal: React.FC = () => {
   const sizes: HoodieSize[] = ['M', 'L', 'XL', '2XL'];
   const colors = product.colors || [];
   const currentColor = colors[selectedColorIndex] || colors[0];
-  const currentStock = product.sizesStock[selectedSize] || 0;
+  const currentStock = getColorSizeStock(product, currentColor?.name, selectedSize);
   const isOutOfStock = currentStock <= 0;
 
   const handleAddToCart = () => {
@@ -323,7 +324,15 @@ export const QuickLookModal: React.FC = () => {
                           key={color.name}
                           id={`quick-look-color-${idx}`}
                           type="button"
-                          onClick={() => setSelectedColorIndex(idx)}
+                          onClick={() => {
+                            setSelectedColorIndex(idx);
+                            const targetColor = colors[idx];
+                            const stockInCurrentSize = getColorSizeStock(product, targetColor?.name, selectedSize);
+                            if (stockInCurrentSize <= 0) {
+                              const firstAvailable = sizes.find((sz) => getColorSizeStock(product, targetColor?.name, sz) > 0);
+                              if (firstAvailable) setSelectedSize(firstAvailable);
+                            }
+                          }}
                           className={`group relative flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-medium transition-all ${
                             isSelected
                               ? 'bg-stone-950 border-amber-400 text-white shadow-sm'
@@ -347,13 +356,13 @@ export const QuickLookModal: React.FC = () => {
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between text-xs text-stone-300">
                   <span className="font-semibold">
-                    المقاس: <strong className="text-amber-400">{selectedSize}</strong>
+                    المقاس: <strong className="text-amber-400">{selectedSize}</strong> {currentColor?.name ? `(${currentColor.name})` : ''}
                   </span>
                 </div>
 
                 <div className="grid grid-cols-4 gap-2">
                   {sizes.map((sz) => {
-                    const inStock = (product.sizesStock[sz] || 0) > 0;
+                    const inStock = getColorSizeStock(product, currentColor?.name, sz) > 0;
                     const isSelected = selectedSize === sz;
                     return (
                       <button

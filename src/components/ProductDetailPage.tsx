@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useStore } from '../store/useStore';
-import { isComingSoon } from '../utils/product';
+import { isComingSoon, getColorSizeStock, getTotalStock } from '../utils/product';
 import { HoodieSize } from '../types';
 import {
   ArrowRight,
@@ -53,13 +53,12 @@ export const ProductDetailPage: React.FC = () => {
 
   const isFav = wishlist.includes(product.id);
   const sizes: HoodieSize[] = ['M', 'L', 'XL', '2XL'];
-  const totalStock = sizes.reduce((sum, sz) => sum + (Number(product.sizesStock?.[sz]) || 0), 0);
-  const isAllOutOfStock = totalStock <= 0;
-  const currentStock = Number(product.sizesStock?.[selectedSize]) || 0;
-  const isCurrentOutOfStock = currentStock <= 0;
-
   const colors = product.colors || [];
   const currentColor = colors[selectedColorIndex] || colors[0];
+  const totalStock = getTotalStock(product);
+  const isAllOutOfStock = totalStock <= 0;
+  const currentStock = getColorSizeStock(product, currentColor?.name, selectedSize);
+  const isCurrentOutOfStock = currentStock <= 0;
 
   const handleAddToCart = () => {
     if (isCurrentOutOfStock) return;
@@ -276,7 +275,14 @@ export const ProductDetailPage: React.FC = () => {
                     <button
                       key={clr.name}
                       type="button"
-                      onClick={() => setSelectedColorIndex(idx)}
+                      onClick={() => {
+                        setSelectedColorIndex(idx);
+                        const stockInCurrentSize = getColorSizeStock(product, clr.name, selectedSize);
+                        if (stockInCurrentSize <= 0) {
+                          const firstAvailable = sizes.find((sz) => getColorSizeStock(product, clr.name, sz) > 0);
+                          if (firstAvailable) setSelectedSize(firstAvailable);
+                        }
+                      }}
                       className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl border transition-all text-right ${
                         isSelected
                           ? 'bg-stone-800 border-amber-500 shadow-md shadow-amber-950/40 ring-1 ring-amber-500/40'
@@ -304,13 +310,13 @@ export const ProductDetailPage: React.FC = () => {
                 <span>المقاس المطلوب:</span>
               </span>
               <span className="px-2.5 py-1 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-300 font-bold text-xs">
-                المقاس المختار: {selectedSize}
+                المقاس المختار: {selectedSize} {currentColor?.name ? `(${currentColor.name})` : ''}
               </span>
             </div>
 
             <div className="grid grid-cols-4 gap-2.5">
               {sizes.map((sz) => {
-                const stock = product.sizesStock[sz] || 0;
+                const stock = getColorSizeStock(product, currentColor?.name, sz);
                 const isAvailable = stock > 0;
                 const isSelected = selectedSize === sz;
 
@@ -360,12 +366,12 @@ export const ProductDetailPage: React.FC = () => {
             ) : isCurrentOutOfStock ? (
               <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-rose-500 shrink-0" />
-                <span>المقاس المختار ({selectedSize}) نفد حالياً، يرجى اختيار مقاس آخر متوفر.</span>
+                <span>المقاس المختار ({selectedSize}) غير متوفر في لون ({currentColor?.name || 'المختار'})، يرجى اختيار لون آخر أو مقاس متوفر.</span>
               </div>
             ) : currentStock > 0 && currentStock < 5 ? (
               <div className="flex items-center gap-2 p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs">
                 <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse shrink-0" />
-                <span>سارع بالطلب، متبقي <strong className="font-mono font-bold text-amber-200">{currentStock} قطع فقط</strong> في المخزون!</span>
+                <span>سارع بالطلب، متبقي <strong className="font-mono font-bold text-amber-200">{currentStock} قطع فقط</strong> من مقاس ({selectedSize}) في لون ({currentColor?.name})!</span>
               </div>
             ) : null}
           </div>

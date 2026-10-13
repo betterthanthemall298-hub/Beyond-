@@ -177,13 +177,17 @@ export const AdminDashboard: React.FC = () => {
   const [pStockXL, setPStockXL] = useState(20);
   const [pStock2XL, setPStock2XL] = useState(10);
   const [pComingSoon, setPComingSoon] = useState(false);
-  // Add Product Colors
+  // Add Product Colors & Sizes Stock per color
   const [pColors, setPColors] = useState<ProductColor[]>([
-    { name: 'أسود كربوني', hex: '#171717' },
-    { name: 'رمادي غامق', hex: '#374151' }
+    { name: 'أسود كربوني', hex: '#171717', sizesStock: { M: 10, L: 15, XL: 12, '2XL': 5 } },
+    { name: 'رمادي غامق', hex: '#374151', sizesStock: { M: 5, L: 10, XL: 8, '2XL': 5 } }
   ]);
   const [pNewColorName, setPNewColorName] = useState('');
   const [pNewColorHex, setPNewColorHex] = useState('#171717');
+  const [pNewColorStockM, setPNewColorStockM] = useState(10);
+  const [pNewColorStockL, setPNewColorStockL] = useState(15);
+  const [pNewColorStockXL, setPNewColorStockXL] = useState(10);
+  const [pNewColorStock2XL, setPNewColorStock2XL] = useState(5);
   const [uploadedProductImages, setUploadedProductImages] = useState<string[]>([]);
   const productFileInputRef = useRef<HTMLInputElement>(null);
 
@@ -210,6 +214,10 @@ export const AdminDashboard: React.FC = () => {
   const [editColors, setEditColors] = useState<ProductColor[]>([]);
   const [newColorName, setNewColorName] = useState('');
   const [newColorHex, setNewColorHex] = useState('#171717');
+  const [newColorStockM, setNewColorStockM] = useState(10);
+  const [newColorStockL, setNewColorStockL] = useState(15);
+  const [newColorStockXL, setNewColorStockXL] = useState(10);
+  const [newColorStock2XL, setNewColorStock2XL] = useState(5);
   const editProductFileInputRef = useRef<HTMLInputElement>(null);
 
   // Review Image Upload States
@@ -501,14 +509,42 @@ export const AdminDashboard: React.FC = () => {
     setUploadedProductImages((prev) => prev.filter((_, idx) => idx !== indexToRemove));
   };
 
+  const handleUpdatePColorSizeStock = (colorIdx: number, size: HoodieSize, val: number) => {
+    setPColors((prev) =>
+      prev.map((clr, i) => {
+        if (i !== colorIdx) return clr;
+        return {
+          ...clr,
+          sizesStock: {
+            ...(clr.sizesStock || { M: 0, L: 0, XL: 0, '2XL': 0 }),
+            [size]: Math.max(0, val)
+          }
+        };
+      })
+    );
+  };
+
   const handleAddPColor = () => {
     if (!pNewColorName.trim()) return;
     setPColors((prev) => [
       ...prev,
-      { name: pNewColorName.trim(), hex: pNewColorHex || '#171717' }
+      {
+        name: pNewColorName.trim(),
+        hex: pNewColorHex || '#171717',
+        sizesStock: {
+          M: Math.max(0, Number(pNewColorStockM) || 0),
+          L: Math.max(0, Number(pNewColorStockL) || 0),
+          XL: Math.max(0, Number(pNewColorStockXL) || 0),
+          '2XL': Math.max(0, Number(pNewColorStock2XL) || 0)
+        }
+      }
     ]);
     setPNewColorName('');
     setPNewColorHex('#171717');
+    setPNewColorStockM(10);
+    setPNewColorStockL(15);
+    setPNewColorStockXL(10);
+    setPNewColorStock2XL(5);
   };
 
   const handleRemovePColor = (indexToRemove: number) => {
@@ -549,6 +585,21 @@ export const AdminDashboard: React.FC = () => {
 
       const numOriginalPrice = pOriginalPrice !== '' && Number(pOriginalPrice) > 0 ? Number(pOriginalPrice) : undefined;
 
+      const finalSizesStock: Record<HoodieSize, number> =
+        pColors.length > 0 && pColors.some((c) => c.sizesStock)
+          ? {
+              M: pColors.reduce((sum, c) => sum + (Number(c.sizesStock?.M) || 0), 0),
+              L: pColors.reduce((sum, c) => sum + (Number(c.sizesStock?.L) || 0), 0),
+              XL: pColors.reduce((sum, c) => sum + (Number(c.sizesStock?.XL) || 0), 0),
+              '2XL': pColors.reduce((sum, c) => sum + (Number(c.sizesStock?.['2XL']) || 0), 0)
+            }
+          : {
+              M: Number(pStockM) || 0,
+              L: Number(pStockL) || 0,
+              XL: Number(pStockXL) || 0,
+              '2XL': Number(pStock2XL) || 0
+            };
+
       await addProduct({
         name: pName.trim(),
         subtitle: pSubtitle.trim() || 'Beyond Oversized Hoodie',
@@ -560,14 +611,9 @@ export const AdminDashboard: React.FC = () => {
         fit: pFit.trim(),
         weightRange: pWeightRange.trim(),
         careInstructions: pCare.trim(),
-        sizesStock: {
-          M: Number(pStockM),
-          L: Number(pStockL),
-          XL: Number(pStockXL),
-          '2XL': Number(pStock2XL)
-        },
+        sizesStock: finalSizesStock,
         colors: pColors.length > 0 ? pColors : [
-          { name: 'أسود كربوني', hex: '#171717' }
+          { name: 'أسود كربوني', hex: '#171717', sizesStock: finalSizesStock }
         ],
         images: imagesToUse,
         isFeatured: true,
@@ -609,9 +655,22 @@ export const AdminDashboard: React.FC = () => {
     setEditStockXL(product.sizesStock?.XL ?? 0);
     setEditStock2XL(product.sizesStock?.['2XL'] ?? 0);
     setEditImages(product.images ? [...product.images] : []);
-    setEditColors(product.colors ? [...product.colors] : []);
+    const initialColors = (product.colors || []).map((c) => ({
+      ...c,
+      sizesStock: c.sizesStock || {
+        M: Number(product.sizesStock?.M) || 0,
+        L: Number(product.sizesStock?.L) || 0,
+        XL: Number(product.sizesStock?.XL) || 0,
+        '2XL': Number(product.sizesStock?.['2XL']) || 0,
+      }
+    }));
+    setEditColors(initialColors);
     setNewColorName('');
     setNewColorHex('#171717');
+    setNewColorStockM(10);
+    setNewColorStockL(15);
+    setNewColorStockXL(10);
+    setNewColorStock2XL(5);
   };
 
   const handleEditProductImageUploadFromDevice = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -635,14 +694,42 @@ export const AdminDashboard: React.FC = () => {
     setEditImages((prev) => prev.filter((_, idx) => idx !== indexToRemove));
   };
 
+  const handleUpdateEditColorSizeStock = (colorIdx: number, size: HoodieSize, val: number) => {
+    setEditColors((prev) =>
+      prev.map((clr, i) => {
+        if (i !== colorIdx) return clr;
+        return {
+          ...clr,
+          sizesStock: {
+            ...(clr.sizesStock || { M: 0, L: 0, XL: 0, '2XL': 0 }),
+            [size]: Math.max(0, val)
+          }
+        };
+      })
+    );
+  };
+
   const handleAddEditColor = () => {
     if (!newColorName.trim()) return;
     setEditColors((prev) => [
       ...prev,
-      { name: newColorName.trim(), hex: newColorHex || '#171717' }
+      {
+        name: newColorName.trim(),
+        hex: newColorHex || '#171717',
+        sizesStock: {
+          M: Math.max(0, Number(newColorStockM) || 0),
+          L: Math.max(0, Number(newColorStockL) || 0),
+          XL: Math.max(0, Number(newColorStockXL) || 0),
+          '2XL': Math.max(0, Number(newColorStock2XL) || 0)
+        }
+      }
     ]);
     setNewColorName('');
     setNewColorHex('#171717');
+    setNewColorStockM(10);
+    setNewColorStockL(15);
+    setNewColorStockXL(10);
+    setNewColorStock2XL(5);
   };
 
   const handleRemoveEditColor = (indexToRemove: number) => {
@@ -658,6 +745,21 @@ export const AdminDashboard: React.FC = () => {
     try {
       const numOriginalPrice = editOriginalPrice !== '' && Number(editOriginalPrice) > 0 ? Number(editOriginalPrice) : undefined;
 
+      const finalSizesStock: Record<HoodieSize, number> =
+        editColors.length > 0 && editColors.some((c) => c.sizesStock)
+          ? {
+              M: editColors.reduce((sum, c) => sum + (Number(c.sizesStock?.M) || 0), 0),
+              L: editColors.reduce((sum, c) => sum + (Number(c.sizesStock?.L) || 0), 0),
+              XL: editColors.reduce((sum, c) => sum + (Number(c.sizesStock?.XL) || 0), 0),
+              '2XL': editColors.reduce((sum, c) => sum + (Number(c.sizesStock?.['2XL']) || 0), 0)
+            }
+          : {
+              M: Number(editStockM) || 0,
+              L: Number(editStockL) || 0,
+              XL: Number(editStockXL) || 0,
+              '2XL': Number(editStock2XL) || 0
+            };
+
       await updateProduct(editingProduct.id, {
         name: editName.trim(),
         subtitle: editSubtitle.trim(),
@@ -672,12 +774,7 @@ export const AdminDashboard: React.FC = () => {
         badge: editBadge.trim() || undefined,
         isFeatured: editIsFeatured,
         comingSoon: editComingSoon,
-        sizesStock: {
-          M: Number(editStockM),
-          L: Number(editStockL),
-          XL: Number(editStockXL),
-          '2XL': Number(editStock2XL)
-        },
+        sizesStock: finalSizesStock,
         images: editImages.length > 0 ? editImages : editingProduct.images,
         colors: editColors.length > 0 ? editColors : editingProduct.colors
       });
@@ -892,6 +989,22 @@ export const AdminDashboard: React.FC = () => {
       </div>
     );
   }
+
+  const pComputedStock = {
+    M: pColors.reduce((sum, c) => sum + (Number(c.sizesStock?.M) || 0), 0),
+    L: pColors.reduce((sum, c) => sum + (Number(c.sizesStock?.L) || 0), 0),
+    XL: pColors.reduce((sum, c) => sum + (Number(c.sizesStock?.XL) || 0), 0),
+    '2XL': pColors.reduce((sum, c) => sum + (Number(c.sizesStock?.['2XL']) || 0), 0)
+  };
+  const pTotalStock = pComputedStock.M + pComputedStock.L + pComputedStock.XL + pComputedStock['2XL'];
+
+  const editComputedStock = {
+    M: editColors.reduce((sum, c) => sum + (Number(c.sizesStock?.M) || 0), 0),
+    L: editColors.reduce((sum, c) => sum + (Number(c.sizesStock?.L) || 0), 0),
+    XL: editColors.reduce((sum, c) => sum + (Number(c.sizesStock?.XL) || 0), 0),
+    '2XL': editColors.reduce((sum, c) => sum + (Number(c.sizesStock?.['2XL']) || 0), 0)
+  };
+  const editTotalStock = editComputedStock.M + editComputedStock.L + editComputedStock.XL + editComputedStock['2XL'];
 
   // Logged-in Admin Dashboard View
   return (
@@ -1278,117 +1391,202 @@ export const AdminDashboard: React.FC = () => {
                   />
                 </div>
 
-                {/* Stock Per Size */}
-                <div className="sm:col-span-2">
-                  <label className="block text-xs text-stone-400 mb-1">
-                    المخزون المتوفر لكل مقاس:
-                  </label>
-                  <div className="grid grid-cols-4 gap-2">
-                    <div>
-                      <span className="text-[11px] text-stone-500">M:</span>
-                      <input
-                        type="number"
-                        value={pStockM}
-                        onChange={(e) => setPStockM(Number(e.target.value))}
-                        className="w-full bg-stone-950 border border-stone-800 rounded-lg px-2 py-1 text-xs text-center text-stone-100"
-                      />
-                    </div>
-                    <div>
-                      <span className="text-[11px] text-stone-500">L:</span>
-                      <input
-                        type="number"
-                        value={pStockL}
-                        onChange={(e) => setPStockL(Number(e.target.value))}
-                        className="w-full bg-stone-950 border border-stone-800 rounded-lg px-2 py-1 text-xs text-center text-stone-100"
-                      />
-                    </div>
-                    <div>
-                      <span className="text-[11px] text-stone-500">XL:</span>
-                      <input
-                        type="number"
-                        value={pStockXL}
-                        onChange={(e) => setPStockXL(Number(e.target.value))}
-                        className="w-full bg-stone-950 border border-stone-800 rounded-lg px-2 py-1 text-xs text-center text-stone-100"
-                      />
-                    </div>
-                    <div>
-                      <span className="text-[11px] text-stone-500">2XL:</span>
-                      <input
-                        type="number"
-                        value={pStock2XL}
-                        onChange={(e) => setPStock2XL(Number(e.target.value))}
-                        className="w-full bg-stone-950 border border-stone-800 rounded-lg px-2 py-1 text-xs text-center text-stone-100"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Colors Management in Add Form */}
-                <div className="sm:col-span-2 p-3.5 bg-stone-950/60 border border-stone-800 rounded-xl space-y-3">
+                {/* Stock & Colors Management in Add Form */}
+                <div className="sm:col-span-2 p-3.5 bg-stone-950/60 border border-stone-800 rounded-xl space-y-4">
                   <div className="flex items-center justify-between">
-                    <label className="text-xs text-amber-400 font-bold flex items-center gap-1.5">
-                      <Palette className="w-4 h-4" />
-                      <span>الألوان المتاحة لهذا الهودي:</span>
-                    </label>
-                    <span className="text-[11px] text-stone-500">
-                      ({pColors.length} ألوان مضافة)
-                    </span>
+                    <div>
+                      <label className="text-xs text-amber-400 font-bold flex items-center gap-1.5">
+                        <Palette className="w-4 h-4" />
+                        <span>تحديد ألوان الهودي والمخزون المتوفر لكل لون:</span>
+                      </label>
+                      <p className="text-[11px] text-stone-400 mt-0.5">
+                        حدد الألوان، ثم حدد عدد القطع المتوفرة لكل مقاس (M, L, XL, 2XL) من كل لون.
+                      </p>
+                    </div>
+                    {pColors.length > 0 && (
+                      <span className="text-xs font-mono font-bold text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-lg border border-amber-500/20">
+                        إجمالي كل الألوان: {pTotalStock} قطعة
+                      </span>
+                    )}
                   </div>
 
-                  {pColors.length > 0 ? (
-                    <div className="flex items-center gap-2 flex-wrap">
-                      {pColors.map((clr, idx) => (
-                        <div
-                          key={idx}
-                          className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-stone-900 border border-stone-800 text-xs text-stone-200"
-                        >
-                          <span
-                            className="w-4 h-4 rounded-full border border-stone-700 inline-block shrink-0"
-                            style={{ backgroundColor: clr.hex }}
-                          />
-                          <span className="font-medium">{clr.name}</span>
-                          <span className="text-[10px] text-stone-500 font-mono">({clr.hex})</span>
-                          <button
-                            type="button"
-                            onClick={() => handleRemovePColor(idx)}
-                            className="text-stone-500 hover:text-rose-400 p-0.5 rounded transition-colors mr-1"
-                            title="حذف هذا اللون"
-                          >
-                            <X className="w-3 h-3" />
-                          </button>
+                  {/* Summary of computed totals per size across all colors */}
+                  {pColors.length > 0 && (
+                    <div className="bg-stone-900/80 border border-stone-800/90 rounded-xl p-2.5">
+                      <span className="text-[11px] text-stone-400 block mb-1">
+                        إجمالي المخزون المحسوب تلقائياً من الألوان لكل مقاس:
+                      </span>
+                      <div className="grid grid-cols-4 gap-2 text-center font-mono">
+                        <div className="bg-stone-950/80 border border-stone-800 rounded p-1">
+                          <span className="text-[10px] text-stone-500 block">مقاس M</span>
+                          <span className="text-xs font-bold text-stone-200">{pComputedStock.M}</span>
                         </div>
-                      ))}
+                        <div className="bg-stone-950/80 border border-stone-800 rounded p-1">
+                          <span className="text-[10px] text-stone-500 block">مقاس L</span>
+                          <span className="text-xs font-bold text-stone-200">{pComputedStock.L}</span>
+                        </div>
+                        <div className="bg-stone-950/80 border border-stone-800 rounded p-1">
+                          <span className="text-[10px] text-stone-500 block">مقاس XL</span>
+                          <span className="text-xs font-bold text-stone-200">{pComputedStock.XL}</span>
+                        </div>
+                        <div className="bg-stone-950/80 border border-stone-800 rounded p-1">
+                          <span className="text-[10px] text-stone-500 block">مقاس 2XL</span>
+                          <span className="text-xs font-bold text-stone-200">{pComputedStock['2XL']}</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* List of colors with per-color size stock inputs */}
+                  {pColors.length > 0 ? (
+                    <div className="space-y-3">
+                      {pColors.map((clr, idx) => {
+                        const colorTotal = Object.values(clr.sizesStock || {}).reduce(
+                          (a, b) => Number(a) + (Number(b) || 0),
+                          0
+                        );
+                        return (
+                          <div
+                            key={idx}
+                            className="p-3 rounded-xl bg-stone-900 border border-stone-800 space-y-2.5 shadow-sm"
+                          >
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <span
+                                  className="w-4 h-4 rounded-full border border-stone-700 inline-block shrink-0 shadow-inner"
+                                  style={{ backgroundColor: clr.hex }}
+                                />
+                                <span className="font-bold text-xs text-stone-100">{clr.name}</span>
+                                <span className="text-[10px] text-stone-500 font-mono">({clr.hex})</span>
+                              </div>
+
+                              <div className="flex items-center gap-2">
+                                <span className="text-[10px] font-mono text-amber-300 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
+                                  إجمالي هذا اللون: {colorTotal} قطعة
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemovePColor(idx)}
+                                  className="text-stone-500 hover:text-rose-400 p-1 rounded-lg hover:bg-stone-800 transition-colors"
+                                  title="حذف هذا اللون"
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Quantity per size for this color */}
+                            <div className="pt-2 border-t border-stone-800/80">
+                              <span className="text-[11px] text-stone-400 font-medium block mb-1.5">
+                                عدد القطع المتوفرة من لون ({clr.name}) لكل مقاس:
+                              </span>
+                              <div className="grid grid-cols-4 gap-2">
+                                {(['M', 'L', 'XL', '2XL'] as HoodieSize[]).map((sz) => (
+                                  <div
+                                    key={sz}
+                                    className="bg-stone-950/80 border border-stone-800 rounded-lg p-1.5 text-center"
+                                  >
+                                    <span className="text-[10px] text-stone-400 block font-bold mb-0.5">
+                                      مقاس {sz}
+                                    </span>
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      value={clr.sizesStock?.[sz] ?? 0}
+                                      onChange={(e) =>
+                                        handleUpdatePColorSizeStock(idx, sz, Number(e.target.value))
+                                      }
+                                      className="w-full bg-stone-900 border border-stone-800 rounded px-1.5 py-1 text-xs text-center text-stone-100 font-mono focus:outline-none focus:border-amber-500"
+                                    />
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   ) : (
                     <p className="text-xs text-stone-500">لم تتم إضافة ألوان بعد.</p>
                   )}
 
-                  {/* Add New Color Row */}
-                  <div className="pt-2 border-t border-stone-800/80 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-                    <input
-                      type="text"
-                      placeholder="اسم اللون (مثال: كحلي داكن، بيج)"
-                      value={pNewColorName}
-                      onChange={(e) => setPNewColorName(e.target.value)}
-                      className="flex-1 bg-stone-900 border border-stone-800 rounded-lg px-2.5 py-1.5 text-xs text-stone-100 focus:outline-none focus:border-amber-500"
-                    />
-                    <div className="flex items-center gap-2">
-                      <div className="flex items-center gap-1.5 bg-stone-900 border border-stone-800 rounded-lg px-2 py-1">
-                        <input
-                          type="color"
-                          value={pNewColorHex}
-                          onChange={(e) => setPNewColorHex(e.target.value)}
-                          className="w-6 h-6 rounded cursor-pointer bg-transparent border-0"
-                        />
-                        <span className="text-[11px] font-mono text-stone-400">{pNewColorHex}</span>
+                  {/* Add New Color Section */}
+                  <div className="pt-3 border-t border-stone-800/80 space-y-2.5">
+                    <span className="text-xs text-amber-400 font-bold block">
+                      + إضافة لون جديد وتحديد قطعه:
+                    </span>
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                      <input
+                        type="text"
+                        placeholder="اسم اللون (مثال: كحلي داكن، بيج رملي، زيتي)"
+                        value={pNewColorName}
+                        onChange={(e) => setPNewColorName(e.target.value)}
+                        className="flex-1 bg-stone-900 border border-stone-800 rounded-lg px-2.5 py-1.5 text-xs text-stone-100 focus:outline-none focus:border-amber-500"
+                      />
+                      <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1.5 bg-stone-900 border border-stone-800 rounded-lg px-2 py-1">
+                          <input
+                            type="color"
+                            value={pNewColorHex}
+                            onChange={(e) => setPNewColorHex(e.target.value)}
+                            className="w-6 h-6 rounded cursor-pointer bg-transparent border-0 p-0"
+                          />
+                          <span className="text-[11px] font-mono text-stone-400">{pNewColorHex}</span>
+                        </div>
                       </div>
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row items-end gap-2">
+                      <div className="grid grid-cols-4 gap-2 flex-1 w-full">
+                        <div>
+                          <span className="text-[10px] text-stone-400 block mb-0.5">قطع M:</span>
+                          <input
+                            type="number"
+                            min="0"
+                            value={pNewColorStockM}
+                            onChange={(e) => setPNewColorStockM(Number(e.target.value))}
+                            className="w-full bg-stone-900 border border-stone-800 rounded px-1.5 py-1 text-xs text-center text-stone-100 font-mono"
+                          />
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-stone-400 block mb-0.5">قطع L:</span>
+                          <input
+                            type="number"
+                            min="0"
+                            value={pNewColorStockL}
+                            onChange={(e) => setPNewColorStockL(Number(e.target.value))}
+                            className="w-full bg-stone-900 border border-stone-800 rounded px-1.5 py-1 text-xs text-center text-stone-100 font-mono"
+                          />
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-stone-400 block mb-0.5">قطع XL:</span>
+                          <input
+                            type="number"
+                            min="0"
+                            value={pNewColorStockXL}
+                            onChange={(e) => setPNewColorStockXL(Number(e.target.value))}
+                            className="w-full bg-stone-900 border border-stone-800 rounded px-1.5 py-1 text-xs text-center text-stone-100 font-mono"
+                          />
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-stone-400 block mb-0.5">قطع 2XL:</span>
+                          <input
+                            type="number"
+                            min="0"
+                            value={pNewColorStock2XL}
+                            onChange={(e) => setPNewColorStock2XL(Number(e.target.value))}
+                            className="w-full bg-stone-900 border border-stone-800 rounded px-1.5 py-1 text-xs text-center text-stone-100 font-mono"
+                          />
+                        </div>
+                      </div>
+
                       <button
                         type="button"
                         onClick={handleAddPColor}
                         disabled={!pNewColorName.trim()}
-                        className="px-3 py-1.5 rounded-lg bg-stone-800 hover:bg-stone-700 disabled:opacity-40 text-amber-400 text-xs font-bold transition-colors"
+                        className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-black text-xs font-black transition-colors shrink-0"
                       >
-                        + إضافة اللون
+                        + إضافة هذا اللون
                       </button>
                     </div>
                   </div>
@@ -3853,122 +4051,203 @@ export const AdminDashboard: React.FC = () => {
                   />
                 </div>
 
-                {/* Stock Per Size */}
-                <div className="sm:col-span-2 p-3 bg-stone-950/60 border border-stone-800 rounded-xl">
-                  <label className="block text-xs text-amber-400 font-bold mb-2">
-                    المخزون المتوفر لكل مقاس:
-                  </label>
-                  <div className="grid grid-cols-4 gap-2">
-                    <div>
-                      <span className="text-[11px] text-stone-400 block mb-0.5">مقاس M</span>
-                      <input
-                        type="number"
-                        min="0"
-                        value={editStockM}
-                        onChange={(e) => setEditStockM(Number(e.target.value))}
-                        className="w-full bg-stone-900 border border-stone-800 rounded-lg px-2 py-1.5 text-xs text-center text-stone-100 font-mono focus:outline-none focus:border-amber-500"
-                      />
-                    </div>
-                    <div>
-                      <span className="text-[11px] text-stone-400 block mb-0.5">مقاس L</span>
-                      <input
-                        type="number"
-                        min="0"
-                        value={editStockL}
-                        onChange={(e) => setEditStockL(Number(e.target.value))}
-                        className="w-full bg-stone-900 border border-stone-800 rounded-lg px-2 py-1.5 text-xs text-center text-stone-100 font-mono focus:outline-none focus:border-amber-500"
-                      />
-                    </div>
-                    <div>
-                      <span className="text-[11px] text-stone-400 block mb-0.5">مقاس XL</span>
-                      <input
-                        type="number"
-                        min="0"
-                        value={editStockXL}
-                        onChange={(e) => setEditStockXL(Number(e.target.value))}
-                        className="w-full bg-stone-900 border border-stone-800 rounded-lg px-2 py-1.5 text-xs text-center text-stone-100 font-mono focus:outline-none focus:border-amber-500"
-                      />
-                    </div>
-                    <div>
-                      <span className="text-[11px] text-stone-400 block mb-0.5">مقاس 2XL</span>
-                      <input
-                        type="number"
-                        min="0"
-                        value={editStock2XL}
-                        onChange={(e) => setEditStock2XL(Number(e.target.value))}
-                        className="w-full bg-stone-900 border border-stone-800 rounded-lg px-2 py-1.5 text-xs text-center text-stone-100 font-mono focus:outline-none focus:border-amber-500"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Colors Management */}
-                <div className="sm:col-span-2 p-3.5 bg-stone-950/60 border border-stone-800 rounded-xl space-y-3">
+                {/* Stock & Colors Management in Edit Form */}
+                <div className="sm:col-span-2 p-3.5 bg-stone-950/60 border border-stone-800 rounded-xl space-y-4">
                   <div className="flex items-center justify-between">
-                    <label className="text-xs text-amber-400 font-bold flex items-center gap-1.5">
-                      <Palette className="w-4 h-4" />
-                      <span>الألوان المتاحة لهذا الهودي:</span>
-                    </label>
-                    <span className="text-[11px] text-stone-500">
-                      ({editColors.length} لون متاح)
-                    </span>
+                    <div>
+                      <label className="text-xs text-amber-400 font-bold flex items-center gap-1.5">
+                        <Palette className="w-4 h-4" />
+                        <span>تحديد ألوان الهودي والمخزون المتوفر لكل لون:</span>
+                      </label>
+                      <p className="text-[11px] text-stone-400 mt-0.5">
+                        حدد الألوان، ثم حدد عدد القطع المتوفرة لكل مقاس (M, L, XL, 2XL) من كل لون.
+                      </p>
+                    </div>
+                    {editColors.length > 0 && (
+                      <span className="text-xs font-mono font-bold text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-lg border border-amber-500/20">
+                        إجمالي كل الألوان: {editTotalStock} قطعة
+                      </span>
+                    )}
                   </div>
+
+                  {/* Summary of computed totals per size across all colors */}
+                  {editColors.length > 0 && (
+                    <div className="bg-stone-900/80 border border-stone-800/90 rounded-xl p-2.5">
+                      <span className="text-[11px] text-stone-400 block mb-1">
+                        إجمالي المخزون المحسوب تلقائياً من الألوان لكل مقاس:
+                      </span>
+                      <div className="grid grid-cols-4 gap-2 text-center font-mono">
+                        <div className="bg-stone-950/80 border border-stone-800 rounded p-1">
+                          <span className="text-[10px] text-stone-500 block">مقاس M</span>
+                          <span className="text-xs font-bold text-stone-200">{editComputedStock.M}</span>
+                        </div>
+                        <div className="bg-stone-950/80 border border-stone-800 rounded p-1">
+                          <span className="text-[10px] text-stone-500 block">مقاس L</span>
+                          <span className="text-xs font-bold text-stone-200">{editComputedStock.L}</span>
+                        </div>
+                        <div className="bg-stone-950/80 border border-stone-800 rounded p-1">
+                          <span className="text-[10px] text-stone-500 block">مقاس XL</span>
+                          <span className="text-xs font-bold text-stone-200">{editComputedStock.XL}</span>
+                        </div>
+                        <div className="bg-stone-950/80 border border-stone-800 rounded p-1">
+                          <span className="text-[10px] text-stone-500 block">مقاس 2XL</span>
+                          <span className="text-xs font-bold text-stone-200">{editComputedStock['2XL']}</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
                   {/* List of current colors */}
                   {editColors.length > 0 ? (
-                    <div className="flex items-center gap-2 flex-wrap">
-                      {editColors.map((clr, idx) => (
-                        <div
-                          key={idx}
-                          className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-stone-900 border border-stone-800 text-xs text-stone-200"
-                        >
-                          <span
-                            className="w-4 h-4 rounded-full border border-stone-700 inline-block shrink-0"
-                            style={{ backgroundColor: clr.hex }}
-                          />
-                          <span className="font-medium">{clr.name}</span>
-                          <span className="text-[10px] text-stone-500 font-mono">({clr.hex})</span>
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveEditColor(idx)}
-                            className="text-stone-500 hover:text-rose-400 p-0.5 rounded transition-colors mr-1"
-                            title="حذف هذا اللون"
+                    <div className="space-y-3">
+                      {editColors.map((clr, idx) => {
+                        const colorTotal = Object.values(clr.sizesStock || {}).reduce(
+                          (a, b) => Number(a) + (Number(b) || 0),
+                          0
+                        );
+                        return (
+                          <div
+                            key={idx}
+                            className="p-3 rounded-xl bg-stone-900 border border-stone-800 space-y-2.5 shadow-sm"
                           >
-                            <X className="w-3 h-3" />
-                          </button>
-                        </div>
-                      ))}
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <span
+                                  className="w-4 h-4 rounded-full border border-stone-700 inline-block shrink-0 shadow-inner"
+                                  style={{ backgroundColor: clr.hex }}
+                                />
+                                <span className="font-bold text-xs text-stone-100">{clr.name}</span>
+                                <span className="text-[10px] text-stone-500 font-mono">({clr.hex})</span>
+                              </div>
+
+                              <div className="flex items-center gap-2">
+                                <span className="text-[10px] font-mono text-amber-300 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
+                                  إجمالي هذا اللون: {colorTotal} قطعة
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveEditColor(idx)}
+                                  className="text-stone-500 hover:text-rose-400 p-1 rounded-lg hover:bg-stone-800 transition-colors"
+                                  title="حذف هذا اللون"
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Quantity per size for this color */}
+                            <div className="pt-2 border-t border-stone-800/80">
+                              <span className="text-[11px] text-stone-400 font-medium block mb-1.5">
+                                عدد القطع المتوفرة من لون ({clr.name}) لكل مقاس:
+                              </span>
+                              <div className="grid grid-cols-4 gap-2">
+                                {(['M', 'L', 'XL', '2XL'] as HoodieSize[]).map((sz) => (
+                                  <div
+                                    key={sz}
+                                    className="bg-stone-950/80 border border-stone-800 rounded-lg p-1.5 text-center"
+                                  >
+                                    <span className="text-[10px] text-stone-400 block font-bold mb-0.5">
+                                      مقاس {sz}
+                                    </span>
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      value={clr.sizesStock?.[sz] ?? 0}
+                                      onChange={(e) =>
+                                        handleUpdateEditColorSizeStock(idx, sz, Number(e.target.value))
+                                      }
+                                      className="w-full bg-stone-900 border border-stone-800 rounded px-1.5 py-1 text-xs text-center text-stone-100 font-mono focus:outline-none focus:border-amber-500"
+                                    />
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   ) : (
                     <p className="text-xs text-stone-500">لم تتم إضافة ألوان بعد.</p>
                   )}
 
-                  {/* Add New Color Row */}
-                  <div className="pt-2 border-t border-stone-800/80 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-                    <input
-                      type="text"
-                      placeholder="اسم اللون (مثال: أزرق نيلي، زيتي)"
-                      value={newColorName}
-                      onChange={(e) => setNewColorName(e.target.value)}
-                      className="flex-1 bg-stone-900 border border-stone-800 rounded-lg px-2.5 py-1.5 text-xs text-stone-100 focus:outline-none focus:border-amber-500"
-                    />
-                    <div className="flex items-center gap-2">
-                      <div className="flex items-center gap-1.5 bg-stone-900 border border-stone-800 rounded-lg px-2 py-1">
-                        <input
-                          type="color"
-                          value={newColorHex}
-                          onChange={(e) => setNewColorHex(e.target.value)}
-                          className="w-6 h-6 rounded cursor-pointer bg-transparent border-0 p-0"
-                        />
-                        <span className="text-[11px] font-mono text-stone-400">{newColorHex}</span>
+                  {/* Add New Color Section */}
+                  <div className="pt-3 border-t border-stone-800/80 space-y-2.5">
+                    <span className="text-xs text-amber-400 font-bold block">
+                      + إضافة لون جديد وتحديد قطعه:
+                    </span>
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                      <input
+                        type="text"
+                        placeholder="اسم اللون (مثال: أزرق نيلي، زيتي، كحلي)"
+                        value={newColorName}
+                        onChange={(e) => setNewColorName(e.target.value)}
+                        className="flex-1 bg-stone-900 border border-stone-800 rounded-lg px-2.5 py-1.5 text-xs text-stone-100 focus:outline-none focus:border-amber-500"
+                      />
+                      <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1.5 bg-stone-900 border border-stone-800 rounded-lg px-2 py-1">
+                          <input
+                            type="color"
+                            value={newColorHex}
+                            onChange={(e) => setNewColorHex(e.target.value)}
+                            className="w-6 h-6 rounded cursor-pointer bg-transparent border-0 p-0"
+                          />
+                          <span className="text-[11px] font-mono text-stone-400">{newColorHex}</span>
+                        </div>
                       </div>
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row items-end gap-2">
+                      <div className="grid grid-cols-4 gap-2 flex-1 w-full">
+                        <div>
+                          <span className="text-[10px] text-stone-400 block mb-0.5">قطع M:</span>
+                          <input
+                            type="number"
+                            min="0"
+                            value={newColorStockM}
+                            onChange={(e) => setNewColorStockM(Number(e.target.value))}
+                            className="w-full bg-stone-900 border border-stone-800 rounded px-1.5 py-1 text-xs text-center text-stone-100 font-mono"
+                          />
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-stone-400 block mb-0.5">قطع L:</span>
+                          <input
+                            type="number"
+                            min="0"
+                            value={newColorStockL}
+                            onChange={(e) => setNewColorStockL(Number(e.target.value))}
+                            className="w-full bg-stone-900 border border-stone-800 rounded px-1.5 py-1 text-xs text-center text-stone-100 font-mono"
+                          />
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-stone-400 block mb-0.5">قطع XL:</span>
+                          <input
+                            type="number"
+                            min="0"
+                            value={newColorStockXL}
+                            onChange={(e) => setNewColorStockXL(Number(e.target.value))}
+                            className="w-full bg-stone-900 border border-stone-800 rounded px-1.5 py-1 text-xs text-center text-stone-100 font-mono"
+                          />
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-stone-400 block mb-0.5">قطع 2XL:</span>
+                          <input
+                            type="number"
+                            min="0"
+                            value={newColorStock2XL}
+                            onChange={(e) => setNewColorStock2XL(Number(e.target.value))}
+                            className="w-full bg-stone-900 border border-stone-800 rounded px-1.5 py-1 text-xs text-center text-stone-100 font-mono"
+                          />
+                        </div>
+                      </div>
+
                       <button
                         type="button"
                         onClick={handleAddEditColor}
-                        className="px-3 py-1.5 rounded-lg bg-stone-800 hover:bg-stone-700 text-amber-400 text-xs font-bold flex items-center gap-1 transition-colors"
+                        disabled={!newColorName.trim()}
+                        className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-black text-xs font-black flex items-center gap-1 transition-colors shrink-0"
                       >
                         <Plus className="w-3.5 h-3.5" />
-                        <span>إضافة اللون</span>
+                        <span>إضافة هذا اللون</span>
                       </button>
                     </div>
                   </div>

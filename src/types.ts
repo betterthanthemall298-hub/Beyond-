@@ -5,6 +5,7 @@ export type HoodieCategory = 'oversized' | 'basic' | 'zipup';
 export interface ProductColor {
   name: string;
   hex: string;
+  sizesStock?: Partial<Record<HoodieSize, number>>;
 }
 
 export interface SizeMeasurement {

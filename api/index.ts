@@ -792,11 +792,36 @@ export function createApp(getDeps: () => Deps) {
             t.set(counterRef, { currentNumber: next, updatedAt: now.toISOString() }, { merge: true });
             t.set(orderRef, createdOrder);
             for (const [pid, sizes] of perProduct) {
-              const stock = { ...(products.get(pid).sizesStock || {}) };
+              const pData = products.get(pid);
+              const stock = { ...(pData.sizesStock || {}) };
               for (const [sz, qty] of Object.entries(sizes)) {
                 stock[sz] = Math.max(0, (Number(stock[sz]) || 0) - qty);
               }
-              t.update(deps.db.collection('products').doc(pid), { sizesStock: stock });
+
+              let updatedColors = Array.isArray(pData.colors) ? [...pData.colors] : [];
+              const productItems = items.filter((it) => it.productId === pid);
+              for (const item of productItems) {
+                if (item.colorName && updatedColors.length > 0) {
+                  updatedColors = updatedColors.map((c: any) => {
+                    if (c && c.name === item.colorName && c.sizesStock && c.sizesStock[item.size] !== undefined) {
+                      const cur = Number(c.sizesStock[item.size]) || 0;
+                      return {
+                        ...c,
+                        sizesStock: {
+                          ...c.sizesStock,
+                          [item.size]: Math.max(0, cur - item.quantity)
+                        }
+                      };
+                    }
+                    return c;
+                  });
+                }
+              }
+
+              t.update(deps.db.collection('products').doc(pid), {
+                sizesStock: stock,
+                ...(updatedColors.length > 0 ? { colors: updatedColors } : {})
+              });
             }
             if (couponRef && couponSnap?.exists) {
               t.update(couponRef, { timesUsed: (Number(couponSnap.data()?.timesUsed) || 0) + 1 });
@@ -983,18 +1008,41 @@ export function createApp(getDeps: () => Deps) {
     }
     const ids = Array.from(perProduct.keys());
     const snaps = await Promise.all(ids.map((id) => t.get(deps.db.collection('products').doc(id))));
-    const updates: Array<[string, any]> = [];
+    const updates: Array<{ id: string; stock: any; colors?: any[] }> = [];
     snaps.forEach((s: any, i: number) => {
       if (!s.exists) return;
-      const stock = { ...(s.data()?.sizesStock || {}) };
+      const data = s.data() || {};
+      const stock = { ...(data.sizesStock || {}) };
       for (const [sz, qty] of Object.entries(perProduct.get(ids[i])!)) {
         const cur = Number(stock[sz]) || 0;
         if (sign === -1 && qty > cur) {
-          throw new HttpError(409, `لا يوجد مخزون كافٍ من ${s.data()?.name || 'المنتج'} مقاس ${sz} لإعادة تفعيل الطلب`);
+          throw new HttpError(409, `لا يوجد مخزون كافٍ من ${data.name || 'المنتج'} مقاس ${sz} لإعادة تفعيل الطلب`);
         }
         stock[sz] = Math.max(0, cur + sign * qty);
       }
-      updates.push([ids[i], stock]);
+
+      let colors = Array.isArray(data.colors) ? [...data.colors] : [];
+      if (colors.length > 0) {
+        for (const it of items) {
+          if (it.productId === ids[i] && it.colorName) {
+            colors = colors.map((c: any) => {
+              if (c && c.name === it.colorName && c.sizesStock && c.sizesStock[it.size] !== undefined) {
+                const cCur = Number(c.sizesStock[it.size]) || 0;
+                return {
+                  ...c,
+                  sizesStock: {
+                    ...c.sizesStock,
+                    [it.size]: Math.max(0, cCur + sign * (Number(it.quantity) || 0))
+                  }
+                };
+              }
+              return c;
+            });
+          }
+        }
+      }
+
+      updates.push({ id: ids[i], stock, colors });
     });
     return updates;
   }
@@ -1020,7 +1068,12 @@ export function createApp(getDeps: () => Deps) {
         if (order.status !== 'pending') throw new HttpError(400, 'لا يمكن إلغاء هذا الطلب بعد بدء تجهيزه');
         const updates = await applyStockDelta(t, deps, order.items || [], 1);
         t.update(ref, { status: 'cancelled', cancelledAt: deps.now().toISOString() });
-        for (const [pid, stock] of updates) t.update(deps.db.collection('products').doc(pid), { sizesStock: stock });
+        for (const u of updates) {
+          t.update(deps.db.collection('products').doc(u.id), {
+            sizesStock: u.stock,
+            ...(u.colors && u.colors.length > 0 ? { colors: u.colors } : {})
+          });
+        }
       });
       res.json({ success: true });
     })
@@ -1043,11 +1096,16 @@ export function createApp(getDeps: () => Deps) {
         const order = snap.data() || {};
         const wasCancelled = order.status === 'cancelled';
         const willCancel = status === 'cancelled';
-        let updates: Array<[string, any]> = [];
+        let updates: Array<{ id: string; stock: any; colors?: any[] }> = [];
         if (!wasCancelled && willCancel) updates = await applyStockDelta(t, deps, order.items || [], 1);
         if (wasCancelled && !willCancel) updates = await applyStockDelta(t, deps, order.items || [], -1);
         t.update(ref, { status });
-        for (const [pid, stock] of updates) t.update(deps.db.collection('products').doc(pid), { sizesStock: stock });
+        for (const u of updates) {
+          t.update(deps.db.collection('products').doc(u.id), {
+            sizesStock: u.stock,
+            ...(u.colors && u.colors.length > 0 ? { colors: u.colors } : {})
+          });
+        }
       });
       res.json({ success: true });
     })
