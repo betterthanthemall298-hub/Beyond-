@@ -19,10 +19,16 @@ export const ORDER_STATUS_FILE_NAMES: Record<OrderStatus, string> = {
 /**
  * Exports an array of Orders to a UTF-8 CSV file compatible with Microsoft Excel and Google Sheets.
  */
-export function exportOrdersToCSV(orders: Order[], customFileName?: string) {
+export function exportOrdersToCSV(
+  orders: Order[],
+  customFileName?: string,
+  onError?: (msg: string) => void
+): boolean {
   if (orders.length === 0) {
-    alert('لا توجد طلبات لتصديرها في هذا التصنيف حالياً.');
-    return;
+    if (onError) {
+      onError('لا توجد طلبات لتصديرها في هذا التصنيف حالياً.');
+    }
+    return false;
   }
 
   // 1. Column Headers in Arabic
@@ -119,9 +125,13 @@ export function exportOrdersToCSV(orders: Order[], customFileName?: string) {
 /**
  * Export orders filtered by a specific status
  */
-export function exportOrdersByStatus(orders: Order[], status: OrderStatus) {
+export function exportOrdersByStatus(
+  orders: Order[],
+  status: OrderStatus,
+  onError?: (msg: string) => void
+): boolean {
   const filtered = orders.filter((o) => o.status === status);
   const statusName = ORDER_STATUS_FILE_NAMES[status] || status;
   const dateStr = new Date().toISOString().split('T')[0];
-  exportOrdersToCSV(filtered, `طلبات_Beyond_${statusName}_${dateStr}`);
+  return exportOrdersToCSV(filtered, `طلبات_Beyond_${statusName}_${dateStr}`, onError);
 }

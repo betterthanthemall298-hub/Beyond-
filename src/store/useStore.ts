@@ -59,7 +59,7 @@ export function normalizeGovName(name: unknown): string {
 
 export interface ToastMessage {
   id: string;
-  type: 'success' | 'info' | 'error';
+  type: 'success' | 'info' | 'error' | 'warning';
   title: string;
   description?: string;
 }

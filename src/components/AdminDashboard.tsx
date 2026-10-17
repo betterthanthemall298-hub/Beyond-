@@ -106,6 +106,7 @@ export const AdminDashboard: React.FC = () => {
     loginWithGoogle,
     logoutAdmin,
     seedSampleProduct,
+    addToast
   } = useStore();
 
   const [activeTab, setActiveTab] = useState<
@@ -2096,10 +2097,11 @@ export const AdminDashboard: React.FC = () => {
                   type="button"
                   onClick={() => {
                     const today = new Date().toISOString().split('T')[0];
+                    const onExportErr = (msg: string) => addToast({ type: 'warning', title: 'تصدير الطلبات', description: msg });
                     if (orderStatusFilter === 'all') {
-                      exportOrdersToCSV(orders, `طلبات_Beyond_كافة_الطلبات_${today}`);
+                      exportOrdersToCSV(orders, `طلبات_Beyond_كافة_الطلبات_${today}`, onExportErr);
                     } else {
-                      exportOrdersByStatus(orders, orderStatusFilter);
+                      exportOrdersByStatus(orders, orderStatusFilter, onExportErr);
                     }
                   }}
                   className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 transition-colors shadow-sm"
@@ -2137,7 +2139,8 @@ export const AdminDashboard: React.FC = () => {
                         type="button"
                         onClick={() => {
                           const today = new Date().toISOString().split('T')[0];
-                          exportOrdersToCSV(orders, `طلبات_Beyond_كافة_الطلبات_${today}`);
+                          const onExportErr = (msg: string) => addToast({ type: 'warning', title: 'تصدير الطلبات', description: msg });
+                          exportOrdersToCSV(orders, `طلبات_Beyond_كافة_الطلبات_${today}`, onExportErr);
                           setShowExportDropdown(false);
                         }}
                         className="w-full text-right px-3 py-2 rounded-xl text-xs text-stone-200 hover:bg-stone-800 flex items-center justify-between"
@@ -2148,7 +2151,8 @@ export const AdminDashboard: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => {
-                          exportOrdersByStatus(orders, 'pending');
+                          const onExportErr = (msg: string) => addToast({ type: 'warning', title: 'تصدير الطلبات', description: msg });
+                          exportOrdersByStatus(orders, 'pending', onExportErr);
                           setShowExportDropdown(false);
                         }}
                         className="w-full text-right px-3 py-2 rounded-xl text-xs text-amber-400 hover:bg-amber-950/40 flex items-center justify-between"
@@ -2159,7 +2163,8 @@ export const AdminDashboard: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => {
-                          exportOrdersByStatus(orders, 'processing');
+                          const onExportErr = (msg: string) => addToast({ type: 'warning', title: 'تصدير الطلبات', description: msg });
+                          exportOrdersByStatus(orders, 'processing', onExportErr);
                           setShowExportDropdown(false);
                         }}
                         className="w-full text-right px-3 py-2 rounded-xl text-xs text-blue-400 hover:bg-blue-950/40 flex items-center justify-between"
@@ -2170,7 +2175,8 @@ export const AdminDashboard: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => {
-                          exportOrdersByStatus(orders, 'shipped');
+                          const onExportErr = (msg: string) => addToast({ type: 'warning', title: 'تصدير الطلبات', description: msg });
+                          exportOrdersByStatus(orders, 'shipped', onExportErr);
                           setShowExportDropdown(false);
                         }}
                         className="w-full text-right px-3 py-2 rounded-xl text-xs text-purple-400 hover:bg-purple-950/40 flex items-center justify-between"
@@ -2181,7 +2187,8 @@ export const AdminDashboard: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => {
-                          exportOrdersByStatus(orders, 'delivered');
+                          const onExportErr = (msg: string) => addToast({ type: 'warning', title: 'تصدير الطلبات', description: msg });
+                          exportOrdersByStatus(orders, 'delivered', onExportErr);
                           setShowExportDropdown(false);
                         }}
                         className="w-full text-right px-3 py-2 rounded-xl text-xs text-emerald-400 hover:bg-emerald-950/40 flex items-center justify-between"
@@ -2192,7 +2199,8 @@ export const AdminDashboard: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => {
-                          exportOrdersByStatus(orders, 'cancelled');
+                          const onExportErr = (msg: string) => addToast({ type: 'warning', title: 'تصدير الطلبات', description: msg });
+                          exportOrdersByStatus(orders, 'cancelled', onExportErr);
                           setShowExportDropdown(false);
                         }}
                         className="w-full text-right px-3 py-2 rounded-xl text-xs text-rose-400 hover:bg-rose-950/40 flex items-center justify-between"
@@ -3082,7 +3090,11 @@ export const AdminDashboard: React.FC = () => {
                   const trimmed = newGovName.trim();
                   if (!trimmed) return;
                   if (editableGovernorates.some((g) => g.name === trimmed)) {
-                    alert('هذه المنطقة أو المحافظة موجودة بالفعل');
+                    addToast({
+                      type: 'warning',
+                      title: 'محافظة مكررة',
+                      description: 'هذه المنطقة أو المحافظة موجودة بالفعل في قائمة الشحن'
+                    });
                     return;
                   }
                   setEditableGovernorates((prev) => [

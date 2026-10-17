@@ -12,6 +12,7 @@ export const ToastContainer: React.FC = () => {
       {toasts.map((toast) => {
         const isError = toast.type === 'error';
         const isSuccess = toast.type === 'success';
+        const isWarning = toast.type === 'warning';
 
         return (
           <div
@@ -22,13 +23,16 @@ export const ToastContainer: React.FC = () => {
                 ? 'bg-stone-900/95 border-rose-800/60 text-stone-100 shadow-rose-950/20'
                 : isSuccess
                 ? 'bg-stone-900/95 border-emerald-800/60 text-stone-100 shadow-emerald-950/20'
+                : isWarning
+                ? 'bg-stone-900/95 border-amber-600/60 text-stone-100 shadow-amber-950/30'
                 : 'bg-stone-900/95 border-stone-700/80 text-stone-100 shadow-black/40'
             }`}
           >
             <div className="mt-0.5 shrink-0">
               {isError && <AlertCircle className="w-5 h-5 text-rose-400" />}
               {isSuccess && <CheckCircle2 className="w-5 h-5 text-emerald-400" />}
-              {!isError && !isSuccess && <Info className="w-5 h-5 text-amber-400" />}
+              {isWarning && <AlertCircle className="w-5 h-5 text-amber-400" />}
+              {!isError && !isSuccess && !isWarning && <Info className="w-5 h-5 text-blue-400" />}
             </div>
 
             <div className="flex-1 text-sm">

@@ -25,7 +25,7 @@ export const ProductDetailPage: React.FC = () => {
     openShareModal,
     addToast,
     products,
-    setIsCartOpen
+    setIsCheckoutOpen
   } = useStore();
 
   // If no product is selected, fallback gracefully
@@ -80,7 +80,7 @@ export const ProductDetailPage: React.FC = () => {
       currentColor?.hex,
       quantity
     );
-    setIsCartOpen(true);
+    setIsCheckoutOpen(true);
   };
 
   // Recommended Products: other products in the store
@@ -447,7 +447,7 @@ export const ProductDetailPage: React.FC = () => {
                   className="w-full py-3 px-4 rounded-xl font-bold text-xs bg-stone-950 hover:bg-stone-800 border border-stone-700 text-stone-200 hover:text-white flex items-center justify-center gap-2 transition-all"
                 >
                   <Package className="w-4 h-4 text-amber-400" />
-                  <span>شراء فوري ومتابعة السلة</span>
+                  <span>شراء فوري مباشر (إتمام الطلب الآن)</span>
                 </button>
               )}
             </div>

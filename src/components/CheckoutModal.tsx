@@ -24,7 +24,8 @@ export const CheckoutModal: React.FC = () => {
     getCartSubtotal,
     getCartDiscount,
     createOrder,
-    settings
+    settings,
+    addToast
   } = useStore();
 
   const [customerName, setCustomerName] = useState('');
@@ -34,7 +35,11 @@ export const CheckoutModal: React.FC = () => {
   const [center, setCenter] = useState('');
   const [address, setAddress] = useState('');
   const [notes, setNotes] = useState('');
+  const [nameError, setNameError] = useState('');
   const [phoneError, setPhoneError] = useState('');
+  const [centerError, setCenterError] = useState('');
+  const [addressError, setAddressError] = useState('');
+  const [submitError, setSubmitError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [confirmedOrder, setConfirmedOrder] = useState<Order | null>(null);
 
@@ -65,7 +70,11 @@ export const CheckoutModal: React.FC = () => {
     setCenter('');
     setAddress('');
     setNotes('');
+    setNameError('');
     setPhoneError('');
+    setCenterError('');
+    setAddressError('');
+    setSubmitError('');
     setConfirmedOrder(null);
     setIsCheckoutOpen(false);
   };
@@ -74,24 +83,49 @@ export const CheckoutModal: React.FC = () => {
     e.preventDefault();
     if (isSubmitting) return;
 
+    setNameError('');
+    setPhoneError('');
+    setCenterError('');
+    setAddressError('');
+    setSubmitError('');
+
     if (!customerName.trim()) {
-      alert('برجاء كتابة الاسم بالكامل');
+      setNameError('برجاء كتابة الاسم بالكامل');
+      addToast({
+        type: 'warning',
+        title: 'الاسم مطلوب',
+        description: 'برجاء كتابة اسمك بالكامل لإتمام شحن الطلب'
+      });
       return;
     }
 
     if (!validateEgyptianPhone(phone)) {
       setPhoneError('برجاء إدخال رقم محمول مصري صحيح مكون من 11 رقماً ويبدأ بـ 01 (مثل: 01012345678)');
+      addToast({
+        type: 'warning',
+        title: 'رقم هاتف غير صحيح',
+        description: 'برجاء إدخال رقم محمول مصري يبدأ بـ 01 لتأكيد الشحن'
+      });
       return;
     }
-    setPhoneError('');
 
     if (!center.trim()) {
-      alert('برجاء كتابة المركز أو المدينة التابع لها');
+      setCenterError('برجاء كتابة المركز أو المدينة أو الحي');
+      addToast({
+        type: 'warning',
+        title: 'المدينة / المركز مطلوبة',
+        description: 'برجاء كتابة المركز أو المدينة التابع لها'
+      });
       return;
     }
 
     if (!address.trim() || address.trim().length < 5) {
-      alert('برجاء كتابة العنوان بالتفصيل (اسم الشارع - رقم العقار / المنزل - رقم الشقة وعلامة مميزة)');
+      setAddressError('برجاء كتابة العنوان بالتفصيل (اسم الشارع - رقم العقار - الشقة وعلامة مميزة)');
+      addToast({
+        type: 'warning',
+        title: 'العنوان غير مكتمل',
+        description: 'برجاء كتابة تفاصيل العنوان لتسهيل وصول مندوب الشحن'
+      });
       return;
     }
 
@@ -136,7 +170,13 @@ export const CheckoutModal: React.FC = () => {
       } catch {}
     } catch (err: any) {
       console.error('Failed to submit order:', err);
-      alert(err?.message || 'حدث خطأ أثناء إرسال الطلب، يرجى المحاولة مرة أخرى.');
+      const errMsg = err?.message || 'حدث خطأ أثناء إرسال الطلب، يرجى المحاولة مرة أخرى.';
+      setSubmitError(errMsg);
+      addToast({
+        type: 'error',
+        title: 'تعذر إرسال الطلب',
+        description: errMsg
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -231,11 +271,19 @@ export const CheckoutModal: React.FC = () => {
                     required
                     placeholder="مثال: محمد أحمد محمود"
                     value={customerName}
-                    onChange={(e) => setCustomerName(e.target.value)}
-                    className="w-full bg-stone-950 border border-stone-800 rounded-xl px-3.5 py-2 text-xs text-stone-100 placeholder-stone-500 focus:outline-none focus:border-amber-500"
+                    onChange={(e) => {
+                      setCustomerName(e.target.value);
+                      setNameError('');
+                    }}
+                    className={`w-full bg-stone-950 border rounded-xl px-3.5 py-2 text-xs text-stone-100 placeholder-stone-500 focus:outline-none transition-colors ${
+                      nameError ? 'border-rose-500/80 ring-1 ring-rose-500/30' : 'border-stone-800 focus:border-amber-500'
+                    }`}
                   />
                   <User className="w-4 h-4 text-stone-500 absolute left-3 top-2.5" />
                 </div>
+                {nameError && (
+                  <p className="text-[11px] text-rose-400 mt-1">{nameError}</p>
+                )}
               </div>
 
               {/* Primary Phone */}
@@ -255,7 +303,9 @@ export const CheckoutModal: React.FC = () => {
                       setPhone(e.target.value);
                       setPhoneError('');
                     }}
-                    className="w-full bg-stone-950 border border-stone-800 rounded-xl px-3.5 py-2 text-xs text-stone-100 placeholder-stone-500 focus:outline-none focus:border-amber-500 font-mono text-left"
+                    className={`w-full bg-stone-950 border rounded-xl px-3.5 py-2 text-xs text-stone-100 placeholder-stone-500 focus:outline-none font-mono text-left transition-colors ${
+                      phoneError ? 'border-rose-500/80 ring-1 ring-rose-500/30' : 'border-stone-800 focus:border-amber-500'
+                    }`}
                   />
                   <Phone className="w-4 h-4 text-stone-500 absolute left-3 top-2.5" />
                 </div>
@@ -317,11 +367,19 @@ export const CheckoutModal: React.FC = () => {
                     required
                     placeholder="مثال: مدينة نصر / الدقي / بنها"
                     value={center}
-                    onChange={(e) => setCenter(e.target.value)}
-                    className="w-full bg-stone-950 border border-stone-800 rounded-xl px-3.5 py-2 text-xs text-stone-100 placeholder-stone-500 focus:outline-none focus:border-amber-500"
+                    onChange={(e) => {
+                      setCenter(e.target.value);
+                      setCenterError('');
+                    }}
+                    className={`w-full bg-stone-950 border rounded-xl px-3.5 py-2 text-xs text-stone-100 placeholder-stone-500 focus:outline-none transition-colors ${
+                      centerError ? 'border-rose-500/80 ring-1 ring-rose-500/30' : 'border-stone-800 focus:border-amber-500'
+                    }`}
                   />
                   <MapPin className="w-4 h-4 text-stone-500 absolute left-3 top-2.5" />
                 </div>
+                {centerError && (
+                  <p className="text-[11px] text-rose-400 mt-1">{centerError}</p>
+                )}
               </div>
 
               {/* Detailed Street Address */}
@@ -336,10 +394,18 @@ export const CheckoutModal: React.FC = () => {
                     rows={2}
                     placeholder="مثال: شارع التحرير - عمارة 15 - الدور الثالث شقة 5 - بجوار صيدلية العزبي"
                     value={address}
-                    onChange={(e) => setAddress(e.target.value)}
-                    className="w-full bg-stone-950 border border-stone-800 rounded-xl px-3.5 py-2 text-xs text-stone-100 placeholder-stone-500 focus:outline-none focus:border-amber-500 resize-none"
+                    onChange={(e) => {
+                      setAddress(e.target.value);
+                      setAddressError('');
+                    }}
+                    className={`w-full bg-stone-950 border rounded-xl px-3.5 py-2 text-xs text-stone-100 placeholder-stone-500 focus:outline-none resize-none transition-colors ${
+                      addressError ? 'border-rose-500/80 ring-1 ring-rose-500/30' : 'border-stone-800 focus:border-amber-500'
+                    }`}
                   />
                 </div>
+                {addressError && (
+                  <p className="text-[11px] text-rose-400 mt-1">{addressError}</p>
+                )}
               </div>
 
               {/* Delivery Notes */}
@@ -409,6 +475,12 @@ export const CheckoutModal: React.FC = () => {
                 <span>معاينة وقياس قبل الدفع</span>
               </div>
             </div>
+
+            {submitError && (
+              <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs">
+                {submitError}
+              </div>
+            )}
 
             {/* Submit Button */}
             <button

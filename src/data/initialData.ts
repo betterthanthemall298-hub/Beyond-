@@ -61,16 +61,10 @@ export const SAMPLE_HOODIE_TEMPLATE: Omit<Product, 'id' | 'rating' | 'reviewsCou
   weightRange: 'مناسب للأوزان من 60 حتى 115 كجم',
   careInstructions: 'غسيل آلي على البارد (30 درجة)، بدون مبيضات، الكي على ظهر القماش',
   sizesStock: { M: 15, L: 20, XL: 18, '2XL': 10 },
-  sizeMeasurements: {
-    M: { length: 72, width: 58 },
-    L: { length: 75, width: 62 },
-    XL: { length: 78, width: 66 },
-    '2XL': { length: 81, width: 70 }
-  },
   colors: [
-    { name: 'أسود كربوني', hex: '#141414' },
-    { name: 'رمادي غامق', hex: '#374151' },
-    { name: 'بيج رملي', hex: '#d6c7b2' }
+    { name: 'أسود كربوني', hex: '#141414', sizesStock: { M: 5, L: 8, XL: 6, '2XL': 3 } },
+    { name: 'رمادي غامق', hex: '#374151', sizesStock: { M: 5, L: 6, XL: 6, '2XL': 4 } },
+    { name: 'بيج رملي', hex: '#d6c7b2', sizesStock: { M: 5, L: 6, XL: 6, '2XL': 3 } }
   ],
   images: [
     'https://images.unsplash.com/photo-1556905055-8f358a7a47b2?q=80&w=1000&auto=format&fit=crop',

@@ -36,13 +36,25 @@ export function getShortMarketingText(product: Product): string {
   return `🔥 هودي ${product.name} بسعر ${product.price} ج.م من متجر Beyond Hoodies`;
 }
 
+function safeOpenUrl(targetUrl: string): void {
+  try {
+    const w = window.open(targetUrl, '_blank', 'noopener,noreferrer');
+    if (!w || w.closed || typeof w.closed === 'undefined') {
+      window.location.href = targetUrl;
+    }
+  } catch {
+    window.location.href = targetUrl;
+  }
+}
+
 /**
  * Share directly on WhatsApp with pre-filled marketing message.
  */
-export function shareToWhatsApp(product: Product): void {
+export async function shareToWhatsApp(product: Product): Promise<void> {
   const text = getMarketingShareText(product);
+  await copyToClipboard(text).catch(() => {});
   const whatsappUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
-  window.open(whatsappUrl, '_blank', 'noopener,noreferrer');
+  safeOpenUrl(whatsappUrl);
 }
 
 /**
@@ -50,38 +62,40 @@ export function shareToWhatsApp(product: Product): void {
  */
 export async function shareToInstagram(product: Product): Promise<void> {
   const text = getMarketingShareText(product);
-  await copyToClipboard(text);
-  // Open Instagram direct / web
-  window.open('https://www.instagram.com/', '_blank', 'noopener,noreferrer');
+  await copyToClipboard(text).catch(() => {});
+  safeOpenUrl('https://www.instagram.com/');
 }
 
 /**
  * Share directly on Telegram (kept for compatibility).
  */
-export function shareToTelegram(product: Product): void {
+export async function shareToTelegram(product: Product): Promise<void> {
   const url = getProductShareUrl(product.id);
   const text = getShortMarketingText(product);
+  await copyToClipboard(text).catch(() => {});
   const telegramUrl = `https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`;
-  window.open(telegramUrl, '_blank', 'noopener,noreferrer');
+  safeOpenUrl(telegramUrl);
 }
 
 /**
  * Share on Facebook.
  */
-export function shareToFacebook(product: Product): void {
+export async function shareToFacebook(product: Product): Promise<void> {
   const url = getProductShareUrl(product.id);
+  await copyToClipboard(url).catch(() => {});
   const fbUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}`;
-  window.open(fbUrl, '_blank', 'noopener,noreferrer');
+  safeOpenUrl(fbUrl);
 }
 
 /**
  * Share on X (Twitter).
  */
-export function shareToTwitter(product: Product): void {
+export async function shareToTwitter(product: Product): Promise<void> {
   const url = getProductShareUrl(product.id);
   const text = getShortMarketingText(product);
+  await copyToClipboard(`${text} ${url}`).catch(() => {});
   const twitterUrl = `https://twitter.com/intent/tweet?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`;
-  window.open(twitterUrl, '_blank', 'noopener,noreferrer');
+  safeOpenUrl(twitterUrl);
 }
 
 /**
